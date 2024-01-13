@@ -82,7 +82,8 @@
   initialize-function ; Function to retrieve the necessary input from prior;
   add-function        ; Function if exists, prompts user to extend input
   base-prior-key      ; If non-nil, provide to all other priors for their use.
-  default-result)
+  default-result
+  options-spec)
 
 (cl-defstruct (p-search-prior
                (:copier nil)
@@ -91,7 +92,8 @@
   inputs
   importance
   results     ; hash table containing the result
-  proc-thread)
+  proc-thread
+  options)
 
 (defun p-search-expand-files (base-priors)
   "Return the list of files that should be considerd according to BASE-PRIORS."
@@ -153,6 +155,12 @@
    :input-function
    (lambda ()
      (read-string "String input: "))
+   :options-spec
+   '((tool . (choice (const :tag "ripgrep (rg)" rg) ;; TODO - how to specify defaults
+                     (const :tag "The Silver Searcher (ag)" ag)
+                     (const :tag "grep" grep)))
+     (strategy . (choice (const :tag "exact, case-insensitive, word-break" (exact case-insensitive word-break)) ;; TODO - how to specify defaults
+                         (const :tag "exact" (exact)))))
    :initialize-function
    (lambda (base-priors prior input)
      (let* ((default-directory (car (alist-get 'include-directories base-priors))) ;; TODO: allow for multiple
@@ -184,6 +192,17 @@
 (defvar-local p-search-priors nil
   "List of active priors for current session.")
 
+(defun p-search--extract-default-options (template)
+  (let* ((options-spec (p-search-prior-template-options-spec template))
+         (options '()))
+    (pcase-dolist (`(,prop-name . ,spec) options-spec)
+      (pcase spec
+        (`(choice . ,choices)
+         (push (cons prop-name
+                     (last (car choices)))
+               options))))
+    (nreverse options)))
+
 (defun p-search--instantiate-prior (template)
   "Create and return a prior according to TEMPLATE."
   (let* ((input-func (p-search-prior-template-input-function template))
@@ -193,7 +212,8 @@
                  :template template
                  :inputs input
                  :results (make-hash-table :test 'equal)
-                 :importance 'medium))
+                 :importance 'medium
+                 :options (p-search--extract-default-options template)))
          (base-priors (p-search--base-priors-values))
          (init-res (funcall init-func base-priors prior input)))
     (setf (p-search-prior-proc-thread prior) init-res)
@@ -260,12 +280,179 @@
                  (prior-importance (p-search-prior-importance p))
                  (file-result (gethash file prior-results (or default-result 'neutral))) ;; TODO indecies?
                  (modifier (p-search-modifier file-result prior-importance)))
-            (when (equal file "/Users/zromero/Downloads/TAOP/data/sharespeare/counters.go")
-              (message ">>> %s %s" file-result prior-importance))
             (setq probability (* probability modifier))))
         (heap-add res (list file probability))
         (cl-incf marginal-p probability)))
     res))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; p-search mode ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defvar p-search-mode-map
+  (let ((map (make-keymap)))
+    (suppress-keymap map t)
+    (keymap-set map "a" #'p-search-add-prior)
+    (keymap-set map "g" #'p-search-refresh-buffer)
+    map))
+
+(defun p-search-highlight-point-section ()
+  (let* ((ovs (overlays-in (point-min) (point-max))))
+    (dolist (ov ovs)
+      (overlay-put ov 'face nil)))
+  (let* ((ovs (overlays-at (point)))
+         (max-ov nil)
+         (max-section -1))
+    (dolist (ov ovs)
+      (let* ((section (overlay-get ov 'p-search-section-level)))
+        (when (> section max-section)
+          (setq max-ov ov)
+          (setq max-section section))))
+    (when max-ov
+      (overlay-put max-ov 'face 'highlight))))
+
+(defun p-search-pre-command-hook ()
+  (p-search-highlight-point-section))
+
+(defun p-search-post-command-hook ()
+  (p-search-highlight-point-section))
+
+(define-derived-mode p-search-mode special-mode "p-search"
+  ""
+  :group 'p-search
+  (hack-dir-local-variables-non-file-buffer)
+  (add-hook 'pre-command-hook #'p-search-pre-command-hook nil t)
+  (add-hook 'post-command-hook #'p-search-post-command-hook t t)
+  ;; (setq-local revert-buffer-function #'magit-refresh-buffer)
+  ;; (setq-local bookmark-make-record-function #'magit--make-bookmark)
+  ;; (setq-local imenu-create-index-function #'magit--imenu-create-index)
+  ;; (setq-local isearch-filter-predicate #'magit-section--open-temporarily)
+  )
+
+;;;;;;;;;;;;;;;;;;;
+;;; prior init ;;;;
+
+(defun p-search-setup-priors ()
+  "Set up the buffers pre-existing priors."
+  (let* ((project-root (expand-file-name (project-root (project-current)))) ;; TODO - make this an opt
+         (initial-priors (list (p-search-prior-create
+                                :template p-search--subdirectory-prior-template
+                                :importance 'critical
+                                :inputs `(,project-root)))))
+    (setq p-search-priors initial-priors)))
+
+(defun p-search-user-setup-prior (template)
+  "Return an instantiated prior from TEMPLATE and users input."
+  )
+
+;;;;;;;;;;;;;;;;;
+;;; display ;;;;;
+
+(defvar p-search--section-level 0)
+
+(defun p-search-add-section-overlay (start end)
+  "Add overlay to indicate collapsible section from START to END."
+  (let ((ov (make-overlay start end)))
+    (overlay-put ov 'p-search-section-level p-search--section-level)))
+
+(defmacro p-search-add-section (section-name &rest body)
+  (declare (indent 1))
+  (let ((start (make-symbol "start"))
+        (end (make-symbol "end")))
+    `(let ((,start (point))
+           (p-search--section-level (1+ p-search--section-level)))
+       (insert ,section-name)
+       (when (not (= (char-after (1- (point))) ?\n))
+         (insert "\n"))
+       ,@body
+       (let ((,end (point)))
+         (p-search-add-section-overlay ,start ,end)))))
+
+(defun p-search-format-inputs (inputs)
+  "Apply formatings to INPUTS to display to end user."
+  (cond
+   ((listp inputs)
+    (seq-map #'p-search-format-inputs inputs))
+   ((stringp inputs)
+    (let ((home-dir (expand-file-name "~")))
+      (replace-regexp-in-string (regexp-quote home-dir) "~" inputs)))
+   (t
+    inputs)))
+
+(defun p-search-insert-prior (prior)
+  (let* ((start (point))
+         (template (p-search-prior-template prior))
+         (template-name (p-search-prior-template-name template))
+         (inputs (p-search-prior-inputs prior))
+         (importance (p-search-prior-importance prior))
+         (importance-char (alist-get
+                           importance
+                           '((critical . "!")
+                             (high . "H")
+                             (medium . "M")
+                             (low . "L")
+                             (none . "-"))))
+         (options (p-search-prior-options prior))) ;; TODO - calculate status
+    (p-search-add-section ""
+      (insert importance-char " " (propertize template-name 'face 'magit-header-line-key))
+      (insert (make-string (- 16 (current-column)) ?\s)
+              (propertize (prin1-to-string (p-search-format-inputs inputs)) 'face 'magit-dimmed) "\n")
+      (pcase-dolist (`(,name . ,val) options)
+        (insert "  " (symbol-name name) (prin1-to-string val) "\n")))))
+
+(defun p-search-refresh-buffer ()
+  "Refresh the current p-search buffer."
+  (interactive)
+  (let ((inhibit-read-only t)
+        (at-line (line-number-at-pos)))
+    (erase-buffer)
+    (p-search-add-section (propertize "Priors" 'face 'magit-header-line)
+      (dolist (prior p-search-priors)
+        (p-search-insert-prior prior)))
+    (goto-char (point-min))
+    (forward-line (1- at-line))))
+
+;;;;;;;;;;;;;;;;;;;;
+;;; mode helpers ;;;
+
+(defun p-search-setup-buffer ()
+  ""
+  (let* ((buffer (generate-new-buffer "p-search"))) ;; TODO - more sophisticated naming
+    (with-current-buffer buffer
+      (p-search-mode))
+    (display-buffer buffer nil)
+    (with-current-buffer buffer
+      (p-search-setup-priors)
+      (p-search-refresh-buffer))
+    buffer)) ;; TODO - more sophisticated display mechanisms
+
+;;;;;;;;;;;;;;;;
+;;; commands ;;;
+
+(defvar p-search-available-prior-templates
+  (list p-search--textseach-prior-template
+        p-search--filename-prior-template
+        p-search--subdirectory-prior-template))
+
+(defun p-search-add-section ()
+  "Command to add prior to current p-search session."
+  (interactive)
+  (let* ((names (seq-map #'p-search-prior-template-name p-search-available-prior-templates))
+         (selection (completing-read "Prior: " names nil t))
+         (template (seq-find (lambda (template)
+                               (string= selection (p-search-prior-template-name template)))
+                             p-search-available-prior-templates)))
+
+    template))
+
+
+(defun p-search ()
+  ""
+  (interactive)
+  (p-search-setup-buffer))
+
+
 
 
 ;; Initial priors
@@ -295,22 +482,6 @@
 ;;                              (heap-delete-root probs)
 ;;                              (heap-delete-root probs))))
 
-
-
-;; (let ((a ".*\\.go"))
-;;   (rx-to-string
-;;    `(or (regexp ,a))))
-
-
-;; (rx (or "a" "b" "c"))
-
-
-;;; API
-
-;;;###autoload
-(defun p-search ()
-  ""
-  (interactive))
 
 (provide 'p-search)
 ;;; p-search.el ends here
