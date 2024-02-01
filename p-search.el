@@ -79,10 +79,11 @@
   "Structure representing a class of priors."
   (name nil :documentation "Name of prior, to be identified by the user")
   (initialize-function nil :documentation "Function to populate prior results.  Called with three arguments: prior, base-priors, and args.")
-  (base-prior-key nil :documentation "Argument name that, when given a critical importance, is used to determine the base file listing, as well as given to other priors to optimize their performance.")
+  (base-prior-key nil :documentation "Argument name that, when given a critical importance, is used to determine the base file listing, as well as given to other priors to optimize their performance.") ;; deprecated
   (default-result nil :documentation "Result that should be returned if no file is specified.")
   (input-spec nil :documentation "Specification of inputs required for the function to function.")
-  (options-spec nil :documentation "Specification of parameters which alter the operation of the prior."))
+  (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
+  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space."))
 
 (cl-defstruct (p-search-prior
                (:copier nil)
@@ -119,12 +120,29 @@ providing information to a search.in "
     ;; '(buffer "*arst*") can be interpereted otherwise.
     ))
 
+(defconst p-search-search-space-cache (make-hash-table :test #'equal)) ;; TODO - Allow invalidation (like with command G)
 
-
-
+(defun p-search-generate-search-space () ;; new version of p-search-expand-files
+  "Generate all search candidates from `p-search-base-prior'."
+  (let* ((args (oref p-search-base-prior arguments))
+         (template (oref p-search-base-prior template))
+         (search-space-func (oref template search-space-function))
+         (search-space-key (list (type-of p-search-base-prior) args)))
+    (if-let* ((res (gethash search-space-key p-search-search-space-cache)))
+        res
+      (unless search-space-func
+        (error "base prior has no search-space-function."))
+      (let* ((res (funcall search-space-func args)))
+        (puthash search-space-key res p-search-search-space-cache)
+        res))))
 
 (defvar-local p-search-priors nil
   "List of active priors for current session.")
+(defvar-local p-search-base-prior nil
+  "The prior which is used to determine search space.
+This prior has a special function in that its
+`search-space-function' is called which returns all of the
+elements to search over.")
 
 (defun p-search--extract-default-options (template)
   (let* ((options-spec (p-search-prior-template-options-spec template))
@@ -146,7 +164,7 @@ providing information to a search.in "
                  :arguments args
                  :results (make-hash-table :test 'equal)
                  :importance (or importance 'medium)))
-         (base-priors (p-search--base-priors-values))
+         (base-priors (oref p-search-base-prior arguments))
          (init-res (funcall init-func prior base-priors args)))
     (setf (p-search-prior-proc-thread prior) init-res)
     prior))
@@ -157,7 +175,7 @@ providing information to a search.in "
          (template (p-search-prior-template prior))
          (init-func (p-search-prior-template-initialize-function template))
          (args (p-search-prior-arguments prior))
-         (base-priors (p-search--base-priors-values))
+         (base-priors (oref p-search-base-prior arguments))
          (init-res (and init-func (funcall init-func prior base-priors args))))
     (when (threadp old-thread|proc)
       (thread-signal old-thread|proc 'stop nil))
@@ -222,9 +240,9 @@ Elements are of the type (FILE PROB).")
 
 (defun p-search--calculate-probs ()
   "For all current priors, calculate element probabilities."
+  (message "--- p-search--calculate-probs")
   (let* ((old-heap p-search-posterior-probs)
-         (base-priors (p-search--base-priors-values))
-         (files (p-search-expand-files base-priors))
+         (files (p-search-generate-search-space))
          (dependent-priors (p-search--dependent-priors))
          (marginal-p 0.0)
          (res (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
@@ -250,6 +268,7 @@ Elements are of the type (FILE PROB).")
           (with-temp-buffer
             (thread-yield))
           (setq start-time (current-time)))))
+    (message "--- p-search--calculate-probs done")
     res))
 
 
@@ -341,11 +360,10 @@ Elements are of the type (FILE PROB).")
                                 :importance 'critical
                                 :arguments
                                 `((include-directories . ,(and project-root (list project-root))))))))
-    (setq p-search-priors initial-priors)))
-
-(defun p-search-user-setup-prior (template)
-  "Return an instantiated prior from TEMPLATE and users input."
-  )
+    (setq p-search-priors nil)
+    (setq p-search-base-prior (p-search-prior-create
+                               :template p-search-prior-base--filesystem
+                               :arguments (p-search-prior-default-arguments p-search-prior-base--filesystem)))))
 
 ;;;;;;;;;;;;;;;;;
 ;;; display ;;;;;
@@ -431,7 +449,7 @@ Elements are of the type (FILE PROB).")
     (p-search-add-section `((heading . "")
                             (props . (p-search-prior ,prior))
                             (key . ,prior))
-      (insert importance-char " " (propertize template-name 'face 'magit-header-line-key) "\n")
+      (insert (or importance-char " ") " " (propertize template-name 'face 'magit-header-line-key) "\n")
       (pcase-dolist (`(,name . ,val) options)
         (unless (eq name 'template)
           (insert "  " (symbol-name name) ": " (prin1-to-string val) "\n"))))))
@@ -450,6 +468,7 @@ Elements are of the type (FILE PROB).")
       (delete-overlay ov))
     (erase-buffer)
     (p-search-add-section (propertize "Priors" 'face 'magit-header-line)
+      (p-search-insert-prior p-search-base-prior)
       (dolist (prior p-search-priors)
         (p-search-insert-prior prior)))
     (goto-char (point-min))
@@ -482,6 +501,7 @@ will be to display the results.")
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
 This function is expected to be called every so often in a p-search buffer."
+  (message "DISPLAY")
   (when p-search-posterior-probs
     (pcase-let* ((`(_ ,start-s ,start-us _) (current-time))
            (elts '())) ;; (1) Get top-n results
@@ -639,11 +659,6 @@ This function is expected to be called every so often in a p-search buffer."
 
 ;;;;;;;;;;;;;;;;
 ;;; commands ;;;
-
-(defvar p-search-available-prior-templates
-  (list p-search--textsearch-prior-template
-        p-search--filename-prior-template
-        p-search--subdirectory-prior-template))
 
 (defun p-search-input-importance ()
   "Prompt the user to enter importance."

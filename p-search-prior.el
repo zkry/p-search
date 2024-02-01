@@ -41,16 +41,38 @@
 ;; - [ ] r f regexp frequency
 
 
+(defun p-search-prior-default-arguments (template)
+  "Return default input and options of TEMPLATE as one alist.
+This function is primarily used to create the base prior with reasonable
+default inputs, with the args being set to nil."
+  (let* ((input-spec (oref template input-spec))
+         (options-spec (oref template options-spec))
+         (res '()))
+    (pcase-dolist (`(,name . (,type . ,options)) input-spec)
+      (let* ((default (plist-get options :default))
+             (default-val (if (functionp default) (funcall default) default)))
+        (setq res (cons
+                   (cons name default-val)
+                   res))))
+    (pcase-dolist (`(,name . (,type . ,options)) options-spec)
+      (let* ((default (plist-get options :default))
+             (default-val (if (functionp default) (funcall default) default)))
+        (setq res (cons
+                   (cons name default-val)
+                   res))))
+    (nreverse res)))
+
+
 ;;;; Reference Priors:
 
-(defconst p-search-prior-base--filesystem-
-  (p-seach-prior-template-create
+(defconst p-search-prior-base--filesystem
+  (p-search-prior-template-create
    :name "FILESYSTEM"
    :base-prior-key t
-   :input-spec '((include-directories . (directory-names
-                                         :key "d"
-                                         :description "Directories"
-                                         :default (lambda () default-directory)))
+   :input-spec '((base-directory . (directory-name
+                                    :key "d"
+                                    :description "Directories"
+                                    :default (lambda () default-directory)))
                  (filename-regexp . (regexp
                                      :key "f"
                                      :description "Filename Pattern"
@@ -62,9 +84,28 @@
                    (use-git-ignore . (switch
                                       :key "-g"
                                       :description "Git Ignore"
-                                      :default t)))
-   ))
-
+                                      :default-value on)))
+   :search-space-function
+   (lambda (args)
+     (message "#####>>> %s" args)
+     (let-alist args
+       (let* ((default-directory .base-directory)
+              (file-candidates (if .use-git-ignore
+                                   (string-split (shell-command-to-string "git ls-files") "\n")
+                                 (string-split (shell-command-to-string "find . -type f") "\n")))
+              (files '()))
+         (dolist (file file-candidates)
+           (catch 'skip
+             (when (string-prefix-p "./" file)
+               (setq file (substring file 2)))
+             (unless (or (equal .filename-regexp ".*")
+                         (string-match-p .filename-regexp file))
+               (throw 'skip nil))
+             (when (and .ignore (string-match-p .ignore file))
+               (throw 'skip nil))
+             (setq file (file-name-concat default-directory file))
+             (push file files)))
+         (nreverse files))))))
 
 (defconst p-search--subdirectory-prior-template
   (p-search-prior-template-create
@@ -110,33 +151,33 @@
                    exact)
                   :key "-s"
                   :description "search scheme")))
-   :initialize-function
-   (lambda (prior base-priors args)
-     (let* ((input (alist-get 'search-term args))
-            (default-directory (car (alist-get 'include-directories base-priors))) ;; TODO: allow for multiple
-            (file-args (alist-get 'include-filename base-priors))
-            (ag-file-regex (and file-args (concat "(" (string-join file-args "|") ")")))
-            (cmd `("ag" ,input "-l" "--nocolor"))
-            (buf (generate-new-buffer "*pcase-text-search*")))
-       (when ag-file-regex
-         (setq cmd (append cmd `("-G" "\\.go$"))))
-       (make-process
-        :name "p-search-text-search-prior"
-        :buffer buf
-        :command cmd
-        :filter (lambda (proc string)
-                  (when (buffer-live-p (process-buffer proc))
-                    (with-current-buffer (process-buffer proc)
-                      (let ((moving (= (point) (process-mark proc))))
-                        (save-excursion
-                          (goto-char (process-mark proc))
-                          (insert string)
-                          (set-marker (process-mark proc) (point)))
-                        (if moving (goto-char (process-mark proc)))
-                        (let ((files (string-split string "\n"))
-                              (result-ht (p-search-prior-results prior)))
-                          (dolist (f files)
-                            (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+   :initialize-function 'p-search--textsearch-init-func
    :default-result 'no))
+
+(defun p-search--textsearch-init-func (prior base-priors args)
+  (let* ((input (alist-get 'search-term args))
+         (default-directory (alist-get 'base-directory base-priors)) ;; TODO: allow for multiple
+         (ag-file-regex (alist-get 'filename-regexp base-priors))
+         (cmd `("ag" ,input "-l" "--nocolor"))
+         (buf (generate-new-buffer "*pcase-text-search*")))
+    (when ag-file-regex
+      (setq cmd (append cmd `("-G" ,ag-file-regex))))
+    (make-process
+     :name "p-search-text-search-prior"
+     :buffer buf
+     :command cmd
+     :filter (lambda (proc string)
+               (when (buffer-live-p (process-buffer proc))
+                 (with-current-buffer (process-buffer proc)
+                   (let ((moving (= (point) (process-mark proc))))
+                     (save-excursion
+                       (goto-char (process-mark proc))
+                       (insert string)
+                       (set-marker (process-mark proc) (point)))
+                     (if moving (goto-char (process-mark proc)))
+                     (let ((files (string-split string "\n"))
+                           (result-ht (p-search-prior-results prior)))
+                       (dolist (f files)
+                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
 
 ;;; p-search-prior.el ends here

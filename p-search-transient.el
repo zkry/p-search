@@ -39,7 +39,8 @@
 ;;; Transient Classes
 
 (defclass p-search--option (transient-variable)
-  ((option-symbol :initarg :option-symbol :initform nil)))
+  ((option-symbol :initarg :option-symbol :initform nil)
+   (default-value :initarg :default-value :initform nil)))
 
 (cl-defmethod transient-infix-value ((obj p-search--option))
   (when-let ((value (oref obj value)))
@@ -50,7 +51,8 @@
 (cl-defmethod transient-init-value ((obj p-search--option))
   ""
   (let* ((option-symbol (oref obj option-symbol))
-         (init-value (alist-get option-symbol p-search-default-inputs)))
+         (default-value (and (slot-boundp obj 'default-value) (oref obj default-value)))
+         (init-value (or (alist-get option-symbol p-search-default-inputs) default-value)))
     (when init-value
       (oset obj value init-value))))
 
@@ -250,6 +252,8 @@ When an alist, the prior key contains the prior to be updated.")
    (pcase spec
      (`(,name . (directory-names . ,opts))
       (p-search-read-directories (format "%s (comma separated): " prompt-string) nil nil))
+     (`(,name . (directory-name . ,opts))
+      (read-directory-name (format "%s (comma separated): " prompt-string)))
      (`(,name . (strings . ,opts))
       (read-string (format "%s: " prompt-string)))
      (`(,name . (regexp . ,opts))
@@ -281,6 +285,15 @@ When an alist, the prior key contains the prior to be updated.")
                :multi-value t
                :option-symbol ,name
                :always-read ,always-read))))
+    (`(,name . (directory-name . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--directory-infix
+               :option-symbol ,name
+               :always-read ,always-read))))
     (`(,name . (regexp . ,opts))
      (let* ((key (plist-get opts :key))
             (description (plist-get opts :description)))
@@ -302,6 +315,16 @@ When an alist, the prior key contains the prior to be updated.")
                :choices ,choices
                :option-symbol ,name
                :always-read ,always-read))))
+
+    (`(,name . (toggle . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--toggle-infix
+               :option-symbol ,name))))
+
     (_ (error "unsupported spec %s" spec))))
 
 (defun p-search-transient-input-suffixes ()
