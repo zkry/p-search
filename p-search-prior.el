@@ -62,7 +62,6 @@ default inputs, with the args being set to nil."
                    res))))
     (nreverse res)))
 
-
 ;;;; Reference Priors:
 
 (defconst p-search-prior-base--filesystem
@@ -81,13 +80,12 @@ default inputs, with the args being set to nil."
                               :key "-i"
                               :description "Ignore Patterns"
                               :multiple t))  ;; TODO - implement multiple
-                   (use-git-ignore . (switch
+                   (use-git-ignore . (toggle
                                       :key "-g"
                                       :description "Git Ignore"
                                       :default-value on)))
    :search-space-function
    (lambda (args)
-     (message "#####>>> %s" args)
      (let-alist args
        (let* ((default-directory .base-directory)
               (file-candidates (if .use-git-ignore
@@ -166,6 +164,11 @@ default inputs, with the args being set to nil."
      :name "p-search-text-search-prior"
      :buffer buf
      :command cmd
+     :sentinel (lambda (proc event)
+                 (when (or (member event '("finished\n" "deleted\n"))
+                           (string-prefix-p "exited abnormally with code" event)
+                           (string-prefix-p "failed with code"))
+                   (p-search--notify-main-thread)))
      :filter (lambda (proc string)
                (when (buffer-live-p (process-buffer proc))
                  (with-current-buffer (process-buffer proc)

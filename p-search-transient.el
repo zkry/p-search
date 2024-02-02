@@ -15,7 +15,7 @@
     (cons date sigma)))
 
 (defun p-search-read-directories (prompt init hist)
-  (completing-read-multiple "Directories: " #'completion-file-name-table #'directory-name-p))
+  (completing-read-multiple "Directories: " #'completion-file-name-table #'directory-name-p nil nil hist))
 
 (defun p-search-read-bytes (prompt &optional init hist)
   (let* ((val (read-string prompt init hist)))
@@ -114,20 +114,29 @@
         (progn
           (oset obj reader #'p-search-read-directories)
           (oset obj prompt "Directories: "))
-      (oset obj reader #'read-directory-name)
+      (oset obj reader (lambda (prompt init hist)
+                         (read-directory-name prompt init nil nil init)))
       (oset obj prompt "Directory: "))))
 
 (cl-defmethod transient-format-value ((obj p-search--directory))
-  (if-let* ((dirs (and (slot-boundp obj 'value) (oref obj value))))
+  (let* ((multi-value-p (and (slot-boundp obj 'multi-value) (oref obj multi-value)))
+         (value (and (slot-boundp obj 'value) (oref obj value))))
+    (cond
+     ((and value multi-value-p)
       (concat "("
-       (string-join
-        (seq-map
-         (lambda (dir)
-           (propertize (format "\"%s\"" dir) 'face 'transient-value))
-         dirs)
-        ", ")
-       ")")
-    (propertize "()" 'face 'transient-inactive-value)))
+                (string-join
+                 (seq-map
+                  (lambda (dir)
+                    (propertize (format "\"%s\"" dir) 'face 'transient-value))
+                  value)
+                 ", ")
+                ")"))
+     ((and value (not multi-value-p))
+      (propertize value 'face 'transient-value))
+     ((and (not value) multi-value-p)
+      (propertize "()" 'face 'transient-inactive-value))
+     (t
+      (propertize "nil" 'face 'transient-inactive-value)))))
 
 (transient-define-infix p-search--directory-infix ()
   :class p-search--directory)
@@ -258,7 +267,8 @@ When an alist, the prior key contains the prior to be updated.")
       (read-string (format "%s: " prompt-string)))
      (`(,name . (regexp . ,opts))
       (read-regexp (format "%s: " prompt-string)))
-     (`(,name . (switch . ,opts)))
+     (`(,name . (toggle . ,opts))
+      (error "Not implemented: switch"))
      (`(,name . (choice . ,opts))
       (let* ((choices (plist-get opts :choices)))
         (completing-read ("%s: " prompt-string) choices nil t)))
@@ -350,6 +360,8 @@ When an alist, the prior key contains the prior to be updated.")
   p-search-prior-editing)
 (defun p-search--is-prior-create-mode ()
   (not p-search-prior-editing))
+(defun p-search--is-base-prior-template ()
+  (oref p-search-current-prior-template search-space-function))
 
 (transient-define-prefix p-search-create-prior-dispatch ()
   "Dispatch create-prior command."
@@ -364,18 +376,20 @@ When an alist, the prior key contains the prior to be updated.")
    (lambda (_)
      (append
       (p-search-transient-option-suffixes)
-      (list (transient-parse-suffix
-             transient--prefix
-             `("-c" "complement"
-               p-search--toggle-infix
-               :init-state nil))
-            (transient-parse-suffix
-             transient--prefix
-             `("-i" "importance"
-               p-search--choices-infix
-               :choices ,p-search-importance-levls
-               :init-choice medium
-               :option-symbol importance)))))]
+      (if (p-search--is-base-prior-template)
+          '()
+        (list (transient-parse-suffix
+               transient--prefix
+               `("-c" "complement"
+                 p-search--toggle-infix
+                 :init-state nil))
+              (transient-parse-suffix
+               transient--prefix
+               `("-i" "importance"
+                 p-search--choices-infix
+                 :choices ,p-search-importance-levls
+                 :init-choice medium
+                 :option-symbol importance))))))]
   ["Actions"
    ("c" "create"
     (lambda ()
@@ -385,7 +399,6 @@ When an alist, the prior key contains the prior to be updated.")
    ("e" "edit"
     (lambda ()
       (interactive)
-      (message "EDITING")
       (p-search-transient-prior-edit))
     :if p-search--is-prior-edit-mode)])
 

@@ -124,17 +124,18 @@ providing information to a search.in "
 
 (defun p-search-generate-search-space () ;; new version of p-search-expand-files
   "Generate all search candidates from `p-search-base-prior'."
-  (let* ((args (oref p-search-base-prior arguments))
-         (template (oref p-search-base-prior template))
-         (search-space-func (oref template search-space-function))
-         (search-space-key (list (type-of p-search-base-prior) args)))
-    (if-let* ((res (gethash search-space-key p-search-search-space-cache)))
-        res
-      (unless search-space-func
-        (error "base prior has no search-space-function."))
-      (let* ((res (funcall search-space-func args)))
-        (puthash search-space-key res p-search-search-space-cache)
-        res))))
+  (when p-search-base-prior
+    (let* ((args (oref p-search-base-prior arguments))
+           (template (oref p-search-base-prior template))
+           (search-space-func (oref template search-space-function))
+           (search-space-key (list (type-of p-search-base-prior) args)))
+      (if-let* ((res (gethash search-space-key p-search-search-space-cache)))
+          res
+        (unless search-space-func
+          (error "base prior has no search-space-function."))
+        (let* ((res (funcall search-space-func args)))
+          (puthash search-space-key res p-search-search-space-cache)
+          res)))))
 
 (defvar-local p-search-priors nil
   "List of active priors for current session.")
@@ -501,7 +502,6 @@ will be to display the results.")
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
 This function is expected to be called every so often in a p-search buffer."
-  (message "DISPLAY")
   (when p-search-posterior-probs
     (pcase-let* ((`(_ ,start-s ,start-us _) (current-time))
            (elts '())) ;; (1) Get top-n results
@@ -549,8 +549,10 @@ This function is expected to be called every so often in a p-search buffer."
 (defvar-local p-search-main-thread-cond (make-condition-variable p-search-main-thread-mutex "p-search main thread cond"))
 
 (defun p-search--notify-main-thread ()
-  (with-mutex p-search-main-thread-mutex
-    (condition-notify p-search-main-thread-cond)))
+  (p-search--calculate-probs)
+  ;; (with-mutex p-search-main-thread-mutex
+  ;;   (condition-notify p-search-main-thread-cond))
+  )
 
 (defun p-search-main-thread ()
   (with-mutex p-search-main-thread-mutex
@@ -566,8 +568,15 @@ This function is expected to be called every so often in a p-search buffer."
   (when (and p-search-main-worker-thread
              (thread-live-p p-search-main-worker-thread))
     (thread-signal p-search-main-worker-thread 'error nil))
-  (setq p-search-main-worker-thread
-        (make-thread #'p-search-main-thread "p-search-main")))
+  ;; Note: Getting threads to work as expected is actually really
+  ;; confusing.  It turns out that running `p-search--calulate-probs'
+  ;; is actually pretty fast so I'll forego the threads for now.
+  ;; Worst case the user has to wait for a 0.5 second computaiton to
+  ;; occur.
+  (p-search--notify-main-thread)
+  ;; (setq p-search-main-worker-thread
+  ;;       (make-thread #'p-search-main-thread "p-search-main"))
+  )
 
 ;;;;;;;;;;;;;;;;;;;
 ;;; Sections   ;;;;
