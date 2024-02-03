@@ -149,15 +149,15 @@ default inputs, with the args being set to nil."
                    exact)
                   :key "-s"
                   :description "search scheme")))
-   :initialize-function 'p-search--textsearch-init-func
+   :initialize-function 'p-search--textsearch-prior-template-init
    :default-result 'no))
 
-(defun p-search--textsearch-init-func (prior base-priors args)
+(defun p-search--textsearch-prior-template-init (prior base-prior-args args)
   (let* ((input (alist-get 'search-term args))
-         (default-directory (alist-get 'base-directory base-priors)) ;; TODO: allow for multiple
-         (ag-file-regex (alist-get 'filename-regexp base-priors))
+         (default-directory (alist-get 'base-directory base-prior-args)) ;; TODO: allow for multiple
+         (ag-file-regex (alist-get 'filename-regexp base-prior-args))
          (cmd `("ag" ,input "-l" "--nocolor"))
-         (buf (generate-new-buffer "*pcase-text-search*")))
+         (buf (generate-new-buffer "*p-search-text-search*")))
     (when ag-file-regex
       (setq cmd (append cmd `("-G" ,ag-file-regex))))
     (make-process
@@ -182,5 +182,45 @@ default inputs, with the args being set to nil."
                            (result-ht (p-search-prior-results prior)))
                        (dolist (f files)
                          (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+
+(defconst p-search--git-author-prior-template
+  (p-search-prior-template-create
+   :name "git author"
+   :input-spec
+   '((git-author . (string :key "a" :description "Author")))
+   :options-spec
+   '()
+   :initialize-function 'p-search--git-author-prior-template-init
+   :default-result 'no))
+
+(defun p-search--git-author-prior-template-init (prior base-prior-args args)
+  (let* ((author (alist-get 'git-author args))
+         (default-directory (alist-get 'base-directory base-prior-args))
+         (buf (generate-new-buffer "*p-search-git-author-search*"))
+         (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
+    (make-process
+     :name "p-seach-git-author-prior"
+     :buffer buf
+     :command `("sh" "-c" ,git-command)
+     :sentinel (lambda (proc event)
+                 (when (or (member event '("finished\n" "deleted\n"))
+                           (string-prefix-p "exited abnormally with code" event)
+                           (string-prefix-p "failed with code"))
+                   (p-search--notify-main-thread)))
+     :filter (lambda (proc string)
+               (when (buffer-live-p (process-buffer proc))
+                 (with-current-buffer (process-buffer proc)
+                   (let ((moving (= (point) (process-mark proc))))
+                     (save-excursion
+                       (goto-char (process-mark proc))
+                       (insert string)
+                       (set-marker (process-mark proc) (point)))
+                     (if moving (goto-char (process-mark proc)))
+                     (let ((files (string-split string "\n"))
+                           (result-ht (p-search-prior-results prior)))
+                       (dolist (f files)
+                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+
+
 
 ;;; p-search-prior.el ends here

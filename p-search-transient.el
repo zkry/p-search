@@ -263,7 +263,7 @@ When an alist, the prior key contains the prior to be updated.")
       (p-search-read-directories (format "%s (comma separated): " prompt-string) nil nil))
      (`(,name . (directory-name . ,opts))
       (read-directory-name (format "%s (comma separated): " prompt-string)))
-     (`(,name . (strings . ,opts))
+     (`(,name . (string . ,opts))
       (read-string (format "%s: " prompt-string)))
      (`(,name . (regexp . ,opts))
       (read-regexp (format "%s: " prompt-string)))
@@ -325,7 +325,6 @@ When an alist, the prior key contains the prior to be updated.")
                :choices ,choices
                :option-symbol ,name
                :always-read ,always-read))))
-
     (`(,name . (toggle . ,opts))
      (let* ((key (plist-get opts :key))
             (description (plist-get opts :description)))
@@ -334,7 +333,14 @@ When an alist, the prior key contains the prior to be updated.")
         `(,key ,description
                p-search--toggle-infix
                :option-symbol ,name))))
-
+    (`(,name . (string . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--string-infix
+               :option-symbol ,name))))
     (_ (error "unsupported spec %s" spec))))
 
 (defun p-search-transient-input-suffixes ()
@@ -446,7 +452,11 @@ When an alist, the prior key contains the prior to be updated.")
     ("f c" "distance" zr/todo) ;; directory-name -> input
     ]
    ["Git"
-    ("g a" "author" zr/todo) ;; git -> read authors -> input
+    ("g a" "author"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation  p-search--git-author-prior-template))
+     zr/todo) ;; git -> read authors -> input
     ("g b" "branch" zr/todo) ;; git -> read branches -> input
     ("g c" "file co-changes" zr/todo) ;;; read file -> input
     ("g m" "modification frequency" zr/todo) ;; ---
