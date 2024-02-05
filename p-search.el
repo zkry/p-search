@@ -165,7 +165,7 @@ elements to search over.")
                  :arguments args
                  :results (make-hash-table :test 'equal)
                  :importance (or importance 'medium)))
-         (base-priors (oref p-search-base-prior arguments))
+         (base-priors (oref p-search-base-prior arguments))  ;; TODO - rename
          (init-res (funcall init-func prior base-priors args)))
     (setf (p-search-prior-proc-thread prior) init-res)
     prior))
@@ -201,16 +201,6 @@ elements to search over.")
             (setq ret (cons (cons base-prior-key next) ret))))))
     ret))
 
-(defun p-search--dependent-priors ()
-  "Return list of priors that are not base-priors."
-  (let ((ret '()))
-    (dolist (p p-search-priors)
-      (let* ((template (p-search-prior-template p))
-             (base-prior-key (p-search-prior-template-base-prior-key template)))
-        (unless base-prior-key
-          (push p ret))))
-    (nreverse ret)))
-
 (defconst p-search-importance-levels
   '(none low medium high critical))
 
@@ -244,7 +234,7 @@ Elements are of the type (FILE PROB).")
   (message "--- p-search--calculate-probs")
   (let* ((old-heap p-search-posterior-probs)
          (files (p-search-generate-search-space))
-         (dependent-priors (p-search--dependent-priors))
+         (dependent-priors p-search-priors)
          (marginal-p 0.0)
          (res (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
                                            (string> (car a) (car b))
@@ -532,8 +522,8 @@ This function is expected to be called every so often in a p-search buffer."
             (pcase-dolist (`(,name ,p) elts)
               (p-search-add-section `((heading . "")
                                       (props . (p-search-result ,name)))
-                (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) 65))
-                (insert (make-string (- 70 (current-column)) ?\s)) ;; TODO - better column
+                (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) 85))
+                (insert (make-string (- 90 (current-column)) ?\s)) ;; TODO - better column
                 (insert (format "%.6f" p))
                 (insert "\n"))))
           (goto-char (point-min))

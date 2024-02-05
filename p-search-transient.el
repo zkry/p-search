@@ -217,12 +217,14 @@
   (cl-call-next-method)
   (oset obj prompt (format "%s: " (symbol-name (oref obj option-symbol))))
   (when-let (init-value (and (slot-boundp obj 'init-choice) (oref obj init-choice)))
-    (oset obj value init-value)))
+    (oset obj value init-value))) ;; TODO - do I need init-choice
 
 (cl-defmethod transient-infix-read ((obj p-search--choices))
   (let* ((choices (oref obj choices))
          (prompt (oref obj prompt)))
-    (intern (completing-read (oref obj prompt) choices nil t))))
+    (intern (completing-read (oref obj prompt) (if (functionp choices) (funcall choices)
+                                                 choices)
+                             nil t))))
 
 (transient-define-infix p-search--choices-infix ()
   :class p-search--choices)
@@ -271,7 +273,8 @@ When an alist, the prior key contains the prior to be updated.")
       (error "Not implemented: switch"))
      (`(,name . (choice . ,opts))
       (let* ((choices (plist-get opts :choices)))
-        (completing-read ("%s: " prompt-string) choices nil t)))
+        (completing-read (format "%s: " prompt-string) (if (functionp choices) (funcall choices) choices)
+                         nil t)))
      (_ (error "unsupported spec %s" spec)))))
 
 (defun p-search-read-current-specs ()
@@ -321,7 +324,8 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--choices-infix
-               :init-choice ,(car choices) ;; First choice is default
+               :init-choice ,(if (functionp choices) nil
+                               (car choices)) ;; First choice is default
                :choices ,choices
                :option-symbol ,name
                :always-read ,always-read))))

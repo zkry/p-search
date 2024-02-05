@@ -67,7 +67,6 @@ default inputs, with the args being set to nil."
 (defconst p-search-prior-base--filesystem
   (p-search-prior-template-create
    :name "FILESYSTEM"
-   :base-prior-key t
    :input-spec '((base-directory . (directory-name
                                     :key "d"
                                     :description "Directories"
@@ -108,7 +107,6 @@ default inputs, with the args being set to nil."
 (defconst p-search--subdirectory-prior-template
   (p-search-prior-template-create
    :name "subdirectory"
-   :base-prior-key 'include-directories
    :input-spec '((include-directories . (directory-names
                                          :key "i"
                                          :description "Directories"))))
@@ -118,17 +116,17 @@ default inputs, with the args being set to nil."
 (defconst p-search--filename-prior-template
   (p-search-prior-template-create
    :name "file-name"
-   :base-prior-key 'include-filename
    :input-spec '((include-filename . (regexp
                                       :key "i"
                                       :description "Pattern")))
-   ;; :initialize-function
-   ;; (lambda (base-priors result-ht input-regexp-match) ;; superfelous
-   ;;   (let* ((files (p-search-extract-files base-priors))) ;; normally should do async or lazily
-   ;;     (dolist (file files)
-   ;;       (puthash file (if (string-match-p input-regexp-match file) 'yes 'no)
-   ;;                result-ht)))))))
-   ))
+   :initialize-function
+   (lambda (prior base-prior-args args) ;; TODO - remove base-prior-args as it can be obtained from base prior and args for that mattr
+     (let* ((files (p-search-generate-search-space))
+            (fn-pattern (alist-get 'include-filename args))
+            (result-ht (p-search-prior-results prior))) ;; normally should do async or lazily
+       (dolist (file files)
+         (puthash file (if (string-match-p fn-pattern file) 'yes 'no) result-ht)))
+     (p-search--notify-main-thread)))))))
 
 (defconst p-search--textsearch-prior-template
   (p-search-prior-template-create
@@ -183,11 +181,19 @@ default inputs, with the args being set to nil."
                        (dolist (f files)
                          (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
 
+(defun p-seach--git-authors ()
+  (let* ((base-args (oref p-search-base-prior arguments))
+         (default-directory (alist-get 'base-directory base-args)))
+    (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))
+
 (defconst p-search--git-author-prior-template
   (p-search-prior-template-create
    :name "git author"
    :input-spec
-   '((git-author . (string :key "a" :description "Author")))
+   '((git-author . (choice
+                    :key "a"
+                    :description "Author"
+                    :choices p-seach--git-authors)))
    :options-spec
    '()
    :initialize-function 'p-search--git-author-prior-template-init
