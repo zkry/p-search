@@ -1,1 +1,5 @@
-* p-search: a search tool aggregator using probabilities
+* p-search: probablistic search tool aggregator
+
+  **This project is a work in progress**
+
+  Once you see documentation here, you'll know it's usable.
