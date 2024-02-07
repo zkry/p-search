@@ -191,6 +191,13 @@
   :class p-search--string)
 
 
+(defclass p-search--number (p-search--option)
+  ((reader :initform #'read-number)))
+
+(transient-define-infix p-search--number-infix ()
+  :class p-search--number)
+
+
 (defclass p-search--memory (p-search--option)
   ((reader :initform #'p-search-read-bytes)
    (prompt :initform "Memory size (e.g. 10MB): ")))
@@ -269,6 +276,8 @@ When an alist, the prior key contains the prior to be updated.")
       (read-string (format "%s: " prompt-string)))
      (`(,name . (regexp . ,opts))
       (read-regexp (format "%s: " prompt-string)))
+     (`(,name . (number . ,opts))
+      (read-number (format "%s: " prompt-string)))
      (`(,name . (toggle . ,opts))
       (error "Not implemented: switch"))
      (`(,name . (choice . ,opts))
@@ -344,6 +353,14 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--string-infix
+               :option-symbol ,name))))
+    (`(,name . (number . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--number-infix
                :option-symbol ,name))))
     (_ (error "unsupported spec %s" spec))))
 

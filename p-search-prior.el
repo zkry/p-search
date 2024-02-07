@@ -10,9 +10,9 @@
 
 ;; ToDo List:
 ;; File System:
-;; - [ ] f n File Name
-;; - [ ] f d Directory
-;; - [ ] f t File Type
+;; - [x] f n Filename
+;; - [x] f d Directory
+;; - [x] f t File Type
 ;; - [ ] f m Modification Date
 ;; - [ ] f s Size
 ;; - [ ] f c Distance
@@ -109,7 +109,20 @@ default inputs, with the args being set to nil."
    :name "subdirectory"
    :input-spec '((include-directories . (directory-names
                                          :key "i"
-                                         :description "Directories"))))
+                                         :description "Directories")))
+   :initialize-function
+   (lambda (prior base-prior-args args)
+     (let* ((files (p-search-generate-search-space))
+            (directories (seq-map #'expand-file-name (alist-get 'include-directories args)))
+            (result-ht (p-search-prior-results prior)))
+       (dolist (file files)
+         (catch 'out
+           (let* ((file-expanded (expand-file-name file)))
+             (dolist (dir directories)
+               (when (string-prefix-p dir file-expanded)
+                 (puthash file 'yes result-ht)
+                 (throw 'out nil))))))
+       (p-search--notify-main-thread))))
   "Sample prior.")
 
 
@@ -126,7 +139,40 @@ default inputs, with the args being set to nil."
             (result-ht (p-search-prior-results prior))) ;; normally should do async or lazily
        (dolist (file files)
          (puthash file (if (string-match-p fn-pattern file) 'yes 'no) result-ht)))
-     (p-search--notify-main-thread)))))))
+     (p-search--notify-main-thread))))
+
+
+(defconst p-search--filetype-prior-template
+  (p-search-prior-template-create
+   :name "file-type"
+   :input-spec
+   '((extension . (string
+                   :key "e"
+                   :description "File Extension")))
+   :initialize-function
+   (lambda (prior base-prior-args args)
+     (let* ((files (p-search-generate-search-space))
+            (ext-suffix (alist-get 'base-prior-args args))
+            (result-ht (p-search-prior-results prior)))
+       (dolist (file files)
+         (puthash file (if (string-suffix-p ext-suffix file) 'yes 'no) result-ht)))
+     (p-search--notify-main-thread))))
+
+
+(defconst p-search--modification-date-prior-template
+  (p-search-prior-template-create
+   :name "modification-date"
+   :input-spec
+   '((date . (string
+              :key "d"
+              :description "Date"))
+     (sigma . (number
+               :key "s"
+               :description "Std Dev")))
+   :initialize-function
+   (lambda (prior base-prior-args args)
+     )))
+
 
 (defconst p-search--textsearch-prior-template
   (p-search-prior-template-create
