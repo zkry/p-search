@@ -158,6 +158,11 @@ default inputs, with the args being set to nil."
          (puthash file (if (string-suffix-p ext-suffix file) 'yes 'no) result-ht)))
      (p-search--notify-main-thread))))
 
+(defconst p-search--timestamp-high-to-days 0.758518518521)
+
+(defun p-search--normal-pdf (x mu sigma)
+  (/ (exp (* -0.5 (expt (/ (- x mu) sigma) 2.0)))
+     (* sigma (sqrt (* 2 pi)))))
 
 (defconst p-search--modification-date-prior-template
   (p-search-prior-template-create
@@ -171,7 +176,17 @@ default inputs, with the args being set to nil."
                :description "Std Dev")))
    :initialize-function
    (lambda (prior base-prior-args args)
-     )))
+     (let* ((files (p-search-generate-search-space))
+            (date (alist-get 'date args))
+            (sigma (alist-get 'sigma args))
+            (result-ht (p-search-prior-results prior)))
+       (let* ((mu (* (car (date-to-time date)) p-search--timestamp-high-to-days)))
+         (dolist (file files)
+           (let* ((attrs (file-attributes file))
+                  (days (* (car (nth 5 attrs)) p-search--timestamp-high-to-days))
+                  (p (p-search--normal-pdf days mu sigma)))
+             (puthash file p result-ht)))))
+     (p-search--notify-main-thread))))
 
 
 (defconst p-search--textsearch-prior-template

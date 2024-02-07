@@ -467,8 +467,14 @@ When an alist, the prior key contains the prior to be updated.")
      (lambda ()
        (interactive)
        (p-search-dispatch-prior-creation p-search--filename-prior-template))) ;; regexp -> input
-    ("f t" "file type" zr/todo) ;; string -> input
-    ("f m" "modification date" zr/todo) ;; date+sigma -> input
+    ("f t" "file type"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--filetype-prior-template))) ;; string -> input
+    ("f m" "modification date"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--modification-date-prior-template))) ;; date+sigma -> input
     ("f s" "size" zr/todo) ;; byte string -> input
     ("f c" "distance" zr/todo) ;; directory-name -> input
     ]
