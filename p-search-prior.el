@@ -13,12 +13,12 @@
 ;; - [x] f n Filename
 ;; - [x] f d Directory
 ;; - [x] f t File Type
-;; - [ ] f m Modification Date
-;; - [ ] f s Size
+;; - [x] f m Modification Date
+;; - [x] f s Size
 ;; - [ ] f c Distance
 ;;
 ;; Git:
-;; - [ ] g a Author
+;; - [x] g a Author
 ;; - [ ] g b Branch
 ;; - [ ] g c File Co-Changes
 ;; - [ ] g m Modification Frequency
@@ -161,8 +161,11 @@ default inputs, with the args being set to nil."
 (defconst p-search--timestamp-high-to-days 0.758518518521)
 
 (defun p-search--normal-pdf (x mu sigma)
-  (/ (exp (* -0.5 (expt (/ (- x mu) sigma) 2.0)))
-     (* sigma (sqrt (* 2 pi)))))
+  (let ((x (float x)) ;; TODO - this needs to be fast!
+        (mu (float mu))
+        (sigma (float sigma)))
+    (/ (exp (* -0.5 (expt (/ (- x mu) sigma) 2.0)))
+       (* sigma (sqrt (* 2 pi))))))
 
 (defconst p-search--modification-date-prior-template
   (p-search-prior-template-create
@@ -187,6 +190,29 @@ default inputs, with the args being set to nil."
                   (p (p-search--normal-pdf days mu sigma)))
              (puthash file p result-ht)))))
      (p-search--notify-main-thread))))
+
+(defconst p-search--file-size-prior-template
+  (p-search-prior-template-create
+   :name "file-size"
+   :input-spec '((data-size . (memory :key "d"
+                                      :description "data size"))
+                 (sigma . (memory :key "s"
+                                  :description "Std Dev")))
+   :initialize-function
+   (lambda (prior base-prior-args args)
+     (let* ((files (p-search-generate-search-space))
+            (mu-bytes (alist-get 'data-size args))
+            (sigma-bytes (alist-get 'sigma args))
+            (result-ht (p-search-prior-results prior)))
+       (dolist (file files)
+         (let* ((size (nth 7 (file-attributes file)))
+                (p (p-search--normal-pdf size mu-bytes sigma-bytes)))
+           (message "p(%d, %d, %d) = %f" size mu-bytes sigma-bytes p)
+           (puthash file p result-ht))))
+     (p-search--notify-main-thread))))
+
+
+;;; Seach Priors
 
 
 (defconst p-search--textsearch-prior-template
@@ -242,10 +268,20 @@ default inputs, with the args being set to nil."
                        (dolist (f files)
                          (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
 
+;;; Git Priors
+
 (defun p-seach--git-authors ()
   (let* ((base-args (oref p-search-base-prior arguments))
          (default-directory (alist-get 'base-directory base-args)))
     (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))
+
+(defun p-seach--git-branches ()
+  (let* ((base-args (oref p-search-base-prior arguments))
+         (default-directory (alist-get 'base-directory base-args)))
+    (seq-map
+     (lambda (line)
+       (string-trim-left line "[ *]*"))
+     (string-lines (shell-command-to-string "git branch  -a") t))))
 
 (defconst p-search--git-author-prior-template
   (p-search-prior-template-create
@@ -255,8 +291,6 @@ default inputs, with the args being set to nil."
                     :key "a"
                     :description "Author"
                     :choices p-seach--git-authors)))
-   :options-spec
-   '()
    :initialize-function 'p-search--git-author-prior-template-init
    :default-result 'no))
 
@@ -265,6 +299,51 @@ default inputs, with the args being set to nil."
          (default-directory (alist-get 'base-directory base-prior-args))
          (buf (generate-new-buffer "*p-search-git-author-search*"))
          (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
+    (make-process
+     :name "p-seach-git-author-prior"
+     :buffer buf
+     :command `("sh" "-c" ,git-command)
+     :sentinel (lambda (proc event)
+                 (when (or (member event '("finished\n" "deleted\n"))
+                           (string-prefix-p "exited abnormally with code" event)
+                           (string-prefix-p "failed with code"))
+                   (p-search--notify-main-thread)))
+     :filter (lambda (proc string)
+               (when (buffer-live-p (process-buffer proc))
+                 (with-current-buffer (process-buffer proc)
+                   (let ((moving (= (point) (process-mark proc))))
+                     (save-excursion
+                       (goto-char (process-mark proc))
+                       (insert string)
+                       (set-marker (process-mark proc) (point)))
+                     (if moving (goto-char (process-mark proc)))
+                     (let ((files (string-split string "\n"))
+                           (result-ht (p-search-prior-results prior)))
+                       (dolist (f files)
+                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+
+(defconst p-search--git-branch-prior-template
+  (p-search-prior-template-create
+   :name "git-branch"
+   :input-spec
+   '((branch . (choice
+                :key "b"
+                :description "Git Branch"
+                :choices p-seach--git-branches))
+     (n . (number
+           :key "n"
+           :description "Number commits back"
+           :default-value 5))) ;; TODO - may break sometimes
+   :initialize-function 'p-search--git-branch-prior-template-init
+   :default-result 'no))
+
+(defun p-search--git-branch-prior-template-init (prior base-prior-args args)
+  (let* ((branch (alist-get 'branch args))
+         (n (alist-get 'n args))
+         (default-directory (alist-get 'base-directory base-prior-args))
+         (buf (generate-new-buffer "*p-search-git-branch-search*"))
+         (git-command (format "git diff --name-only %s~%d %s"
+                              branch n branch)))
     (make-process
      :name "p-seach-git-author-prior"
      :buffer buf

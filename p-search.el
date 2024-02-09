@@ -219,12 +219,20 @@ elements to search over.")
     ('(no high) 0.1)
     ('(no critical) 0.0)
     (`(,p low) ; TODO: speed up betaI calculation
-     (calc-eval (format "betaI(%f, 0.5, 0.5)" p)))
+     ;;(read (calc-eval (format "betaI(%f, 0.5, 0.5)" p)))
+     p
+     ) ;; TODO - don't use calc-eval
     (`(,p medium) p)
     (`(,p high)
-     (calc-eval (format "betaI(%f, 3.0, 3.0)" p)))
+     ;; (read (calc-eval (format "betaI(%f, 3.0, 3.0)" p)))
+     p
+     )
     (`(,p critical)
-     (calc-eval (format "betaI(%f, 100, 100)" p)))))
+     ;;(read (calc-eval (format "betaI(%f, 100, 100)" p)))
+     p
+     )))
+
+
 
 (defvar-local p-search-posterior-probs nil
   "Heap of calculated posterior probabilities.
@@ -525,7 +533,7 @@ This function is expected to be called every so often in a p-search buffer."
                                       (props . (p-search-result ,name)))
                 (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) 85))
                 (insert (make-string (- 90 (current-column)) ?\s)) ;; TODO - better column
-                (insert (format "%.6f" p))
+                (insert (format "%.10f" p))
                 (insert "\n"))))
           (goto-char (point-min))
           (forward-line (1- start-line))

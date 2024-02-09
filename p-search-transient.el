@@ -18,23 +18,32 @@
   (completing-read-multiple "Directories: " #'completion-file-name-table #'directory-name-p nil nil hist))
 
 (defun p-search-read-bytes (prompt &optional init hist)
-  (let* ((val (read-string prompt init hist)))
-    (save-match-data
-      (unless (string-match " *\\([0-9]*\\) *\\([kKmMgGtT]?i?[bB]?\\)" val)
-        (user-error "invalid byte size input"))
-      (let* ((num (match-string 1 val))
-             (unit (downcase (match-string 2 val)))
-             (to-byte (alist-get unit '(("" . 1)
-                                        ("kb" . 1000)
-                                        ("kib" . 1024)
-                                        ("mb" . 1000000)
-                                        ("mib" . 1048576)
-                                        ("tb" .  1000000000000)
-                                        ("tib" . 1099511627776))
-                                 nil nil #'equal)))
-        (unless to-byte
-          (user-error "invalid byte size input"))
-        (* (string-to-number num) to-byte)))))
+  (catch 'done
+    (while t
+     (let* ((val (read-string prompt init hist)))
+       (save-match-data
+         (if (not (string-match " *\\([0-9]*\\) *\\([kKmMgGtT]?i?[bB]?\\)" val))
+             (progn
+               (beep)
+               (message "invalid byte size input")
+               (sit-for 1))
+           (let* ((num (match-string 1 val))
+                  (unit (downcase (match-string 2 val)))
+                  (to-byte (alist-get unit '(("" . 1)
+                                             ("b" . 1)
+                                             ("kb" . 1000)
+                                             ("kib" . 1024)
+                                             ("mb" . 1000000)
+                                             ("mib" . 1048576)
+                                             ("tb" .  1000000000000)
+                                             ("tib" . 1099511627776))
+                                      nil nil #'equal)))
+             (if to-byte
+                 (throw 'done (* (string-to-number num) to-byte))
+               (beep)
+               (message "invalid byte size input")
+               (sit-for 1))
+             )))))))
 
 ;;; Transient Classes
 
@@ -276,6 +285,8 @@ When an alist, the prior key contains the prior to be updated.")
       (read-string (format "%s: " prompt-string)))
      (`(,name . (regexp . ,opts))
       (read-regexp (format "%s: " prompt-string)))
+     (`(,name . (memory . ,opts))
+      (p-search-read-bytes (format "%s: " prompt-string)))
      (`(,name . (number . ,opts))
       (read-number (format "%s: " prompt-string)))
      (`(,name . (toggle . ,opts))
@@ -345,7 +356,17 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--toggle-infix
-               :option-symbol ,name))))
+               :option-symbol ,name
+               :always-read ,always-read))))
+    (`(,name . (memory . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--memory-infix
+               :option-symbol ,name
+               :always-read ,always-read))))
     (`(,name . (string . ,opts))
      (let* ((key (plist-get opts :key))
             (description (plist-get opts :description)))
@@ -353,7 +374,8 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--string-infix
-               :option-symbol ,name))))
+               :option-symbol ,name
+               :always-read ,always-read))))
     (`(,name . (number . ,opts))
      (let* ((key (plist-get opts :key))
             (description (plist-get opts :description)))
@@ -361,7 +383,8 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--number-infix
-               :option-symbol ,name))))
+               :option-symbol ,name
+               :always-read ,always-read))))
     (_ (error "unsupported spec %s" spec))))
 
 (defun p-search-transient-input-suffixes ()
@@ -435,7 +458,6 @@ When an alist, the prior key contains the prior to be updated.")
          (template (alist-get 'template args))
          (prior (p-search--instantiate-prior template args)))
     (setq p-search-priors (append p-search-priors (list prior)))
-    (p-search--notify-main-thread)
     (p-search-refresh-buffer)))
 
 (defun p-search-transient-prior-edit (&optional prior)
@@ -475,16 +497,21 @@ When an alist, the prior key contains the prior to be updated.")
      (lambda ()
        (interactive)
        (p-search-dispatch-prior-creation p-search--modification-date-prior-template))) ;; date+sigma -> input
-    ("f s" "size" zr/todo) ;; byte string -> input
+    ("f s" "size"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--file-size-prior-template))) ;; byte string -> input
     ("f c" "distance" zr/todo) ;; directory-name -> input
     ]
    ["Git"
     ("g a" "author"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation  p-search--git-author-prior-template))
-     zr/todo) ;; git -> read authors -> input
-    ("g b" "branch" zr/todo) ;; git -> read branches -> input
+       (p-search-dispatch-prior-creation  p-search--git-author-prior-template))) ;; git -> read authors -> input
+    ("g b" "branch"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--git-branch-prior-template))) ;; git -> read branches -> input
     ("g c" "file co-changes" zr/todo) ;;; read file -> input
     ("g m" "modification frequency" zr/todo) ;; ---
     ("g t" "commit time" zr/todo)]] ;; date+sigma -> input
