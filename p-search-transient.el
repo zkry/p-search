@@ -151,6 +151,15 @@
   :class p-search--directory)
 
 
+(defclass p-search--file (p-search--option)
+  ((reader :initform #'read-file-name)
+   (prompt :initform "file: ")))
+
+(transient-define-infix p-search--file-infix ()
+  :class p-search--file)
+
+
+
 (defclass p-search--regexp (p-search--option)
   ((reader :initform #'read-regexp)
    (prompt :initform "regexp: ")))
@@ -325,6 +334,15 @@ When an alist, the prior key contains the prior to be updated.")
         transient--prefix
         `(,key ,description
                p-search--directory-infix
+               :option-symbol ,name
+               :always-read ,always-read))))
+    (`(,name . (file . ,opts))
+     (let* ((key (plist-get opts :key))
+            (description (plist-get opts :description)))
+       (transient-parse-suffix
+        transient--prefix
+        `(,key ,description
+               p-search--file-infix
                :option-symbol ,name
                :always-read ,always-read))))
     (`(,name . (regexp . ,opts))

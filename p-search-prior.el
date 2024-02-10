@@ -19,7 +19,7 @@
 ;;
 ;; Git:
 ;; - [x] g a Author
-;; - [ ] g b Branch
+;; - [x] g b Branch
 ;; - [ ] g c File Co-Changes
 ;; - [ ] g m Modification Frequency
 ;; - [ ] g t Commit Time
@@ -366,6 +366,67 @@ default inputs, with the args being set to nil."
                            (result-ht (p-search-prior-results prior)))
                        (dolist (f files)
                          (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+
+(defconst p-search--git-co-changes-prior-template
+  (p-search-prior-template-create
+   :name "git co-changes"
+   :input-spec
+   '() ;; TODO - may break sometimes
+   :options-spec
+   '((use-edited-files . (toggle
+                          :key "-e"
+                          :description "Use `git-status' files as input."
+                          :default-value on))
+     (file . (file
+              :key "-f"
+              :description "Specific file to calculate co-changes.")))
+   :initialize-function 'p-search--git-co-changes-prior-template-init
+   :default-result 'no))
+
+
+(defun p-search--git-co-changes-prior-template-init (prior base-prior-args args)
+  (let* ((use-edited-files (alist-get 'use-edited-files args))
+         (file (alist-get 'file args))
+         (default-directory (alist-get 'base-directory base-prior-args))
+         (buf (generate-new-buffer "*p-search-git-cochanges-search*"))
+         (git-command (format "git diff --name-only %s~%d %s"
+                              branch n branch))
+         (base-files '()))
+    (when use-edited-files
+      (let* ((status-files (seq-map (lambda (line) (substring line 3))
+                                    (shell-command-to-string "git status -s"))))
+        (setq base-files (append base-files status-files))))
+    (when file
+      (setq base-files (append base-files (list file))))
+    (dolist (file base-files)
+      (let* ((git-command (format "git log --pretty=format:\"%H\" -- %s"
+                                  (shell-quote-argument file))))
+        (make-process
+         :name "p-seach-git-cochanges-prior"
+         :buffer buf
+         :command `("sh" "-c" ,git-command)
+         :sentinel (lambda (proc event)
+                     (when (equal event "finished\n")
+                       (with-current-buffer (process-buffer proc)
+                         (let* ((result-ht (p-search-prior-results prior))
+                                (file-counts (make-hash-table))
+                                (N 0)
+                                (commit-hashes (string-lines (buffer-string) t)))
+                           (dolist (hash commit-hashes)
+                             (let* ((changed-files
+                                     (thread-first "git show --pretty=format:\"\" --name-only %s"
+                                                   (format hash)
+                                                   (shell-command-to-string)
+                                                   (string-lines t))))
+                               (cl-incf N (length changed-files))
+                               (dolist (file changed-files)
+                                 (puthash file (gethash file file-counts 0) file-counts))))
+                           (maphash
+                            (lambda (file count)
+                              (let* ((p (/ (float count) N)))
+                                (puthash (file-name-concat default-directory file) p result-ht)))
+                            file-counts)))
+                       (p-search--notify-main-thread))))))))
 
 
 
