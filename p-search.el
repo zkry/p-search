@@ -258,8 +258,11 @@ Elements are of the type (FILE PROB).")
                  (prior-template (p-search-prior-template p))
                  (default-result (p-search-prior-template-default-result prior-template))
                  (prior-importance (alist-get 'importance  (p-search-prior-arguments p) 'medium)) ;; TODO - Default?
+                 (complement (alist-get 'complement  (p-search-prior-arguments p)))
                  (file-result (gethash file prior-results (or default-result 'neutral))) ;; TODO indecies?
                  (modifier (p-search-modifier file-result prior-importance)))
+            (when complement
+              (setq modifier (- 1 modifier)))
             (setq probability (* probability modifier))))
         (heap-add res (list file probability))
         (cl-incf marginal-p probability))

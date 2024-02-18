@@ -17,6 +17,9 @@
 (defun p-search-read-directories (prompt init hist)
   (completing-read-multiple "Directories: " #'completion-file-name-table #'directory-name-p nil nil hist))
 
+(defun p-search-read-file-name (prompt init hist)
+  (read-file-name prompt nil nil t init))
+
 (defun p-search-read-bytes (prompt &optional init hist)
   (catch 'done
     (while t
@@ -152,7 +155,7 @@
 
 
 (defclass p-search--file (p-search--option)
-  ((reader :initform #'read-file-name)
+  ((reader :initform #'p-search-read-file-name)
    (prompt :initform "file: ")))
 
 (transient-define-infix p-search--file-infix ()
@@ -450,7 +453,8 @@ When an alist, the prior key contains the prior to be updated.")
                transient--prefix
                `("-c" "complement"
                  p-search--toggle-infix
-                 :init-state nil))
+                 :init-state nil
+                 :option-symbol complement))
               (transient-parse-suffix
                transient--prefix
                `("-i" "importance"
@@ -530,7 +534,10 @@ When an alist, the prior key contains the prior to be updated.")
      (lambda ()
        (interactive)
        (p-search-dispatch-prior-creation p-search--git-branch-prior-template))) ;; git -> read branches -> input
-    ("g c" "file co-changes" zr/todo) ;;; read file -> input
+    ("g c" "file co-changes"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--git-co-changes-prior-template))) ;;; read file -> input
     ("g m" "modification frequency" zr/todo) ;; ---
     ("g t" "commit time" zr/todo)]] ;; date+sigma -> input
   [["Vector"

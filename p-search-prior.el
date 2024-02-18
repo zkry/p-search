@@ -40,6 +40,7 @@
 ;; - [ ] r c co-located regexp text match
 ;; - [ ] r f regexp frequency
 
+(require 'subr-x)
 
 (defun p-search-prior-default-arguments (template)
   "Return default input and options of TEMPLATE as one alist.
@@ -383,24 +384,29 @@ default inputs, with the args being set to nil."
    :initialize-function 'p-search--git-co-changes-prior-template-init
    :default-result 'no))
 
-
 (defun p-search--git-co-changes-prior-template-init (prior base-prior-args args)
+  ""
   (let* ((use-edited-files (alist-get 'use-edited-files args))
          (file (alist-get 'file args))
          (default-directory (alist-get 'base-directory base-prior-args))
          (buf (generate-new-buffer "*p-search-git-cochanges-search*"))
-         (git-command (format "git diff --name-only %s~%d %s"
-                              branch n branch))
+         ;; (git-command (format "git diff --name-only %s~%d %s"
+         ;;                      branch n branch))
          (base-files '()))
     (when use-edited-files
-      (let* ((status-files (seq-map (lambda (line) (substring line 3))
-                                    (shell-command-to-string "git status -s"))))
+      (let* ((status-files (seq-map
+                            (lambda (line) (substring line 3))
+                            (seq-filter
+                             (lambda (line) (not (string-prefix-p "??" line)))
+                             (string-lines
+                              (shell-command-to-string "git status -s") t)))))
         (setq base-files (append base-files status-files))))
     (when file
       (setq base-files (append base-files (list file))))
     (dolist (file base-files)
-      (let* ((git-command (format "git log --pretty=format:\"%H\" -- %s"
-                                  (shell-quote-argument file))))
+      (let* ((git-command (format "git log --pretty=format:\"%%H\" -- %s"
+                                  file)))
+        (message "δ git command: %s" git-command)
         (make-process
          :name "p-seach-git-cochanges-prior"
          :buffer buf
@@ -412,22 +418,23 @@ default inputs, with the args being set to nil."
                                 (file-counts (make-hash-table))
                                 (N 0)
                                 (commit-hashes (string-lines (buffer-string) t)))
+                           (message "δ got %d commit hashes" (length commit-hashes))
                            (dolist (hash commit-hashes)
                              (let* ((changed-files
                                      (thread-first "git show --pretty=format:\"\" --name-only %s"
                                                    (format hash)
                                                    (shell-command-to-string)
                                                    (string-lines t))))
+                               (message "δ   got %d lines" (length changed-files))
                                (cl-incf N (length changed-files))
                                (dolist (file changed-files)
-                                 (puthash file (gethash file file-counts 0) file-counts))))
+                                 (puthash file (1+ (gethash file file-counts 0)) file-counts))))
+                           (message "δ total: %d" (hash-table-count file-counts ))
                            (maphash
                             (lambda (file count)
                               (let* ((p (/ (float count) N)))
                                 (puthash (file-name-concat default-directory file) p result-ht)))
                             file-counts)))
                        (p-search--notify-main-thread))))))))
-
-
 
 ;;; p-search-prior.el ends here
