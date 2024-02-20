@@ -213,7 +213,8 @@
 
 
 (defclass p-search--number (p-search--option)
-  ((reader :initform #'read-number)))
+  ((reader :initform #'read-number)
+   (prompt :initform "number: ")))
 
 (transient-define-infix p-search--number-infix ()
   :class p-search--number)
@@ -480,7 +481,10 @@ When an alist, the prior key contains the prior to be updated.")
          (template (alist-get 'template args))
          (prior (p-search--instantiate-prior template args)))
     (setq p-search-priors (append p-search-priors (list prior)))
-    (p-search-refresh-buffer)))
+    (p-search-refresh-buffer)
+    (when p-search-main-thread-calculate-flag
+      (setq p-search-main-thread-calculate-flag nil)
+      (p-search--notify-main-thread))))
 
 (defun p-search-transient-prior-edit (&optional prior)
   (interactive)
@@ -538,12 +542,18 @@ When an alist, the prior key contains the prior to be updated.")
      (lambda ()
        (interactive)
        (p-search-dispatch-prior-creation p-search--git-co-changes-prior-template))) ;;; read file -> input
-    ("g m" "modification frequency" zr/todo) ;; ---
-    ("g t" "commit time" zr/todo)]] ;; date+sigma -> input
-  [["Vector"
-    ("v d" "vector distance" zr/todo)] ;; read string -> input
+    ("g m" "modification frequency"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template)))]] ;; date+sigma -> input
+  [
+   ;; ["Vector"
+   ;;  ("v d" "vector distance" zr/todo)]
    ["Emacs"
-    ("e b" "open buffer" zr/todo)] ;;  -> ---
+    ("e b" "open buffer"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--emacs-open-buffer-template)))]
    ["Source"
     ("s t" "text match" zr/todo) ;; string -> inptut
     ("s c" "co-located text match" zr/todo) ;; multiple string -> input

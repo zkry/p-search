@@ -94,7 +94,8 @@ providing information to a search.in "
   (importance nil :documentation "How much the prior should influence results.") ;; TODO - identiy where values come from
   (results nil :documentation "hash table containing the result.  Maps from file name to result indicator.")
   (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
-  (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options."))
+  (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
+  (default-result nil :documentation "Override of the tempate's default result."))
 
 (defun p-search-expand-files (base-priors)
   "Return the list of files that should be considerd according to BASE-PRIORS."
@@ -256,7 +257,7 @@ Elements are of the type (FILE PROB).")
         (dolist (p dependent-priors)
           (let* ((prior-results (p-search-prior-results p))
                  (prior-template (p-search-prior-template p))
-                 (default-result (p-search-prior-template-default-result prior-template))
+                 (default-result (or (p-search-prior-default-result p) (p-search-prior-template-default-result prior-template)))
                  (prior-importance (alist-get 'importance  (p-search-prior-arguments p) 'medium)) ;; TODO - Default?
                  (complement (alist-get 'complement  (p-search-prior-arguments p)))
                  (file-result (gethash file prior-results (or default-result 'neutral))) ;; TODO indecies?
@@ -555,6 +556,14 @@ This function is expected to be called every so often in a p-search buffer."
   ;; (with-mutex p-search-main-thread-mutex
   ;;   (condition-notify p-search-main-thread-cond))
   )
+
+(defvar-local p-search-main-thread-calculate-flag nil)
+
+(defun p-search--notify-main-thread-after-init ()
+  "Called when creating a prior to calculate immediate after prior is added.
+This is usually done when the prior's initialization function
+does all of the computation necessary."
+  (setq p-search-main-thread-calculate-flag t))
 
 (defun p-search-main-thread ()
   (with-mutex p-search-main-thread-mutex

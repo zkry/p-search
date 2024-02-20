@@ -20,9 +20,8 @@
 ;; Git:
 ;; - [x] g a Author
 ;; - [x] g b Branch
-;; - [ ] g c File Co-Changes
-;; - [ ] g m Modification Frequency
-;; - [ ] g t Commit Time
+;; - [x] g c File Co-Changes
+;; - [x] g m Modification Frequency
 ;;
 ;; Vector:
 ;; - [ ] v d Vector Distance
@@ -41,6 +40,7 @@
 ;; - [ ] r f regexp frequency
 
 (require 'subr-x)
+(require 'eieio)
 
 (defun p-search-prior-default-arguments (template)
   "Return default input and options of TEMPLATE as one alist.
@@ -276,6 +276,14 @@ default inputs, with the args being set to nil."
          (default-directory (alist-get 'base-directory base-args)))
     (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))
 
+(defun p-search--git-branches ()
+  (let* ((base-args (oref p-search-base-prior arguments))
+         (default-directory (alist-get 'base-directory base-args)))
+    (seq-map
+     (lambda (line)
+       (substring line 2))
+     (string-lines (shell-command-to-string "git branch -a") t))))
+
 (defun p-seach--git-branches ()
   (let* ((base-args (oref p-search-base-prior arguments))
          (default-directory (alist-get 'base-directory base-args)))
@@ -382,7 +390,7 @@ default inputs, with the args being set to nil."
               :key "-f"
               :description "Specific file to calculate co-changes.")))
    :initialize-function 'p-search--git-co-changes-prior-template-init
-   :default-result 'no))
+   :default-result 0))
 
 (defun p-search--git-co-changes-prior-template-init (prior base-prior-args args)
   ""
@@ -406,7 +414,6 @@ default inputs, with the args being set to nil."
     (dolist (file base-files)
       (let* ((git-command (format "git log --pretty=format:\"%%H\" -- %s"
                                   file)))
-        (message "δ git command: %s" git-command)
         (make-process
          :name "p-seach-git-cochanges-prior"
          :buffer buf
@@ -415,26 +422,163 @@ default inputs, with the args being set to nil."
                      (when (equal event "finished\n")
                        (with-current-buffer (process-buffer proc)
                          (let* ((result-ht (p-search-prior-results prior))
-                                (file-counts (make-hash-table))
+                                (file-counts (make-hash-table :test #'equal))
                                 (N 0)
                                 (commit-hashes (string-lines (buffer-string) t)))
-                           (message "δ got %d commit hashes" (length commit-hashes))
                            (dolist (hash commit-hashes)
                              (let* ((changed-files
                                      (thread-first "git show --pretty=format:\"\" --name-only %s"
                                                    (format hash)
                                                    (shell-command-to-string)
                                                    (string-lines t))))
-                               (message "δ   got %d lines" (length changed-files))
                                (cl-incf N (length changed-files))
                                (dolist (file changed-files)
                                  (puthash file (1+ (gethash file file-counts 0)) file-counts))))
-                           (message "δ total: %d" (hash-table-count file-counts ))
                            (maphash
                             (lambda (file count)
                               (let* ((p (/ (float count) N)))
                                 (puthash (file-name-concat default-directory file) p result-ht)))
                             file-counts)))
                        (p-search--notify-main-thread))))))))
+
+(defconst p-search--git-mod-freq-prior-template
+  (p-search-prior-template-create
+   :name "git commit frequency"
+   :input-spec
+   '((n-commits . (number
+                   :key "n"
+                   :description "Consider last N commits."
+                   :default-value 20)))
+   :options-spec
+   '((branch . (choice
+                :key "-b"
+                :description "Git Branch"
+                :choices p-search--git-branches)))
+   :initialize-function #'p-search--git-mod-freq-prior-template-init
+   :default-result 0))
+
+
+(defun p-search--git-mod-freq-prior-template-init (prior base-prior-args args)
+  "Initialization function of git-mod-freq-prior-template."
+  (let* ((search-space (p-search-generate-search-space))
+         (n-commits (alist-get 'n-commits args))
+         (branch (alist-get 'branch args))
+         (last-commits-cmd (if branch
+                               (format "git log %s -%d --pretty=format:\"%%H\"" branch n-commits)
+                             (format "git log -%d --pretty=format:\"%%H\"" n-commits)))
+         (commits (string-lines (shell-command-to-string last-commits-cmd) t))
+         (file-counts (make-hash-table :test #'equal))
+         (N (length search-space)) ;; apply laplace smoothing
+         (result-ht (p-search-prior-results prior)))
+    (dolist (commit commits)
+      (let* ((files (string-lines (shell-command-to-string (format "git show --pretty=format:\"\" --name-only %s" commit)) t)))
+        (cl-incf N (length files))
+        (dolist (file files)
+          ;; default of 1 for laplace smoothing
+          (puthash file (1+ (gethash file file-counts 1)) file-counts))))
+    (maphash
+     (lambda (file count)
+       (let* ((p (/ (float count) N)))
+         (puthash (file-name-concat default-directory file) p result-ht)))
+     file-counts)
+    (setf (p-search-prior-default-result prior) (/ 1.0 N))
+    (p-search--notify-main-thread-after-init)))
+
+;;; Emacs
+
+(defconst p-search--emacs-open-buffer-template
+  (p-search-prior-template-create
+   :name "emacs open buffer"
+   :input-spec
+   '()
+   :options-spec
+   '()
+   :initialize-function #'p-search--emacs-open-buffer-prior-template-init
+   :default-result 'no))
+
+(defun p-search--emacs-open-buffer-prior-template-init (prior base-prior-args args)
+  (let* ((buffer-files (seq-map #'buffer-file-name (buffer-list)))
+         (result-ht (p-search-prior-results prior)))
+    (dolist (file buffer-files)
+      (puthash file 'yes result-ht))
+    (p-search--notify-main-thread-after-init)))
+
+
+;;; Text search
+
+(defconst p-search--text-query-prior-template
+  (p-search-prior-template-create
+   :name "text query"
+   :input-spec '(query . (string
+                          :key "q"
+                          :description "search query"))
+   :options-spec
+   '((subword . (toggle
+                 :key "-s"
+                 :description "break special casing to new queries"
+                 :default-value on))
+     (algorithm . (choices
+                   :key "-a"
+                   :description "search ranking algorithm"
+                   (bm25
+                    boolean
+                    tf-idf)))
+     (tool . (choice
+              :key "-p"
+              :description "search program"
+              :default-value ag
+              :choices
+              (rg
+               ag
+               grep))))
+   :initialize-function #'p-search--text-query-template-init
+   :default-value 0))
+
+(defun p-search--text-query-parse-terms (query-str)
+  (let* ((terms (string-split query-str " "))
+         (broken-terms '()))
+    (dolist (term terms)
+      (let* ((new-terms '())
+             (current "")
+             (i 0))
+        (while (< i (length term))
+          (let ((at-char (aref term i)))
+            (cond
+             ((= at-char ?_)
+              (when (> (length current) 0)
+                (push current new-terms)))
+             ((= at-char ?-)
+              (when (> (length current) 0)
+                (push current new-terms)))
+             ((or (and (> i 0)
+                       (char-uppercase-p at-char)
+                       (not (char-uppercase-p (aref term (1- i)))))
+                  (and (> i 0)
+                       (> (length term) (1+ i))
+                       (char-uppercase-p at-char)
+                       (char-uppercase-p (aref term (1- i)))
+                       (not (char-uppercase-p (aref term (1+ i))))))
+              (when (> (length current) 0)
+                (push current new-terms)
+                (setq current ""))
+              (setq current (concat current (char-to-string at-char))))
+             (t (setq current (concat current (char-to-string at-char))))))
+          (cl-incf i))
+        (when (and (> (length current) 0)
+                   (not (equal current term)))
+          (push current new-terms))
+        (setq broken-terms (append broken-terms new-terms))))
+    `((tier-1 . ,(list query-str))
+      (tier-2 . ,terms)
+      (tier-3 . ,broken-terms))))
+
+
+(defun p-search--text-query-template-init (prior base-prior-args args)
+  (let* ((query (alist-get 'query args))
+         (subword (alist-get 'subword args))
+         (algorithm (alist-get 'algorithm args))
+         (tool (alist-get 'tool args)))
+    ))
+
 
 ;;; p-search-prior.el ends here
