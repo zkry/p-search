@@ -253,7 +253,7 @@ default inputs, with the args being set to nil."
      :sentinel (lambda (proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code"))
+                           (string-prefix-p "failed with code" event))
                    (p-search--notify-main-thread)))
      :filter (lambda (proc string)
                (when (buffer-live-p (process-buffer proc))
@@ -315,7 +315,7 @@ default inputs, with the args being set to nil."
      :sentinel (lambda (proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code"))
+                           (string-prefix-p "failed with code" event))
                    (p-search--notify-main-thread)))
      :filter (lambda (proc string)
                (when (buffer-live-p (process-buffer proc))
@@ -360,7 +360,7 @@ default inputs, with the args being set to nil."
      :sentinel (lambda (proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code"))
+                           (string-prefix-p "failed with code" event))
                    (p-search--notify-main-thread)))
      :filter (lambda (proc string)
                (when (buffer-live-p (process-buffer proc))
@@ -567,10 +567,13 @@ default inputs, with the args being set to nil."
         (when (and (> (length current) 0)
                    (not (equal current term)))
           (push current new-terms))
-        (setq broken-terms (append broken-terms new-terms))))
-    `((tier-1 . ,(list query-str))
-      (tier-2 . ,terms)
-      (tier-3 . ,broken-terms))))
+        (setq new-terms (seq-into (nreverse new-terms) 'vector))
+        (push new-terms broken-terms)
+        (setq new-terms '())))
+    `((queries . ,terms)
+      (broken-terms . ,broken-terms))))
+
+(p-search--text-query-parse-terms "CreateUserFactory TurkishCitizenship")
 
 
 (defun p-search--text-query-template-init (prior base-prior-args args)
@@ -578,7 +581,52 @@ default inputs, with the args being set to nil."
          (subword (alist-get 'subword args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
+
     ))
+
+(defun p-search--text-query-bm25 (query-string)
+  (let* ((all-files (p-search-generate-search-space))
+         (buf (generate-new-buffer (format "*bm25 %s*" query-string)))
+         (cmd (list "ag" "-c" "--nocolor" "-i" query-string))
+         (file-counts (make-hash-table :test #'equal))
+         (total-counts 0)
+         (docs-containing 0)
+         (k1 1.2)
+         (b 0.75))
+    (make-process
+     :name "p-search-text-search"
+     :buffer buf
+     :command cmd
+     :sentinel (lambda (proc event)
+                 (when (or (member event '("finished\n" "deleted\n"))
+                           (string-prefix-p "exited abnormally with code" event)
+                           (string-prefix-p "failed with code" event))
+                   (with-current-buffer (process-buffer proc)
+                    (let* ((files (string-split (buffer-string) "\n")))
+                      (dolist (f files)
+                        (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                          (let* ((fname (match-string 1 f))
+                                 (count (string-to-number (match-string 2 f))))
+                            (puthash (file-name-concat default-directory fname) count file-counts)
+                            (cl-incf docs-containing)
+                            (cl-incf total-counts count))))))
+                   (let* ((N (length all-files))
+                          (all-files-size 0))
+                     (dolist (file all-files)
+                       (cl-incf all-files-size (nth 7 (file-attributes file))))
+                     (let* ((idf (log (+ (/ (+ N (- docs-containing) 0.5)
+                                            (+ docs-containing 0.5))
+                                         1)))
+                            (avg-size (/ (float all-files-size) N)))
+                       (maphash
+                        (lambda (file count)
+
+                          (let* ((size (nth 7 (file-attributes file)))
+                                 (score (* idf (/ (* count (+ k1 1))
+                                                  (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
+
+                            (message "%f %s" score file)))
+                        file-counts))))))))
 
 
 ;;; p-search-prior.el ends here
