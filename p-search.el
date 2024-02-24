@@ -230,8 +230,7 @@ elements to search over.")
      )
     (`(,p critical)
      ;;(read (calc-eval (format "betaI(%f, 100, 100)" p)))
-     p
-     )))
+     p)))
 
 
 

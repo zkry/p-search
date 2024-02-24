@@ -554,8 +554,11 @@ When an alist, the prior key contains the prior to be updated.")
      (lambda ()
        (interactive)
        (p-search-dispatch-prior-creation p-search--emacs-open-buffer-template)))]
-   ["Source"
-    ("s t" "text match" zr/todo) ;; string -> inptut
+   ["Text Query"
+    ("t q" "text query"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--text-query-prior-template))) ;; string -> inptut
     ("s c" "co-located text match" zr/todo) ;; multiple string -> input
     ("s f" "text frequency" zr/todo)]  ;; string -> input
    ["Source (Regexp) "

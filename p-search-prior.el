@@ -123,7 +123,7 @@ default inputs, with the args being set to nil."
                (when (string-prefix-p dir file-expanded)
                  (puthash file 'yes result-ht)
                  (throw 'out nil))))))
-       (p-search--notify-main-thread))))
+       (p-search--notify-main-thread-after-init))))
   "Sample prior.")
 
 
@@ -509,30 +509,31 @@ default inputs, with the args being set to nil."
 (defconst p-search--text-query-prior-template
   (p-search-prior-template-create
    :name "text query"
-   :input-spec '(query . (string
-                          :key "q"
-                          :description "search query"))
+   :input-spec '((query . (string
+                           :key "q"
+                           :description "search query")))
    :options-spec
    '((subword . (toggle
                  :key "-s"
                  :description "break special casing to new queries"
                  :default-value on))
-     (algorithm . (choices
+     (algorithm . (choice
                    :key "-a"
                    :description "search ranking algorithm"
+                   :default-value bm25
+                   :choices
                    (bm25
                     boolean
                     tf-idf)))
      (tool . (choice
               :key "-p"
               :description "search program"
-              :default-value ag
               :choices
               (rg
                ag
                grep))))
    :initialize-function #'p-search--text-query-template-init
-   :default-value 0))
+   :default-result 0))
 
 (defun p-search--text-query-parse-terms (query-str)
   (let* ((terms (string-split query-str " "))
@@ -546,10 +547,12 @@ default inputs, with the args being set to nil."
             (cond
              ((= at-char ?_)
               (when (> (length current) 0)
-                (push current new-terms)))
+                (push (downcase current) new-terms)
+                (setq current "")))
              ((= at-char ?-)
               (when (> (length current) 0)
-                (push current new-terms)))
+                (push (downcase current) new-terms)
+                (setq current "")))
              ((or (and (> i 0)
                        (char-uppercase-p at-char)
                        (not (char-uppercase-p (aref term (1- i)))))
@@ -559,19 +562,37 @@ default inputs, with the args being set to nil."
                        (char-uppercase-p (aref term (1- i)))
                        (not (char-uppercase-p (aref term (1+ i))))))
               (when (> (length current) 0)
-                (push current new-terms)
+                (push (downcase current) new-terms)
                 (setq current ""))
               (setq current (concat current (char-to-string at-char))))
              (t (setq current (concat current (char-to-string at-char))))))
           (cl-incf i))
         (when (and (> (length current) 0)
                    (not (equal current term)))
-          (push current new-terms))
-        (setq new-terms (seq-into (nreverse new-terms) 'vector))
-        (push new-terms broken-terms)
+          (push (downcase current) new-terms))
+        (setq broken-terms (append broken-terms new-terms))
         (setq new-terms '())))
     `((queries . ,terms)
       (broken-terms . ,broken-terms))))
+
+(defun p-search--text-query-terms-expand (terms tool)
+  (pcase tool
+    ('ag
+     (seq-mapcat
+      (lambda (term)
+        (list (list (concat "\\b(?=\\w)" term "\\b(?<=\w)") :case-insensitive t)
+              (concat "[a-z]"
+                      (capitalize (substring term 0 1))
+                      (substring term 1))))
+      terms))
+    ('rg
+     (seq-mapcat
+      (lambda (term)
+        (list (list (concat "\\b" term "\\b") :case-insensitive t)
+              (concat "[a-z]"
+                      (capitalize (substring term 0 1))
+                      (substring term 1))))
+      terms))))
 
 (defun p-search--text-query-template-init (prior base-prior-args args)
   "Initialize search functions for text query."
@@ -579,7 +600,7 @@ default inputs, with the args being set to nil."
          (subword (alist-get 'subword args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
-    (unless (eq tool 'ag)
+    (when (eq tool 'grep)
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
@@ -587,16 +608,26 @@ default inputs, with the args being set to nil."
            (query-terms (alist-get 'queries terms)))
       (when subword
         (setq query-terms (append query-terms (alist-get 'broken-terms terms))))
-      (let* ((results (make-vector (length terms) nil)))
-        (dotimes (i (length terms))
-          (p-search--text-query-bm25 prior i results (nth i query-terms)))))))
+      (setq query-terms (p-search--text-query-terms-expand query-terms tool))
+      (let* ((results (make-vector (length query-terms) nil)))
+        (dotimes (i (length query-terms))
+          (p-search--text-query-bm25 prior i results (nth i query-terms) tool))))))
 
-(defun p-search--text-query-bm25 (prior i results query-string)
+(defun p-search--text-query-search-command (tool query case-insensitive)
+  (pcase tool
+    ('ag
+     `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,query))
+    ('rg
+     `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive '("-i")) ,query))))
+
+(defun p-search--text-query-bm25 (prior i results query tool)
   "Perform BM25 query with QUERY-STRING and add result to RESULTS at index I.
 If all results are populated, finalize the PRIOR results."
   (let* ((all-files (p-search-generate-search-space))
+         (query-string (if (listp query) (car query) query))
+         (case-i (and (listp query) (plist-get (cdr query) :case-insensitive)))
          (buf (generate-new-buffer (format "*bm25 %s*" query-string)))
-         (cmd (list "ag" "-c" "--nocolor" "-i" query-string))
+         (cmd (p-search--text-query-search-command tool query-string case-i))
          (file-counts (make-hash-table :test #'equal))
          (file-scores (make-hash-table :test #'equal))
          (total-counts 0)
@@ -635,7 +666,6 @@ If all results are populated, finalize the PRIOR results."
                             (let* ((size (nth 7 (file-attributes file)))
                                    (score (* idf (/ (* count (+ k1 1))
                                                     (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
-
                               (puthash file score file-scores)))
                           file-counts)))
                      (message "BM25 complete: %s" (time-since start-time))
@@ -655,22 +685,25 @@ RESULTS is a vector of hash table of file scores."
         (maphash
          (lambda (file score)
            (let ((next-score (+ score (gethash file at 0))))
-             (puthash file next-score next)
-             (when (and (= i (- (length results) 2))
-                        (> next-score max-score))
-               (setq max-score next-score))
-             (when (and (= i (- (length results) 2))
-                        (< next-score min-score))
-               (setq min-score next-score))))
+             (puthash file next-score next)))
          at)))
+    (maphash
+     (lambda (_ score)
+       (cond
+        ((> score max-score)
+         (setq max-score score))
+        ((< score min-score)
+         (setq min-score score))))
+     (aref results (1- (length results))))
     (let* ((extra (/ min-score 2.0))) ;; smoothing
       (maphash
        (lambda (file score)
          (puthash file (/ (+ (float score) extra)
                           (+ max-score extra))
                   probs))
-       (aref results (1- (length results)))))
-    (setf (p-search-prior-results prior) probs)
-    (p-search--notify-main-thread)))
+       (aref results (1- (length results))))
+      (setf (p-search-prior-results prior) probs)
+      (setf (p-search-prior-default-result prior) (/ extra (+ max-score extra)))
+      (p-search--notify-main-thread))))
 
 ;;; p-search-prior.el ends here
