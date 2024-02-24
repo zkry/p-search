@@ -42,28 +42,30 @@
 (require 'subr-x)
 (require 'eieio)
 
+(declare-function p-search-prior-template-input-spec "p-search.el")
+(declare-function p-search-prior-template-options-spec "p-search.el")
+(declare-function p-search-prior-template-create "p-search.el")
+
 (defun p-search-prior-default-arguments (template)
   "Return default input and options of TEMPLATE as one alist.
 This function is primarily used to create the base prior with reasonable
 default inputs, with the args being set to nil."
-  (let* ((input-spec (oref template input-spec))
-         (options-spec (oref template options-spec))
+  (let* ((input-spec (p-search-prior-template-input-spec template))
+         (options-spec (p-search-prior-template-options-spec template))
          (res '()))
-    (pcase-dolist (`(,name . (,type . ,options)) input-spec)
+    (pcase-dolist (`(,name . (,_type . ,options)) input-spec)
       (let* ((default (plist-get options :default))
              (default-val (if (functionp default) (funcall default) default)))
         (setq res (cons
                    (cons name default-val)
                    res))))
-    (pcase-dolist (`(,name . (,type . ,options)) options-spec)
+    (pcase-dolist (`(,name . (,_type . ,options)) options-spec)
       (let* ((default (plist-get options :default))
              (default-val (if (functionp default) (funcall default) default)))
         (setq res (cons
                    (cons name default-val)
                    res))))
     (nreverse res)))
-
-;;;; Reference Priors:
 
 (defconst p-search-prior-base--filesystem
   (p-search-prior-template-create
@@ -89,8 +91,8 @@ default inputs, with the args being set to nil."
      (let-alist args
        (let* ((default-directory .base-directory)
               (file-candidates (if .use-git-ignore
-                                   (string-split (shell-command-to-string "git ls-files") "\n")
-                                 (string-split (shell-command-to-string "find . -type f") "\n")))
+                                   (string-split (shell-command-to-string "git ls-files") "\n" t t)
+                                 (string-split (shell-command-to-string "find . -type f") "\n" t t)))
               (files '()))
          (dolist (file file-candidates)
            (catch 'skip

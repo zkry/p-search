@@ -140,6 +140,10 @@ providing information to a search.in "
 
 (defvar-local p-search-priors nil
   "List of active priors for current session.")
+(defvar-local p-search-marginal nil
+  "Marginal distribution of search space.
+This is the denominator we need to divide all probabilities by to get a proper
+probability distribution.")
 (defvar-local p-search-base-prior nil
   "The prior which is used to determine search space.
 This prior has a special function in that its
@@ -232,8 +236,6 @@ elements to search over.")
      ;;(read (calc-eval (format "betaI(%f, 100, 100)" p)))
      p)))
 
-
-
 (defvar-local p-search-posterior-probs nil
   "Heap of calculated posterior probabilities.
 Elements are of the type (FILE PROB).")
@@ -271,6 +273,7 @@ Elements are of the type (FILE PROB).")
           (with-temp-buffer
             (thread-yield))
           (setq start-time (current-time)))))
+    (setq p-search-marginal marginal-p)
     (message "--- p-search--calculate-probs done")
     res))
 
@@ -289,6 +292,7 @@ Elements are of the type (FILE PROB).")
     (keymap-set map "g" #'p-search-refresh-buffer)
     (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-prior)
+    (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "<tab>" #'p-search-toggle-section)
     map))
 
@@ -433,14 +437,13 @@ Elements are of the type (FILE PROB).")
    ((stringp inputs)
     (let ((home-dir (expand-file-name "~")))
       (replace-regexp-in-string (regexp-quote home-dir) "~" inputs)))
-   (t
-    inputs)))
+   (t inputs)))
 
 (defun p-search-insert-prior (prior)
   (let* ((start (point))
          (template (p-search-prior-template prior))
          (template-name (p-search-prior-template-name template))
-         (importance (p-search-prior-importance prior))
+         (importance (alist-get 'importance (p-search-prior-arguments prior)))
          (importance-char (alist-get
                            importance
                            '((critical . "!")
@@ -501,6 +504,14 @@ will be to display the results.")
 (defvar-local p-search-last-results nil
   "Variable to store the last nop-n results.  If value is the same don't re-draw.")
 
+(defun p-search--display-columns ()
+  "Return a list of two numbers: the start of column 2 and the end of column 2."
+  (let* ((body-width (window-body-width))
+         (page-width (min 100 body-width)))
+    (list
+     page-width
+     (- page-width 12))))
+
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
 This function is expected to be called every so often in a p-search buffer."
@@ -517,7 +528,10 @@ This function is expected to be called every so often in a p-search buffer."
         (heap-add p-search-posterior-probs elt))
       (unless (equal p-search-last-results elts)
         (setq p-search-last-results elts)
-        (let* ((start-line (line-number-at-pos))
+        (let* ((body-width (window-body-width))
+               (page-width (min 100 body-width))
+               (page-dims (p-search--display-columns))
+               (start-line (line-number-at-pos))
                (inhibit-read-only t)
                (ovs (overlays-in (point-min) (point-max))) ;; (2) Display results
                (res-ov (seq-find (lambda (ov) (overlay-get ov 'p-search-results)) ovs)))
@@ -534,9 +548,10 @@ This function is expected to be called every so often in a p-search buffer."
             (pcase-dolist (`(,name ,p) elts)
               (p-search-add-section `((heading . "")
                                       (props . (p-search-result ,name)))
-                (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) 85))
-                (insert (make-string (- 90 (current-column)) ?\s)) ;; TODO - better column
-                (insert (format "%.10f" p))
+
+                (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) (- (cadr page-dims) 5)))
+                (insert (make-string (- (cadr page-dims) (current-column)) ?\s)) ;; TODO - better column
+                (insert (format "%.10f" (/ p p-search-marginal)))
                 (insert "\n"))))
           (goto-char (point-min))
           (forward-line (1- start-line))
@@ -610,17 +625,25 @@ does all of the computation necessary."
       (let* ((template (p-search-prior-template prior))
              (inputs (p-search-prior-template-input-spec template))
              (args (p-search-prior-arguments prior)))
-        (concat " "
-         (propertize
-          (string-join
-           (seq-map
-            (lambda (input)
-              (format "%s" (alist-get (car input) args "")))
-            inputs)
-           " ")
-          'face
-          'transient-value)
-         " ")))))
+        (if (> (length inputs) 1)
+            (concat " "
+                  (propertize
+                   (string-join
+                    (seq-map
+                     (lambda (input)
+                       (format "%s: %s" (symbol-name (car input))
+                               (alist-get (car input) args "") "x"))
+                     inputs)
+                    " ")
+                   'face
+                   'transient-value)
+                  " ")
+          (concat " "
+                  (propertize
+                   (format "%s" (alist-get (caar inputs) args))
+                   'face
+                   'transient-value)
+                  " "))))))
 
 (defun p-search-occlude-section (overlay)
   "Occlude a toggable section."
@@ -694,6 +717,14 @@ does all of the computation necessary."
     (setq p-search-priors (remove prior p-search-priors))
     (p-search-refresh-buffer)
     (p-search--notify-main-thread)))
+
+(defun p-search-reinstantiate-prior ()
+  (interactive)
+  (let* ((prior (p-search--prior-at-point)))
+    (message "Reinstantiating prior: %s" (p-search-prior-template-name (p-search-prior-template prior)))
+    (p-search--rerun-prior prior)
+    (p-search--notify-main-thread)
+    (p-search-refresh-buffer)))
 
 (defun p-search-importance ()
   "Command to edit the importance of an element."
