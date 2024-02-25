@@ -65,6 +65,46 @@
   :group 'extensions)
 
 
+;;; Faces
+
+(defgroup p-search-faces nil
+  "Faces used by p-saerch."
+  :group 'p-search
+  :group 'faces)
+
+(defface p-search-section-highlight
+  `((((class color) (background light))
+     :extend t
+     :background "grey95")
+    (((class color) (background  dark))
+     :extend t
+     :background "grey20"))
+  "Face for highlighting the current section."
+  :group 'p-search-faces)
+
+(defface p-search-section-heading
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "DarkGoldenrod4"
+     :weight bold)
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "LightGoldenrod2"
+     :weight bold))
+  "Face for section headings."
+  :group 'magit-section-faces)
+
+(defface p-search-header-line-key
+  '((t :inherit font-lock-builtin-face))
+  "Face for keys in the `header-line'."
+  :group 'p-search-faces)
+
+(defface p-search-value
+  '((t :inherit transient-value))
+  "Face for keys in the `header-line'."
+  :group 'p-search-faces)
+
+
 ;;; Priors
 
 (defconst p-search-importance-levls
@@ -171,9 +211,17 @@ elements to search over.")
                  :results (make-hash-table :test 'equal)
                  :importance (or importance 'medium)))
          (base-priors (oref p-search-base-prior arguments))  ;; TODO - rename
-         (init-res (funcall init-func prior base-priors args)))
+         (init-res (funcall init-func prior)))
     (setf (p-search-prior-proc-thread prior) init-res)
     prior))
+
+(defun p-search--validate-prior (prior args)
+  "Throw an error if PRIOR is defined improperly with ARGS."
+  (let* ((template (p-search-prior-template prior))
+         (input-spec (p-search-prior-template-input-spec template)))
+    (pcase-dolist (`(,id . _) input-spec)
+      (unless (alist-get id args)
+        (user-error "Input value `%s' not defined" id )))))
 
 (defun p-search--rerun-prior (prior)
   "Stop currently running PRIOR and re-runs it."
@@ -183,7 +231,7 @@ elements to search over.")
          (args (p-search-prior-arguments prior))
          (base-priors (oref p-search-base-prior arguments)))
     (setf (p-search-prior-results prior) (make-hash-table :test #'equal))
-    (let ((init-res (and init-func (funcall init-func prior base-priors args))))
+    (let ((init-res (and init-func (funcall init-func prior))))
       (when (threadp old-thread|proc)
         (thread-signal old-thread|proc 'stop nil))
       (when (and (processp old-thread|proc) (eql (process-status old-thread|proc) 'run))
@@ -294,6 +342,8 @@ Elements are of the type (FILE PROB).")
     (keymap-set map "k" #'p-search-kill-prior)
     (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "<tab>" #'p-search-toggle-section)
+    (keymap-set map "<return>" #'p-search-find-file)
+    (keymap-set map "C-o" #'p-search-display-file)
     map))
 
 (defun p-search-pre-command-hook ()
@@ -390,7 +440,7 @@ Elements are of the type (FILE PROB).")
           (setq max-ov ov)
           (setq max-section section))))
     (when max-ov
-      (overlay-put max-ov 'face 'highlight))))
+      (overlay-put max-ov 'face 'p-search-section-highlight))))
 
 (defun p-search-add-section-overlay (start end &optional props key)
   "Add overlay to indicate collapsible section from START to END."
@@ -455,7 +505,7 @@ Elements are of the type (FILE PROB).")
     (p-search-add-section `((heading . "")
                             (props . (p-search-prior ,prior))
                             (key . ,prior))
-      (insert (or importance-char " ") " " (propertize template-name 'face 'magit-header-line-key) "\n")
+      (insert (or importance-char " ") " " (propertize template-name 'face 'p-search-header-line-key) "\n")
       (pcase-dolist (`(,name . ,val) options)
         (unless (eq name 'template)
           (insert "  " (symbol-name name) ": " (prin1-to-string val) "\n"))))))
@@ -473,7 +523,7 @@ Elements are of the type (FILE PROB).")
              occlusion-states))
       (delete-overlay ov))
     (erase-buffer)
-    (p-search-add-section (propertize "Priors" 'face 'magit-header-line)
+    (p-search-add-section (propertize "Priors" 'face 'p-search-section-heading)
       (p-search-insert-prior p-search-base-prior)
       (dolist (prior p-search-priors)
         (p-search-insert-prior prior)))
@@ -512,6 +562,16 @@ will be to display the results.")
      page-width
      (- page-width 12))))
 
+(defun p-search-result-window (file-name)
+  "Return the string of the contents of FILE-NAME to preview to user."
+  ;; TODO - apply major mode for faces
+  (with-temp-buffer
+    (insert-file-contents file-name)
+    (funcall major-mode)
+    (goto-char (point-min))
+    (forward-line 10)
+    (buffer-substring (point-min) (point))))
+
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
 This function is expected to be called every so often in a p-search buffer."
@@ -543,16 +603,23 @@ This function is expected to be called every so often in a p-search buffer."
                 (goto-char start))
             (goto-char (point-max))
             (insert "\n"))
-          (p-search-add-section `((heading . ,(format "Search Results (%d)" (heap-size p-search-posterior-probs)))
+          (p-search-add-section `((heading . ,(propertize
+                                               (format "Search Results (%d)" (heap-size p-search-posterior-probs))
+                                               'face 'p-search-section-heading))
                                   (props . (p-search-results t)))
             (pcase-dolist (`(,name ,p) elts)
-              (p-search-add-section `((heading . "")
-                                      (props . (p-search-result ,name)))
-
-                (insert (truncate-string-to-width (propertize (p-search-format-inputs name) 'face 'magit-header-line-key) (- (cadr page-dims) 5)))
-                (insert (make-string (- (cadr page-dims) (current-column)) ?\s)) ;; TODO - better column
-                (insert (format "%.10f" (/ p p-search-marginal)))
-                (insert "\n"))))
+              (let* ((heading-line-1
+                      (concat (truncate-string-to-width
+                               (propertize (p-search-format-inputs name) 'face 'p-search-header-line-key) (- (cadr page-dims) 5))))
+                     (heading-line
+                      (concat heading-line-1
+                              (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                              (format "%.10f" (/ p p-search-marginal)))))
+                (p-search-add-section `((heading . ,heading-line)
+                                        (props . (p-search-result ,name)))
+                  (insert "\n")
+                  (insert (p-search-result-window name))
+                  (insert "\n")))))
           (goto-char (point-min))
           (forward-line (1- start-line))
           (p-search-highlight-point-section)))
@@ -560,7 +627,6 @@ This function is expected to be called every so often in a p-search buffer."
                    (duration (- (+ (* s 1000000) us)
                                 (+ (* start-s 1000000) start-us))))
         (p-search-log "display-function complete (%d μs)" duration)))))
-
 
 (defvar-local p-search-main-thread-mutex (make-mutex "p-search main thread"))
 (defvar-local p-search-main-thread-cond (make-condition-variable p-search-main-thread-mutex "p-search main thread cond"))
@@ -636,13 +702,13 @@ does all of the computation necessary."
                      inputs)
                     " ")
                    'face
-                   'transient-value)
+                   'p-search-value)
                   " ")
           (concat " "
                   (propertize
                    (format "%s" (alist-get (caar inputs) args))
                    'face
-                   'transient-value)
+                   'p-search-value)
                   " "))))))
 
 (defun p-search-occlude-section (overlay)
@@ -678,8 +744,6 @@ does all of the computation necessary."
     (delete-overlay occ-ov)
     (when info-ov
       (delete-overlay info-ov))))
-
-
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; mode helpers ;;;
@@ -764,7 +828,23 @@ does all of the computation necessary."
          (hidden-p (overlay-get ov 'p-search-section-hidden)))
     (if hidden-p
         (p-search-reveal-section ov)
-        (p-search-occlude-section ov))))
+      (p-search-occlude-section ov))))
+
+(defun p-search-find-file ()
+  "Navigate to the file under the point in other buffer."
+  (interactive)
+  (let* ((file-name (car (get-char-property-and-overlay (point) 'p-search-result))))
+    (unless file-name
+      (user-error "No file found at point"))
+    (find-file-other-window file-name)))
+
+(defun p-search-display-file ()
+  "Display file under point in other buffer."
+  (interactive)
+  (let* ((file-name (car (get-char-property-and-overlay (point) 'p-search-result))))
+    (unless file-name
+      (user-error "No file found at point"))
+    (display-buffer (find-file-noselect file-name))))
 
 (defun p-search ()
   ""

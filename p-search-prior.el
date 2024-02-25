@@ -8,43 +8,20 @@
 
 ;;; Reader Functions
 
-;; ToDo List:
-;; File System:
-;; - [x] f n Filename
-;; - [x] f d Directory
-;; - [x] f t File Type
-;; - [x] f m Modification Date
-;; - [x] f s Size
-;; - [ ] f c Distance
-;;
-;; Git:
-;; - [x] g a Author
-;; - [x] g b Branch
-;; - [x] g c File Co-Changes
-;; - [x] g m Modification Frequency
-;;
-;; Vector:
-;; - [ ] v d Vector Distance
-;;
-;; Emacs
-;; - [ ] e b Open Buffer
-;;
-;; Source
-;; - [ ] s t Text Match
-;; - [ ] s c Co-located text match
-;; - [ ] s f Text Frequency
-;;
-;; Source (Regexp)
-;; - [ ] r t Regexp Text Match
-;; - [ ] r c co-located regexp text match
-;; - [ ] r f regexp frequency
-
 (require 'subr-x)
 (require 'eieio)
 
+(defvar p-search-base-prior)
+
+(declare-function p-search-prior-arguments "p-search.el")
+(declare-function p-search-prior-results "p-search.el")
+(declare-function p-search-generate-search-space "p-search.el")
+(declare-function p-search--notify-main-thread "p-search.el")
+(declare-function p-search--notify-main-thread-after-init "p-search.el")
 (declare-function p-search-prior-template-input-spec "p-search.el")
 (declare-function p-search-prior-template-options-spec "p-search.el")
 (declare-function p-search-prior-template-create "p-search.el")
+
 
 (defun p-search-prior-default-arguments (template)
   "Return default input and options of TEMPLATE as one alist.
@@ -114,8 +91,9 @@ default inputs, with the args being set to nil."
                                          :key "i"
                                          :description "Directories")))
    :initialize-function
-   (lambda (prior base-prior-args args)
-     (let* ((files (p-search-generate-search-space))
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (files (p-search-generate-search-space))
             (directories (seq-map #'expand-file-name (alist-get 'include-directories args)))
             (result-ht (p-search-prior-results prior)))
        (dolist (file files)
@@ -136,8 +114,9 @@ default inputs, with the args being set to nil."
                                       :key "i"
                                       :description "Pattern")))
    :initialize-function
-   (lambda (prior base-prior-args args) ;; TODO - remove base-prior-args as it can be obtained from base prior and args for that mattr
-     (let* ((files (p-search-generate-search-space))
+   (lambda (prior) ;; TODO - remove base-prior-args as it can be obtained from base prior and args for that mattr
+     (let* ((args (p-search-prior-arguments prior))
+            (files (p-search-generate-search-space))
             (fn-pattern (alist-get 'include-filename args))
             (result-ht (p-search-prior-results prior))) ;; normally should do async or lazily
        (dolist (file files)
@@ -153,8 +132,9 @@ default inputs, with the args being set to nil."
                    :key "e"
                    :description "File Extension")))
    :initialize-function
-   (lambda (prior base-prior-args args)
-     (let* ((files (p-search-generate-search-space))
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (files (p-search-generate-search-space))
             (ext-suffix (alist-get 'base-prior-args args))
             (result-ht (p-search-prior-results prior)))
        (dolist (file files)
@@ -164,11 +144,12 @@ default inputs, with the args being set to nil."
 (defconst p-search--timestamp-high-to-days 0.758518518521)
 
 (defun p-search--normal-pdf (x mu sigma)
+  "Calculate the PDF of a normal distribution N(MU, SIGMA) for value X."
   (let ((x (float x)) ;; TODO - this needs to be fast!
         (mu (float mu))
         (sigma (float sigma)))
     (/ (exp (* -0.5 (expt (/ (- x mu) sigma) 2.0)))
-       (* sigma (sqrt (* 2 pi))))))
+       (* sigma (sqrt (* 2 float-pi))))))
 
 (defconst p-search--modification-date-prior-template
   (p-search-prior-template-create
@@ -181,8 +162,9 @@ default inputs, with the args being set to nil."
                :key "s"
                :description "Std Dev")))
    :initialize-function
-   (lambda (prior base-prior-args args)
-     (let* ((files (p-search-generate-search-space))
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (files (p-search-generate-search-space))
             (date (alist-get 'date args))
             (sigma (alist-get 'sigma args))
             (result-ht (p-search-prior-results prior)))
@@ -202,8 +184,9 @@ default inputs, with the args being set to nil."
                  (sigma . (memory :key "s"
                                   :description "Std Dev")))
    :initialize-function
-   (lambda (prior base-prior-args args)
-     (let* ((files (p-search-generate-search-space))
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (files (p-search-generate-search-space))
             (mu-bytes (alist-get 'data-size args))
             (sigma-bytes (alist-get 'sigma args))
             (result-ht (p-search-prior-results prior)))
@@ -240,8 +223,11 @@ default inputs, with the args being set to nil."
    :initialize-function 'p-search--textsearch-prior-template-init
    :default-result 'no))
 
-(defun p-search--textsearch-prior-template-init (prior base-prior-args args)
-  (let* ((input (alist-get 'search-term args))
+(defun p-search--textsearch-prior-template-init (prior)
+  "Initialize process fro the text-search PRIOR."
+  (let* ((args (p-search-prior-arguments prior))
+         (base-prior-args (p-search-prior-arguments p-search-base-prior))
+         (input (alist-get 'search-term args))
          (default-directory (alist-get 'base-directory base-prior-args)) ;; TODO: allow for multiple
          (ag-file-regex (alist-get 'filename-regexp base-prior-args))
          (cmd `("ag" ,input "-l" "--nocolor"))
@@ -252,7 +238,7 @@ default inputs, with the args being set to nil."
      :name "p-search-text-search-prior"
      :buffer buf
      :command cmd
-     :sentinel (lambda (proc event)
+     :sentinel (lambda (_proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
                            (string-prefix-p "failed with code" event))
@@ -274,25 +260,19 @@ default inputs, with the args being set to nil."
 ;;; Git Priors
 
 (defun p-seach--git-authors ()
-  (let* ((base-args (oref p-search-base-prior arguments))
+  "Return list of git authors."
+  (let* ((base-args (p-search-prior-arguments p-search-base-prior))
          (default-directory (alist-get 'base-directory base-args)))
     (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))
 
 (defun p-search--git-branches ()
-  (let* ((base-args (oref p-search-base-prior arguments))
+  "Return list of all git branches."
+  (let* ((base-args (p-search-prior-arguments p-search-base-prior))
          (default-directory (alist-get 'base-directory base-args)))
     (seq-map
      (lambda (line)
        (substring line 2))
      (string-lines (shell-command-to-string "git branch -a") t))))
-
-(defun p-seach--git-branches ()
-  (let* ((base-args (oref p-search-base-prior arguments))
-         (default-directory (alist-get 'base-directory base-args)))
-    (seq-map
-     (lambda (line)
-       (string-trim-left line "[ *]*"))
-     (string-lines (shell-command-to-string "git branch  -a") t))))
 
 (defconst p-search--git-author-prior-template
   (p-search-prior-template-create
@@ -305,8 +285,11 @@ default inputs, with the args being set to nil."
    :initialize-function 'p-search--git-author-prior-template-init
    :default-result 'no))
 
-(defun p-search--git-author-prior-template-init (prior base-prior-args args)
-  (let* ((author (alist-get 'git-author args))
+(defun p-search--git-author-prior-template-init (prior)
+  ""
+  (let* ((args (p-search-prior-arguments prior))
+         (base-prior-args (p-search-prior-arguments p-search-base-prior))
+         (author (alist-get 'git-author args))
          (default-directory (alist-get 'base-directory base-prior-args))
          (buf (generate-new-buffer "*p-search-git-author-search*"))
          (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
@@ -314,7 +297,7 @@ default inputs, with the args being set to nil."
      :name "p-seach-git-author-prior"
      :buffer buf
      :command `("sh" "-c" ,git-command)
-     :sentinel (lambda (proc event)
+     :sentinel (lambda (_proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
                            (string-prefix-p "failed with code" event))
@@ -359,7 +342,7 @@ default inputs, with the args being set to nil."
      :name "p-seach-git-author-prior"
      :buffer buf
      :command `("sh" "-c" ,git-command)
-     :sentinel (lambda (proc event)
+     :sentinel (lambda (_proc event)
                  (when (or (member event '("finished\n" "deleted\n"))
                            (string-prefix-p "exited abnormally with code" event)
                            (string-prefix-p "failed with code" event))
@@ -394,9 +377,11 @@ default inputs, with the args being set to nil."
    :initialize-function 'p-search--git-co-changes-prior-template-init
    :default-result 0))
 
-(defun p-search--git-co-changes-prior-template-init (prior base-prior-args args)
+(defun p-search--git-co-changes-prior-template-init (prior)
   ""
-  (let* ((use-edited-files (alist-get 'use-edited-files args))
+  (let* ((args (p-search-prior-arguments prior))
+         (base-prior-args (p-search-prior-arguments p-search-base-prior))
+         (use-edited-files (alist-get 'use-edited-files args))
          (file (alist-get 'file args))
          (default-directory (alist-get 'base-directory base-prior-args))
          (buf (generate-new-buffer "*p-search-git-cochanges-search*"))
@@ -460,9 +445,10 @@ default inputs, with the args being set to nil."
    :default-result 0))
 
 
-(defun p-search--git-mod-freq-prior-template-init (prior base-prior-args args)
+(defun p-search--git-mod-freq-prior-template-init (prior)
   "Initialization function of git-mod-freq-prior-template."
-  (let* ((search-space (p-search-generate-search-space))
+  (let* ((args (p-search-prior-arguments prior))
+         (search-space (p-search-generate-search-space))
          (n-commits (alist-get 'n-commits args))
          (branch (alist-get 'branch args))
          (last-commits-cmd (if branch
@@ -498,7 +484,8 @@ default inputs, with the args being set to nil."
    :initialize-function #'p-search--emacs-open-buffer-prior-template-init
    :default-result 'no))
 
-(defun p-search--emacs-open-buffer-prior-template-init (prior base-prior-args args)
+(defun p-search--emacs-open-buffer-prior-template-init (prior)
+  ""
   (let* ((buffer-files (seq-map #'buffer-file-name (buffer-list)))
          (result-ht (p-search-prior-results prior)))
     (dolist (file buffer-files)
@@ -596,9 +583,10 @@ default inputs, with the args being set to nil."
                       (substring term 1))))
       terms))))
 
-(defun p-search--text-query-template-init (prior base-prior-args args)
+(defun p-search--text-query-template-init (prior)
   "Initialize search functions for text query."
-  (let* ((query (alist-get 'query args))
+  (let* ((args (p-search-prior-arguments prior))
+         (query (alist-get 'query args))
          (subword (alist-get 'subword args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
