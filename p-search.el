@@ -92,7 +92,7 @@
      :foreground "LightGoldenrod2"
      :weight bold))
   "Face for section headings."
-  :group 'magit-section-faces)
+  :group 'p-search-faces)
 
 (defface p-search-header-line-key
   '((t :inherit font-lock-builtin-face))
@@ -102,6 +102,15 @@
 (defface p-search-value
   '((t :inherit transient-value))
   "Face for keys in the `header-line'."
+  :group 'p-search-faces)
+
+(defface p-search-hi-yellow
+  '((((min-colors 88) (background dark))
+     (:weight bold :box (:line-width 1 :color "yellow1" :style nil)))
+    (((background dark)) (:weight bold :box (:line-width 1 :color "yellow" :style nil)))
+    (((min-colors 88)) (:weight bold :box (:line-width 1 :color "yellow1" :style nil)))
+    (t (:weight bold :box (:line-width 1 :color "yellow" :style nil))))
+  "Face for highlighting in p-search mode with bold text and a box."
   :group 'p-search-faces)
 
 
@@ -123,7 +132,8 @@
   (default-result nil :documentation "Result that should be returned if no file is specified.")
   (input-spec nil :documentation "Specification of inputs required for the function to function.")
   (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
-  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space."))
+  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.")
+  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance."))
 
 (cl-defstruct (p-search-prior
                (:copier nil)
@@ -313,6 +323,7 @@ Elements are of the type (FILE PROB).")
             (when complement
               (setq modifier (- 1 modifier)))
             (setq probability (* probability modifier))))
+        (setq probability (* probability (gethash file p-search-observations 1.0)))
         (heap-add res (list file probability))
         (cl-incf marginal-p probability))
       (pcase-let* ((`(,_ ,sec ,ms) (time-since start-time)))
@@ -323,6 +334,21 @@ Elements are of the type (FILE PROB).")
     (setq p-search-marginal marginal-p)
     (message "--- p-search--calculate-probs done")
     res))
+
+
+;;; Posteriors
+
+(defvar-local p-search-observations nil
+  "Hash table of observiations.")
+
+(defun p-search-obs-not-relevant ()
+  "Mark the result under the point as not-relevant."
+  (interactive)
+  (let* ((document (p-search--document-at-point)))  ;; TODO - use terminology "document" instead of "file"
+    (unless document
+      (user-error "No document found at point"))
+    (puthash document (* (gethash document p-search-observations 1) 0.3) p-search-observations)
+    (p-search--notify-main-thread)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -340,10 +366,14 @@ Elements are of the type (FILE PROB).")
     (keymap-set map "g" #'p-search-refresh-buffer)
     (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-prior)
+    (keymap-set map "n" #'p-search-obs-not-relevant)
     (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "<tab>" #'p-search-toggle-section)
     (keymap-set map "<return>" #'p-search-find-file)
     (keymap-set map "C-o" #'p-search-display-file)
+    (keymap-set map "1" #'p-search-show-level-1)
+    (keymap-set map "2" #'p-search-show-level-2)
+    (keymap-set map "3" #'p-search-show-level-3)
     map)
   "Mode-map for p-search-mode.")
 
@@ -373,6 +403,7 @@ Elements are of the type (FILE PROB).")
   (add-hook 'pre-command-hook #'p-search-pre-command-hook nil t)
   (add-hook 'post-command-hook #'p-search-post-command-hook t t)
   (add-hook 'kill-buffer-hook #'p-search-kill-hook nil t)
+  (setq p-search-observations (make-hash-table :test 'equal))
   (let ((buf (current-buffer)))
     (setq p-search-display-timer
           (run-with-timer 1 1
@@ -568,12 +599,21 @@ will be to display the results.")
 (defun p-search-result-window (file-name)
   "Return the string of the contents of FILE-NAME to preview to user."
   ;; TODO - apply major mode for faces
-  (with-temp-buffer
-    (insert-file-contents file-name)
-    (funcall major-mode)
-    (goto-char (point-min))
-    (forward-line 10)
-    (buffer-substring (point-min) (point))))
+  (let ((all-priors p-search-priors))
+    (with-temp-buffer
+      (insert-file-contents file-name)
+      (funcall major-mode)
+      (goto-char (point-min))
+      (let* ((hints '()))
+        (dolist (prior all-priors)
+          (let* ((template (p-search-prior-template prior))
+                 (hint-func (p-search-prior-template-result-hint-function template)))
+            (when hint-func
+              (let* ((hint-results (funcall hint-func prior (current-buffer))))
+                (setq hints (append hints hint-results))))))
+        (pcase-dolist (`(,start . ,end) hints)
+          (put-text-property start end 'face 'p-search-hi-yellow)))
+      (buffer-substring (point-min) (point-max)))))
 
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
@@ -620,7 +660,6 @@ This function is expected to be called every so often in a p-search buffer."
                               (format "%.10f" (/ p p-search-marginal)))))
                 (p-search-add-section `((heading . ,heading-line)
                                         (props . (p-search-result ,name)))
-                  (insert "\n")
                   (insert (p-search-result-window name))
                   (insert "\n")))))
           (goto-char (point-min))
@@ -668,7 +707,6 @@ does all of the computation necessary."
 
 
 ;;; Sections   ;;;;
-
 
 (defun p-search-deepest-section-overlays-at (position)
   "Return the overlay at POSITION with the highest section level."
@@ -744,6 +782,21 @@ does all of the computation necessary."
     (when info-ov
       (delete-overlay info-ov))))
 
+(defun p-search-fold-sections-to-level (level)
+  "Toggle the fold of the various sections to LEVEL.
+E.g., level 1 is everything folded except the top level."
+  (let* ((all-overlays (overlays-in (point-min) (point-max))))
+    (dolist (ov all-overlays)
+      (when (overlay-get ov 'p-search-section-hidden)
+        (p-search-reveal-section ov)))
+    (dolist (i '(2 1 0))
+      (dolist (ov all-overlays)
+        (when-let* ((ov-level (overlay-get ov 'p-search-section-level)))
+          (if (> (1+ i) level)
+              (when (= ov-level i)
+                (p-search-occlude-section ov))))))))
+
+
 ;;;;;;;;;;;;;;;;;;;;
 ;;; mode helpers ;;;
 
@@ -763,7 +816,7 @@ does all of the computation necessary."
   "Return the prior at the current point."
   (car (get-char-property-and-overlay (point) 'p-search-prior)))
 
-(defun p-search--result-at-point ()
+(defun p-search--document-at-point ()
   "Return the prior at the current point."
   (car (get-char-property-and-overlay (point) 'p-search-result)))
 
@@ -839,10 +892,25 @@ This is useful if the underlying data that the prior uses changes."
         (p-search-reveal-section ov)
       (p-search-occlude-section ov))))
 
+(defun p-search-show-level-1 ()
+  "Show only to top level sections of the buffer."
+  (interactive)
+  (p-search-fold-sections-to-level 1))
+
+(defun p-search-show-level-2 ()
+  "Show two levels of nesting, folding everything beneath them."
+  (interactive)
+  (p-search-fold-sections-to-level 2))
+
+(defun p-search-show-level-3 ()
+  "Show three levels of nesting."
+  (interactive)
+  (p-search-fold-sections-to-level 3))
+
 (defun p-search-find-file ()
   "Navigate to the file under the point in other buffer."
   (interactive)
-  (let* ((file-name (p-search--result-at-point)))
+  (let* ((file-name (p-search--document-at-point)))
     (unless file-name
       (user-error "No file found at point"))
     (find-file-other-window file-name)))
@@ -850,7 +918,7 @@ This is useful if the underlying data that the prior uses changes."
 (defun p-search-display-file ()
   "Display file under point in other buffer."
   (interactive)
-  (let* ((file-name (p-search--result-at-point)))
+  (let* ((file-name (p-search--document-at-point)))
     (unless file-name
       (user-error "No file found at point"))
     (display-buffer (find-file-noselect file-name))))

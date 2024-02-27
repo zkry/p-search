@@ -68,8 +68,8 @@ default inputs, with the args being set to nil."
      (let-alist args
        (let* ((default-directory .base-directory)
               (file-candidates (if .use-git-ignore
-                                   (string-split (shell-command-to-string "git ls-files") "\n" t t)
-                                 (string-split (shell-command-to-string "find . -type f") "\n" t t)))
+                                   (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
+                                 (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
               (files '()))
          (dolist (file file-candidates)
            (catch 'skip
@@ -522,7 +522,8 @@ default inputs, with the args being set to nil."
                ag
                grep))))
    :initialize-function #'p-search--text-query-template-init
-   :default-result 0))
+   :default-result 0 ;; TODO: should actually be 'no
+   :result-hint-function #'p-search--text-search-hint))
 
 (defun p-search--text-query-parse-terms (query-str)
   (let* ((terms (string-split query-str " "))
@@ -581,24 +582,38 @@ default inputs, with the args being set to nil."
               (concat "[a-z]"
                       (capitalize (substring term 0 1))
                       (substring term 1))))
+      terms))
+    ('emacs
+     (seq-mapcat
+      (lambda (term)
+        (list (list (concat "\\<" term "\\>") :case-insensitive t)
+              (concat "[a-z]"
+                      (capitalize (substring term 0 1))
+                      (substring term 1))))
       terms))))
 
-(defun p-search--text-query-template-init (prior)
-  "Initialize search functions for text query."
-  (let* ((args (p-search-prior-arguments prior))
-         (query (alist-get 'query args))
+(defun p-search--text-query-all-search-items (args &optional tool)
+  "Generate list of query strings based on prior's ARGS.
+If TOOL is provided, use it to override the tool in ARGS."
+  (let* ((query (alist-get 'query args))
          (subword (alist-get 'subword args))
+         (tool (or tool (alist-get 'tool args)))
+         (terms (p-search--text-query-parse-terms query))
+         (query-terms (alist-get 'queries terms)))
+    (when subword
+      (setq query-terms (append query-terms (alist-get 'broken-terms terms))))
+    (p-search--text-query-terms-expand query-terms tool)))
+
+(defun p-search--text-query-template-init (prior)
+  "Initialize search functions for text query PRIOR."
+  (let* ((args (p-search-prior-arguments prior))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
     (when (eq tool 'grep)
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
-    (let* ((terms (p-search--text-query-parse-terms query))
-           (query-terms (alist-get 'queries terms)))
-      (when subword
-        (setq query-terms (append query-terms (alist-get 'broken-terms terms))))
-      (setq query-terms (p-search--text-query-terms-expand query-terms tool))
+    (let* ((query-terms (p-search--text-query-all-search-items args)))
       (let* ((results (make-vector (length query-terms) nil)))
         (dotimes (i (length query-terms))
           (p-search--text-query-bm25 prior i results (nth i query-terms) tool))))))
@@ -696,4 +711,17 @@ RESULTS is a vector of hash table of file scores."
       (setf (p-search-prior-default-result prior) (/ extra (+ max-score extra)))
       (p-search--notify-main-thread))))
 
+(defun p-search--text-search-hint (prior buffer)
+  "Mark places where the query args of PRIOR matches text in BUFFER."
+  (let* ((search-regexps (p-search--text-query-all-search-items (p-search-prior-arguments prior) 'emacs))
+         (ress '()))
+    (with-current-buffer buffer
+      (dolist (search-item search-regexps)
+        (let* ((regexp (if (listp search-item) (car search-item) search-item))
+               (case-fold-search (and (listp search-item) (plist-get (cdr search-item) :case-insensitive))))
+          (while (search-forward-regexp regexp nil t)
+            (push (cons (match-beginning 0) (match-end 0)) ress)))))
+    ress))
+
+(provide 'p-search-prior)
 ;;; p-search-prior.el ends here
