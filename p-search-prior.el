@@ -286,7 +286,7 @@ default inputs, with the args being set to nil."
    :default-result 'no))
 
 (defun p-search--git-author-prior-template-init (prior)
-  ""
+  "Initialize process for git-author PRIOR."
   (let* ((args (p-search-prior-arguments prior))
          (base-prior-args (p-search-prior-arguments p-search-base-prior))
          (author (alist-get 'git-author args))
@@ -331,8 +331,11 @@ default inputs, with the args being set to nil."
    :initialize-function 'p-search--git-branch-prior-template-init
    :default-result 'no))
 
-(defun p-search--git-branch-prior-template-init (prior base-prior-args args)
-  (let* ((branch (alist-get 'branch args))
+(defun p-search--git-branch-prior-template-init (prior)
+  "Initialize function for git-branch PRIOR."
+  (let* ((args (p-search-prior-arguments prior))
+         (base-prior-args (p-search-prior-arguments p-search-base-prior))
+         (branch (alist-get 'branch args))
          (n (alist-get 'n args))
          (default-directory (alist-get 'base-directory base-prior-args))
          (buf (generate-new-buffer "*p-search-git-branch-search*"))
@@ -378,7 +381,7 @@ default inputs, with the args being set to nil."
    :default-result 0))
 
 (defun p-search--git-co-changes-prior-template-init (prior)
-  ""
+  "Initialize function for git-co-changes PRIOR."
   (let* ((args (p-search-prior-arguments prior))
          (base-prior-args (p-search-prior-arguments p-search-base-prior))
          (use-edited-files (alist-get 'use-edited-files args))
@@ -446,7 +449,7 @@ default inputs, with the args being set to nil."
 
 
 (defun p-search--git-mod-freq-prior-template-init (prior)
-  "Initialization function of git-mod-freq-prior-template."
+  "Initialization function of git-mod-freq-prior-template PRIOR."
   (let* ((args (p-search-prior-arguments prior))
          (search-space (p-search-generate-search-space))
          (n-commits (alist-get 'n-commits args))
@@ -485,7 +488,7 @@ default inputs, with the args being set to nil."
    :default-result 'no))
 
 (defun p-search--emacs-open-buffer-prior-template-init (prior)
-  ""
+  "Initialize function for Emacs open-buffer PRIOR."
   (let* ((buffer-files (seq-map #'buffer-file-name (buffer-list)))
          (result-ht (p-search-prior-results prior)))
     (dolist (file buffer-files)
@@ -526,6 +529,9 @@ default inputs, with the args being set to nil."
    :result-hint-function #'p-search--text-search-hint))
 
 (defun p-search--text-query-parse-terms (query-str)
+  "Break out all query terms from QUERY-STR returning alist.
+`queries' contains the base terms, split by whitespace.
+`broken-terms' contains the individual terms of composite camel or kebap case."
   (let* ((terms (string-split query-str " "))
          (broken-terms '()))
     (dolist (term terms)
@@ -566,6 +572,10 @@ default inputs, with the args being set to nil."
       (broken-terms . ,broken-terms))))
 
 (defun p-search--text-query-terms-expand (terms tool)
+  "For a given TOOL, return all query strings of TERMS.
+For example, a term is searched as a separate word and also as a
+composite word in camel case string.  This should not return the
+word as part of another word (e.g. \"text\" in \"context\")."
   (pcase tool
     ('ag
      (seq-mapcat
@@ -619,6 +629,9 @@ If TOOL is provided, use it to override the tool in ARGS."
           (p-search--text-query-bm25 prior i results (nth i query-terms) tool))))))
 
 (defun p-search--text-query-search-command (tool query case-insensitive)
+  "Return text query command list for QUERY using TOOL.
+If CASE-INSENSITIVE is non-nil, the command should add the
+case-insensitive flag."
   (pcase tool
     ('ag
      `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,query))
