@@ -599,21 +599,48 @@ will be to display the results.")
 (defun p-search-result-window (file-name)
   "Return the string of the contents of FILE-NAME to preview to user."
   ;; TODO - apply major mode for faces
+  ;; TODO - make sure this is customizable
   (let ((all-priors p-search-priors))
     (with-temp-buffer
-      (insert-file-contents file-name)
-      (funcall major-mode)
-      (goto-char (point-min))
-      (let* ((hints '()))
-        (dolist (prior all-priors)
-          (let* ((template (p-search-prior-template prior))
-                 (hint-func (p-search-prior-template-result-hint-function template)))
-            (when hint-func
-              (let* ((hint-results (funcall hint-func prior (current-buffer))))
-                (setq hints (append hints hint-results))))))
-        (pcase-dolist (`(,start . ,end) hints)
-          (put-text-property start end 'face 'p-search-hi-yellow)))
-      (buffer-substring (point-min) (point-max)))))
+      (let* ((line-nums '())
+             (max-line 0)
+             (has-matches t))
+        (insert-file-contents file-name)
+        (funcall major-mode)
+        (goto-char (point-min))
+        (let* ((hints '()))
+          (dolist (prior all-priors)
+            (let* ((template (p-search-prior-template prior))
+                   (hint-func (p-search-prior-template-result-hint-function template)))
+              (when hint-func
+                (let* ((hint-results (funcall hint-func prior (current-buffer))))
+                  (setq hints (append hints hint-results))))))
+          (pcase-dolist (`(,start . ,end) hints)
+            (put-text-property start end 'face 'p-search-hi-yellow)
+            (let ((lnum (line-number-at-pos start)))
+              (push lnum line-nums)
+              (when (> lnum max-line)
+                (setq max-line lnum)))))
+        (setq line-nums (cl-remove-duplicates line-nums))
+        (when (not line-nums)
+          (setq line-nums '(10 9 8 7 6 5 4 3 2 1))
+          (setq max-line 10)
+          (setq has-matches nil))
+        (setq line-nums (seq-sort #'> line-nums))
+        (let* ((lines '())
+               (digits (1+ (floor (log max-line 10)))))
+          (dolist (num line-nums)
+            (goto-char (point-min))
+            (forward-line (1- num))
+            (insert (format (concat "%" (number-to-string digits) "d: ") num))
+            (push (buffer-substring (pos-bol) (pos-eol)) lines))
+          (when (> (length lines) 10)
+            (let ((after-ct (- (length lines) 10)))
+              (setq lines (seq-take lines 10))
+              (when has-matches
+                (setq lines
+                      (append lines (list (concat (make-string (+ digits 2) ?\s) (format "%d more..." after-ct))))))))
+          (string-join lines "\n"))))))
 
 (defun p-search-display-function () ;; TODO - rename
   "Add the search results to p-search buffer.
@@ -910,10 +937,17 @@ This is useful if the underlying data that the prior uses changes."
 (defun p-search-find-file ()
   "Navigate to the file under the point in other buffer."
   (interactive)
-  (let* ((file-name (p-search--document-at-point)))
+  (let* ((file-name (p-search--document-at-point))
+         (line-number (save-excursion
+                        (goto-char (pos-bol))
+                        (and (looking-at " *\\([0-9]+\\): ")  ;; TODO?: extract this regexp
+                             (string-to-number (match-string 1))))))
     (unless file-name
       (user-error "No file found at point"))
-    (find-file-other-window file-name)))
+    (find-file-other-window file-name)
+    (when line-number
+      (goto-char (point-min))
+      (forward-line (1- line-number)))))
 
 (defun p-search-display-file ()
   "Display file under point in other buffer."
