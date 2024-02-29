@@ -673,10 +673,12 @@ This function is expected to be called every so often in a p-search buffer."
                 (goto-char start))
             (goto-char (point-max))
             (insert "\n"))
-          (p-search-add-section `((heading . ,(propertize
-                                               (format "Search Results (%d)" (heap-size p-search-posterior-probs))
-                                               'face 'p-search-section-heading))
-                                  (props . (p-search-results t)))
+          (p-search-add-section
+              `((heading . ,(propertize
+                             (format "Search Results (%d)" (heap-size p-search-posterior-probs))
+                             'face 'p-search-section-heading))
+                (props . (p-search-results t))
+                (key . p-search-results-header))
             (pcase-dolist (`(,name ,p) elts)
               (let* ((heading-line-1
                       (concat (truncate-string-to-width
@@ -686,7 +688,8 @@ This function is expected to be called every so often in a p-search buffer."
                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
                               (format "%.10f" (/ p p-search-marginal)))))
                 (p-search-add-section `((heading . ,heading-line)
-                                        (props . (p-search-result ,name)))
+                                        (props . (p-search-result ,name))
+                                        (key . ,name))
                   (insert (p-search-result-window name))
                   (insert "\n")))))
           (goto-char (point-min))
