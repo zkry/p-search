@@ -525,8 +525,7 @@ Base priors are priors with a template that has a search-space-function."
     (p-search--validate-prior prior args)
     (setq p-search-priors (append p-search-priors (list prior)))
     (p-search-refresh-buffer)
-    (when p-search-main-thread-calculate-flag
-      (setq p-search-main-thread-calculate-flag nil)
+    (when (> (hash-table-count (p-search-prior-results prior)) 0)
       (p-search--notify-main-thread))))
 
 (defun p-search-transient-prior-edit (&optional prior)

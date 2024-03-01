@@ -707,14 +707,6 @@ This function is expected to be called every so often in a p-search buffer."
   "Notify that a calculation needs to be made."
   (p-search--calculate-probs))
 
-(defvar-local p-search-main-thread-calculate-flag nil)
-
-(defun p-search--notify-main-thread-after-init ()
-  "Called when creating a prior to calculate immediate after prior is added.
-This is usually done when the prior's initialization function
-does all of the computation necessary."
-  (setq p-search-main-thread-calculate-flag t))
-
 (defun p-search-main-thread ()
   "Initial function of the calculation thread."
   (with-mutex p-search-main-thread-mutex

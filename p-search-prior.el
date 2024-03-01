@@ -102,8 +102,7 @@ default inputs, with the args being set to nil."
              (dolist (dir directories)
                (when (string-prefix-p dir file-expanded)
                  (puthash file 'yes result-ht)
-                 (throw 'out nil))))))
-       (p-search--notify-main-thread-after-init))))
+                 (throw 'out nil)))))))))
   "Sample prior.")
 
 
@@ -472,8 +471,7 @@ default inputs, with the args being set to nil."
        (let* ((p (/ (float count) N)))
          (puthash (file-name-concat default-directory file) p result-ht)))
      file-counts)
-    (setf (p-search-prior-default-result prior) (/ 1.0 N))
-    (p-search--notify-main-thread-after-init)))
+    (setf (p-search-prior-default-result prior) (/ 1.0 N))))
 
 ;;; Emacs
 
@@ -492,8 +490,7 @@ default inputs, with the args being set to nil."
   (let* ((buffer-files (seq-map #'buffer-file-name (buffer-list)))
          (result-ht (p-search-prior-results prior)))
     (dolist (file buffer-files)
-      (puthash file 'yes result-ht))
-    (p-search--notify-main-thread-after-init)))
+      (puthash file 'yes result-ht))))
 
 
 ;;; Text search
