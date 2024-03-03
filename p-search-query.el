@@ -6,7 +6,8 @@
 
 ;;; Code:
 
-(defun p-search-query-escape-rg (string)
+(defun p-search-query-rg-escape (string)
+  "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
   (let* ((meta-chars '(?\\ ?. ?+ ?* ?\? ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~))
          (ret-str (make-string (* (length string) 2) 0))
          (i 0))
@@ -20,9 +21,214 @@
         (cl-incf i)))
     (substring ret-str 0 i)))
 
+(defun p-search-query-rg--term-regexp (string)
+  "Create a term regular expression from STRING.
+A term regex is noted for marking boundary characters."
+  (list (list (concat "\\b" string "\\b") :case-insensitive t)
+        (concat (capitalize (substring string 0 1))
+                (substring string 1))))
+
+(defun p-search-query-emacs--term-regexp (string)
+  "Create a term regular expression from STRING.
+A term regex is noted for marking boundary characters."
+  (list (list (concat "\\<" string "\\>") :case-insensitive t)
+        (concat (capitalize (substring string 0 1))
+                (substring string 1))))
 
 
+(defun p-search-query-rg--command (term)
+  "Return command line arguments for rg search of TERM."
+  (let* ((case-insensitive (and (listp term) (plist-get (cdr term) :case-insensitive))))
+    `("rg" "--count-matches" "--color" "never" "-i" ,@(and case-insensitive '("-i")) ,term)))
 
+(defun p-search-query-rg (string finalize-func)
+  "Run query STRING using the rg tool.  Call FINALIZE-FUNC on obtained results."
+  (let* ((terms (p-search-query-rg--term-regexp string))
+         (commands (seq-map #'p-search-query-rg--command terms))
+         (buf (generate-new-buffer (format "*p-search rg*")))
+         (file-counts (make-hash-table :test #'equal))
+         (proc-complete-ct 0))
+    (dolist (cmd commands)
+      (make-process
+       :name "p-search-text-search"
+       :buffer buf
+       :command cmd
+       :sentinel
+       (lambda (proc event)
+         (when (or (member event '("finished\n" "deleted\n"))
+                   (string-prefix-p "exited abnormally with code" event)
+                   (string-prefix-p "failed with code" event))
+           (with-current-buffer (process-buffer proc)
+             (let* ((files (string-split (buffer-string) "\n")))
+               (dolist (f files)
+                 (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                   (let* ((fname (match-string 1 f))
+                          (count (string-to-number (match-string 2 f))))
+                     (puthash (file-name-concat default-directory fname) count file-counts))))
+               (cl-incf proc-complete-ct)
+               (when (= proc-complete-ct (length terms))
+                 (funcall finalize-func file-counts))))))))))
+
+(defun p-search-query-and (results)
+  "Return intersection of RESULTS, a vector of hash-tables."
+  (let ((result (make-hash-table :test 'equal))
+        (res1 (aref results 0)))
+    (maphash
+     (lambda (k v)
+       (catch 'out
+         (let* ((min-ct v)
+                (i 1))
+           (while (< i (length results))
+             (let* ((val (gethash k (aref results i))))
+               (unless val
+                 (throw 'out nil))
+               (when (< val min-ct)
+                 (setq min-ct val)))
+
+             (cl-incf i))
+           ;; k is in all results
+           (puthash k min-ct result))))
+     res1)
+    result))
+
+(defun p-search-query-near (subqueries results)
+  "Return subset of RESULTS where results of SUBQUERIES are close to eachother."
+  (let* ((intersect-results (p-search-query-and results)))
+    ))
+
+(defun p-search-query--metadata-add (elt md-key md-val)
+  "Add metadata MD-KEY MD-VAL to ELT."
+  (if (listp elt)
+      (let* ((md (cdr elt))
+             (new-md (plist-put md md-key md-val)))
+        (cons elt new-md))
+    (list elt md-key md-val)))
+
+(defun p-search-query--metadata-get (elt md-key)
+  "Return metadata value MD-KEY of ELT."
+  (when (listp elt)
+    (plist-get (cdr elt) md-key)))
+
+(defun p-search-query--metadata-elt (elt)
+  "Return original element of ELT."
+  (if (listp elt)
+      (car elt)
+    elt))
+
+(defun p-search-query-run (query &optional finalize-func)
+  ""
+  (pcase query
+    (`(terms . ,elts)
+     (let ((results (make-vector (length elts) nil))
+           (i 0))
+      (dolist (elt elts)
+        (p-search-query-run
+         elt
+         (lambda (result)
+           (aset results i result)
+           (cl-incf i)
+           (when (= i (length elts))
+             (funcall finalize-func results)))))))
+    ((cl-type string)
+     (p-search-query-rg query finalize-func))
+    (`(and . ,elts)
+     (let ((results (make-vector (length elts) nil))
+           (i 0))
+      (dolist (elt elts)
+        (p-search-query-run
+         elt
+         (lambda (result)
+           (aset results i result)
+           (cl-incf i)
+           (when (= i (length elts))
+             (let* ((and-res (p-search-query-and results)))
+               (funcall finalize-func and-res))))))))
+    (`(near . ,elts)
+     (let ((results (make-vector (length elts) nil))
+           (i 0))
+      (dolist (elt elts)
+        (p-search-query-run
+         elt
+         (lambda (result)
+           (aset results i result)
+           (cl-incf i)
+           (when (= i (length elts))
+             (let* ((near-res (p-search-query-near elts results)))
+               (funcall finalize-func near-res))))))))
+    (`(not ,elt)
+     (p-search-query-run
+      elt
+      (lambda (result)
+        (funcall
+         finalize-func
+         (p-search-query--metadata-add
+          result :calc-type 'not)))))
+    (`(must ,elt)
+     (p-search-query-run
+      elt
+      (lambda (result)
+        (funcall
+         finalize-func
+         (p-search-query--metadata-add
+          result :calc-type 'must)))))
+    (`(must-not ,elt)
+     (p-search-query-run
+      elt
+      (lambda (result)
+        (funcall
+         finalize-func
+         (p-search-query--metadata-add
+          result :calc-type 'must-not)))))))
+
+
+
+;;; Mark
+
+(defun p-search-query-mark--term (string)
+  "Find and return locations of STRING in buffer."
+  (let* ((terms (p-search-query-emacs--term-regexp string))
+         (ress '()))
+    (dolist (term terms)
+      (save-excursion
+        (goto-char (point-min))
+        (let* ((case-fold-search (p-search-query--metadata-get term :case-insensitive)))
+          (while (search-forward-regexp (p-search-query--metadata-elt term) nil t)
+            (push (cons (match-beginning 0) (match-end 0)) ress)))))
+    ress))
+
+(defun p-search-query-mark (query)
+  "Return intervals where QUERY matches content in current buffer."
+  (pcase query
+    (`(terms . ,elts)
+     (let* ((ress '()))
+       (dolist (elt elts)
+         (let* ((res (p-search-query-mark elt)))
+           (when res
+             (setq ress (append res ress)))))
+       ress))
+    ((cl-type string)
+     (p-search-query-mark--term query))
+    (`(and . ,elts)
+     (let* ((ress '()))
+       (dolist (elt elts)
+         (let* ((res (p-search-query-mark elt)))
+           (when res
+             (setq ress (append res ress)))))
+       ress))
+    (`(near . ,elts)
+     ;; TODO - I should ensure that these are actually near
+     (let* ((ress '()))
+       (dolist (elt elts)
+         (let* ((res (p-search-query-mark elt)))
+           (when res
+             (setq ress (append res ress)))))
+       ress))
+    (`(not ,_elt)
+     (ignore))
+    (`(must ,elt)
+     (p-search-query-mark elt))
+    (`(must-not ,_elt)
+     (ignore))))
 
 
 "one two three"
