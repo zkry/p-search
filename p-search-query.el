@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+(require 'range)
+
 (defun p-search-query-rg-escape (string)
   "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
   (let* ((meta-chars '(?\\ ?. ?+ ?* ?\? ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~))
@@ -91,10 +93,61 @@ A term regex is noted for marking boundary characters."
      res1)
     result))
 
+;; let subqueries near dotimes
+
+(defun p-search-query-near* (subqueries)
+  "Return ranges in current buffer where SUBQUERIES are close to eachother."
+  (let* ((ress '())
+         (distance 15)) ;; TODO - make configurable
+    (let* ((matches (seq-into (seq-map #'p-search-query-mark subqueries) 'vector)))
+      (while (seq-every-p #'identity matches)
+        (message "%s" (seq-map #'length matches))
+        (catch 'out
+          (let* ((first-matches (seq-map #'car matches))
+                 (ordered (seq-sort-by #'car #'< first-matches))
+                 (betweens (seq-mapn (lambda (a b)
+                                       (- (car b) (cdr a)))
+                                     ordered (cdr ordered))))
+            (dotimes (i (length betweens))
+              ;; if any of the matching intervals are too big,
+              ;; get the next matches of everything below the
+              ;; too-big interval.
+              (when (> (nth i betweens) distance)
+                (dotimes (j (1+ i))
+                  (let* ((elt (nth j ordered)))
+                    (dotimes (k (length matches))
+                      (when (equal elt (car (aref matches k)))
+                        (aset matches k (cdr (aref matches k)))))))
+                (throw 'out nil)))
+            (push (cons (caar ordered)
+                        (cdr (car (last ordered))))
+                  ress)
+            (dotimes (k (length matches))
+              (when (equal (car ordered) (car (aref matches k)))
+                (aset matches k (cdr (aref matches k)))))))))
+    (setq ress (nreverse ress))
+    ress))
+
 (defun p-search-query-near (subqueries results)
   "Return subset of RESULTS where results of SUBQUERIES are close to eachother."
-  (let* ((intersect-results (p-search-query-and results)))
-    ))
+  (let* ((ress (make-hash-table :test #'equal))
+         (intersect-results (p-search-query-and results)))
+    (maphash
+     (lambda (file _)
+       (with-temp-buffer
+         (insert-file-contents file)
+         (let* ((matching-intervals (p-search-query-near* subqueries)))
+           (puthash file (length matching-intervals) ress))))
+     intersect-results)))
+
+;; 1-3   5-8   10-11   13-20
+;;     2     2       2
+;; GOOD within 2
+;;
+;; 1-3   10-13   15-20   27-20
+;;     7       2       7
+;; 5-7   10-13   15-20   27-20
+;;     3       2       7
 
 (defun p-search-query--metadata-add (elt md-key md-val)
   "Add metadata MD-KEY MD-VAL to ELT."
@@ -194,6 +247,7 @@ A term regex is noted for marking boundary characters."
         (let* ((case-fold-search (p-search-query--metadata-get term :case-insensitive)))
           (while (search-forward-regexp (p-search-query--metadata-elt term) nil t)
             (push (cons (match-beginning 0) (match-end 0)) ress)))))
+    (setq ress (nreverse ress))
     ress))
 
 (defun p-search-query-mark (query)
@@ -204,7 +258,7 @@ A term regex is noted for marking boundary characters."
        (dolist (elt elts)
          (let* ((res (p-search-query-mark elt)))
            (when res
-             (setq ress (append res ress)))))
+             (setq ress (range-add-list ress res)))))
        ress))
     ((cl-type string)
      (p-search-query-mark--term query))
@@ -213,7 +267,7 @@ A term regex is noted for marking boundary characters."
        (dolist (elt elts)
          (let* ((res (p-search-query-mark elt)))
            (when res
-             (setq ress (append res ress)))))
+             (setq ress (range-add-list ress res)))))
        ress))
     (`(near . ,elts)
      ;; TODO - I should ensure that these are actually near
@@ -221,7 +275,7 @@ A term regex is noted for marking boundary characters."
        (dolist (elt elts)
          (let* ((res (p-search-query-mark elt)))
            (when res
-             (setq ress (append res ress)))))
+             (setq ress (range-add-list ress res)))))
        ress))
     (`(not ,_elt)
      (ignore))
