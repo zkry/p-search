@@ -40,8 +40,8 @@ A term regex is noted for marking boundary characters."
 
 (defun p-search-query-rg--command (term)
   "Return command line arguments for rg search of TERM."
-  (let* ((case-insensitive (and (listp term) (plist-get (cdr term) :case-insensitive))))
-    `("rg" "--count-matches" "--color" "never" "-i" ,@(and case-insensitive '("-i")) ,term)))
+  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
+    `("rg" "--count-matches" "--color" "never" "-i" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
 
 (defun p-search-query-rg (string finalize-func)
   "Run query STRING using the rg tool.  Call FINALIZE-FUNC on obtained results."
@@ -101,7 +101,6 @@ A term regex is noted for marking boundary characters."
          (distance 15)) ;; TODO - make configurable
     (let* ((matches (seq-into (seq-map #'p-search-query-mark subqueries) 'vector)))
       (while (seq-every-p #'identity matches)
-        (message "%s" (seq-map #'length matches))
         (catch 'out
           (let* ((first-matches (seq-map #'car matches))
                  (ordered (seq-sort-by #'car #'< first-matches))
@@ -139,15 +138,6 @@ A term regex is noted for marking boundary characters."
          (let* ((matching-intervals (p-search-query-near* subqueries)))
            (puthash file (length matching-intervals) ress))))
      intersect-results)))
-
-;; 1-3   5-8   10-11   13-20
-;;     2     2       2
-;; GOOD within 2
-;;
-;; 1-3   10-13   15-20   27-20
-;;     7       2       7
-;; 5-7   10-13   15-20   27-20
-;;     3       2       7
 
 (defun p-search-query--metadata-add (elt md-key md-val)
   "Add metadata MD-KEY MD-VAL to ELT."
@@ -231,7 +221,81 @@ A term regex is noted for marking boundary characters."
         (funcall
          finalize-func
          (p-search-query--metadata-add
-          result :calc-type 'must-not)))))))
+          result :calc-type 'must-not)))))
+    (`(boost . ,rest)
+     (let* ((boost-elt (car rest))
+            (boost-amt (or (nth 1 rest) 1)))
+       (p-search-query-run
+        boost-elt
+        (lambda (result)
+          (funcall
+           finalize-func
+           (p-search-query--metadata-add
+            result :boost boost-amt))))))))
+
+(defun p-search-query-bm25* (result-ht N total-size)
+  "Calculate the BM25 scores of RESULT-HT, a map of file name to counts.
+N is the total number of documents and TOTAL-SIZE is the sum of all files'
+sizes."
+  (let* ((docs-containing (hash-table-count result-ht))
+         (total-counts 0)
+         (scores (make-hash-table :test #'equal))
+         (k1 1.2) ;; TODO - make customizable
+         (b 0.75)) ;; TODO - make customizable
+    (maphash (lambda (_ v) (cl-incf total-counts v)) result-ht)
+    (let* ((idf (log (+ (/ (+ N (- docs-containing) 0.5)
+                           (+ docs-containing 0.5))
+                        1)))
+           (avg-size (/ (float total-size) N)))
+      (maphash
+       (lambda (file count)
+         (let* ((size (nth 7 (file-attributes file)))
+                (score (* idf (/ (* count (+ k1 1))
+                                 (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
+           (puthash file score scores)))
+       (p-search-query--metadata-elt result-ht)))
+    ;; TODO - consider boosts
+    scores))
+
+(defun p-search-query-bm25 (results N total-size)
+  "Compute BM25 from RESULTS.
+N is the number of documents and TOTAL-SIZE is the sum of the
+sizes of all the documents."
+  (let* ((total-scores (make-hash-table :test #'equal))
+         (must-files (make-hash-table :test #'equal))
+         (must-not-files (make-hash-table :test #'equal))
+         (scores (seq-map (lambda (res)
+                            (p-search-query-bm25* res N total-size))
+                          results)))
+    (dotimes (i (length scores))
+      (let* ((count-ht (aref results i))
+             (score-ht (nth i scores))
+             (boost (or (p-search-query--metadata-get count-ht :boost) 1))
+             (calc-type (p-search-query--metadata-get count-ht :calc-type)))
+        (maphash
+         (lambda (file score)
+           (when (eql calc-type 'must)
+             (puthash file t must-files))
+           (when (eql calc-type 'must-not)
+             (puthash file t must-not-files))
+           (cond
+            ((eql calc-type 'not)
+             (puthash file (- (gethash file total-scores 0) (* score boost)) total-scores))
+            (t
+             (puthash file (+ (gethash file total-scores 0) (* score boost)) total-scores))))
+         score-ht)
+        (maphash
+         (lambda (must-not-file _)
+           (remhash must-not-file total-scores))
+         must-not-files)
+        (when (> (hash-table-count must-files) 0)
+          (let* ((replace-total-scores (make-hash-table :test #'equal)))
+            (maphash
+             (lambda (must-file _)
+               (puthash must-file (gethash must-file total-scores) replace-total-scores))
+             must-files)
+            (setq total-scores replace-total-scores)))))
+    total-scores))
 
 
 
@@ -270,19 +334,19 @@ A term regex is noted for marking boundary characters."
              (setq ress (range-add-list ress res)))))
        ress))
     (`(near . ,elts)
-     ;; TODO - I should ensure that these are actually near
-     (let* ((ress '()))
-       (dolist (elt elts)
-         (let* ((res (p-search-query-mark elt)))
-           (when res
-             (setq ress (range-add-list ress res)))))
-       ress))
+     (p-search-query-near* elts))
     (`(not ,_elt)
      (ignore))
     (`(must ,elt)
      (p-search-query-mark elt))
     (`(must-not ,_elt)
      (ignore))))
+
+;;; scratch
+;; (let* ((default-directory "/Users/zromero/dev/go/delve"))
+;;   (p-search-query-run '(terms (must "text") (boost "node"))
+;;                       (lambda (res)
+;;                         (message "DONE! %s" res))))
 
 
 "one two three"
