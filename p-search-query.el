@@ -342,11 +342,71 @@ sizes of all the documents."
     (`(must-not ,_elt)
      (ignore))))
 
+(defun p-search-query-scores-to-p-linear (scores)
+  "Convert SCORES hashtable to hashtable of probabilities."
+  ;; TODO - better algorithm...
+  (let* ((max-score 0)
+         (min-score most-positive-fixnum)
+         (zero-score 0.4)
+         (results (make-hash-table :test #'equal)))
+    (maphash
+     (lambda (_doc score)
+       (when (> score max-score)
+         (setq max-score score))
+       (when (< score min-score)
+         (setq min-score score)))
+     scores)
+    (maphash
+     (lambda (doc score)
+       (puthash doc (+ (* (/ (- 1.0 zero-score) (- max-score min-score)) score) zero-score) results))
+     scores)
+    results))
+
+
+;;; Query Parser
+
+(defun p-search-query-tokenize (query-str)
+  (let* ((tokens '()))
+    (with-temp-buffer
+      (insert query-str)
+      (goto-char (point-min))
+      (while (not (eobp))
+        (cond
+         ((eql (char-after (point)) ?\t)
+          (forward-char 1))
+         ((eql (char-after (point)) ?\s)
+          (forward-char 1))
+         ((member (char-after (point)) '(?+ ?- ?~ ?@ ?! ?^ ?/))
+          (push (intern (char-to-string (char-after (point)))) tokens)
+          (forward-char 1))
+         ((eql (char-after (point)) ?\")
+          (push 'quote tokens) ;; TODO
+          (forward-char 1))
+         ((eql (char-after (point)) ?\()
+          (push 'lparen tokens)
+          (forward-char 1))
+         ((eql (char-after (point)) ?\))
+          (push 'rparen tokens)
+          (forward-char 1))
+         ((looking-at-p "AND\\>")
+          (push 'and tokens)
+          (forward-char 3))
+         (t
+          (forward-char 1)))))
+    (nreverse tokens)))
+
+
+
+
+
 ;;; scratch
-;; (let* ((default-directory "/Users/zromero/dev/go/delve"))
-;;   (p-search-query-run '(terms (must "text") (boost "node"))
-;;                       (lambda (res)
-;;                         (message "DONE! %s" res))))
+(let* ((default-directory "/Users/zromero/dev/go/delve"))
+  (p-search-query-run '(terms (must "text") (boost "node"))
+                      (lambda (res)
+                        (message "SCORES: %s" (p-search-query-bm25 res 1263 16682639))
+                        (message "PROBS: %s" (p-search-query-scores-to-p-linear (p-search-query-bm25 res 1263 16682639))))))
+
+
 
 
 "one two three"
