@@ -47,29 +47,29 @@ A term regex is noted for marking boundary characters."
   "Run query STRING using the rg tool.  Call FINALIZE-FUNC on obtained results."
   (let* ((terms (p-search-query-rg--term-regexp string))
          (commands (seq-map #'p-search-query-rg--command terms))
-         (buf (generate-new-buffer (format "*p-search rg*")))
          (file-counts (make-hash-table :test #'equal))
          (proc-complete-ct 0))
     (dolist (cmd commands)
-      (make-process
-       :name "p-search-text-search"
-       :buffer buf
-       :command cmd
-       :sentinel
-       (lambda (proc event)
-         (when (or (member event '("finished\n" "deleted\n"))
-                   (string-prefix-p "exited abnormally with code" event)
-                   (string-prefix-p "failed with code" event))
-           (with-current-buffer (process-buffer proc)
-             (let* ((files (string-split (buffer-string) "\n")))
-               (dolist (f files)
-                 (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                   (let* ((fname (match-string 1 f))
-                          (count (string-to-number (match-string 2 f))))
-                     (puthash (file-name-concat default-directory fname) count file-counts))))
-               (cl-incf proc-complete-ct)
-               (when (= proc-complete-ct (length terms))
-                 (funcall finalize-func file-counts))))))))))
+      (let* ((buf (generate-new-buffer (format "*p-search rg*")))) ;; TODO - better name
+        (make-process
+         :name "p-search-text-search"
+         :buffer buf
+         :command cmd
+         :sentinel
+         (lambda (proc event)
+           (when (or (member event '("finished\n" "deleted\n"))
+                     (string-prefix-p "exited abnormally with code" event)
+                     (string-prefix-p "failed with code" event))
+             (with-current-buffer (process-buffer proc)
+               (let* ((files (string-split (buffer-string) "\n")))
+                 (dolist (f files)
+                   (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                     (let* ((fname (match-string 1 f))
+                            (count (string-to-number (match-string 2 f))))
+                       (puthash (file-name-concat default-directory fname) count file-counts))))
+                 (cl-incf proc-complete-ct)
+                 (when (= proc-complete-ct (length terms))
+                   (funcall finalize-func file-counts)))))))))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
@@ -237,12 +237,12 @@ A term regex is noted for marking boundary characters."
   "Calculate the BM25 scores of RESULT-HT, a map of file name to counts.
 N is the total number of documents and TOTAL-SIZE is the sum of all files'
 sizes."
-  (let* ((docs-containing (hash-table-count result-ht))
+  (let* ((docs-containing (hash-table-count (p-search-query--metadata-elt result-ht)))
          (total-counts 0)
          (scores (make-hash-table :test #'equal))
          (k1 1.2) ;; TODO - make customizable
          (b 0.75)) ;; TODO - make customizable
-    (maphash (lambda (_ v) (cl-incf total-counts v)) result-ht)
+    (maphash (lambda (_ v) (cl-incf total-counts v)) (p-search-query--metadata-elt result-ht))
     (let* ((idf (log (+ (/ (+ N (- docs-containing) 0.5)
                            (+ docs-containing 0.5))
                         1)))
