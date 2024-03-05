@@ -370,30 +370,101 @@ sizes of all the documents."
     (with-temp-buffer
       (insert query-str)
       (goto-char (point-min))
-      (while (not (eobp))
-        (cond
-         ((eql (char-after (point)) ?\t)
-          (forward-char 1))
-         ((eql (char-after (point)) ?\s)
-          (forward-char 1))
-         ((member (char-after (point)) '(?+ ?- ?~ ?@ ?! ?^ ?/))
-          (push (intern (char-to-string (char-after (point)))) tokens)
-          (forward-char 1))
-         ((eql (char-after (point)) ?\")
-          (push 'quote tokens) ;; TODO
-          (forward-char 1))
-         ((eql (char-after (point)) ?\()
-          (push 'lparen tokens)
-          (forward-char 1))
-         ((eql (char-after (point)) ?\))
-          (push 'rparen tokens)
-          (forward-char 1))
-         ((looking-at-p "AND\\>")
-          (push 'and tokens)
-          (forward-char 3))
-         (t
-          (forward-char 1)))))
+      (let* ((pos nil))
+        (while (not (eobp))
+          (cond
+           ((and pos
+                 (member (char-after (point)) '(?: ?\t ?\s ?+ ?- ?~ ?@ ?! ?^ ?/ ?\" ?\( ?\))))
+            (push `(TERM ,(buffer-substring-no-properties pos (point))) tokens)
+            (setq pos nil))
+           ((eql (char-after (point)) ?\t)
+            (forward-char 1))
+           ((eql (char-after (point)) ?\s)
+            (forward-char 1))
+           ((member (char-after (point)) '(?+ ?- ?~ ?@ ?! ?^ ?/ ?:))
+            (push (intern (char-to-string (char-after (point)))) tokens)
+            (forward-char 1))
+           ((eql (char-after (point)) ?\")
+            (if (eql (char-after (1+ (point))) ?\")
+                (forward-char 2) ;; Just skip the empty quoted string
+              (let* ((start (1+ (point)))
+                     (res (search-forward-regexp "[^\"]\"" nil t)))
+                (if res
+                    (push `(TERM ,(buffer-substring-no-properties start (1- (point))))
+                          tokens)
+                  (user-error "unmatched quote at position %d" start))))
+            (push 'quote tokens) ;; TODO
+            (forward-char 1))
+           ((eql (char-after (point)) ?\()
+            (push 'lparen tokens)
+            (forward-char 1))
+           ((eql (char-after (point)) ?\))
+            (push 'rparen tokens)
+            (forward-char 1))
+           ((looking-at-p "AND\\>")
+            (push 'and tokens)
+            (forward-char 3))
+           (t
+            (when (not pos)
+              (setq pos (point)))
+            (forward-char 1))))))
+    (push 'eoq tokens)
     (nreverse tokens)))
+
+(defvar p-search-query-parse--tokens nil)
+(defvar p-search-query-parse--idx nil)
+
+(defun p-search-query-parse--at-token ()
+  (aref p-search-query-parse--tokens p-search-query-parse--idx))
+
+(defun p-search-query-parse--next-token ()
+  (cl-incf p-search-query-parse--idx))
+
+(defun p-search-query-parse-tokens (tokens)
+  "Return query parse tree from TOKENS."
+  (let* ((p-search-query-parse--tokens (seq-into tokens 'vector))
+         (p-search-query-parse--idx 0)
+         (statements '()))
+    (while (not (eql (p-search-query-parse--at-token) 'eoq))
+      (let* ((statement (p-search-query-parse--statement)))
+        (when statement
+          (push statement statements)))
+      (p-search-query-parse--next-token))))
+
+(defun p-search-query-parse--statement ()
+  (pcase (p-search-query-parse--at-token)
+    ('+
+     (p-search-query-parse--next-token)
+     (let* ((statement (p-search-query-parse--statement)))
+       `(must ,statement)))
+    ('-
+     (p-search-query-parse--next-token)
+     (let* ((statement (p-search-query-parse--statement)))
+       `(must-not ,statement)))
+    ('lparen
+     (p-search-query-parse--next-token)
+     (let* ((terms '()))
+       (while (not (eql (p-search-query-parse--at-token) 'rparen))
+         (pcase (p-search-query-parse--at-token)
+           (`(TERM ,term)
+            (push term terms))
+           (token (error "unexpected token %s" token)))
+         (p-search-query-parse--next-token))
+       (p-search-query-parse--next-token) ;; move after rparen
+       (while (member (p-search-query-parse--at-token) '(?~ ?^))
+         (pcase (p-search-query-parse--at-token)
+           (?~ nil)
+           (?^ nil)))))
+    (`(TERM ,term)
+     term)))
+
+
+
+;; query ::= term*
+;; term  ::= ('+ | '-)? term-item '~? ('^ NUMBER?)?
+;; term-item ::= TERM | '( TERM+ ')
+
+(p-search-query-tokenize "  (this is !\"not this\")^")
 
 
 
@@ -405,6 +476,8 @@ sizes of all the documents."
                       (lambda (res)
                         (message "SCORES: %s" (p-search-query-bm25 res 1263 16682639))
                         (message "PROBS: %s" (p-search-query-scores-to-p-linear (p-search-query-bm25 res 1263 16682639))))))
+
+
 
 
 
