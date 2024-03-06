@@ -8,6 +8,7 @@
 
 ;;; Reader Functions
 
+(require 'p-search-query)
 (require 'subr-x)
 (require 'eieio)
 
@@ -525,213 +526,30 @@ default inputs, with the args being set to nil."
    :default-result 0 ;; TODO: should actually be 'no
    :result-hint-function #'p-search--text-search-hint))
 
-(defun p-search--text-query-parse-terms (query-str)
-  "Break out all query terms from QUERY-STR returning alist.
-`queries' contains the base terms, split by whitespace.
-`broken-terms' contains the individual terms of composite camel or kebap case."
-  (let* ((terms (string-split query-str " "))
-         (broken-terms '()))
-    (dolist (term terms)
-      (let* ((new-terms '())
-             (current "")
-             (i 0))
-        (while (< i (length term))
-          (let ((at-char (aref term i)))
-            (cond
-             ((= at-char ?_)
-              (when (> (length current) 0)
-                (push (downcase current) new-terms)
-                (setq current "")))
-             ((= at-char ?-)
-              (when (> (length current) 0)
-                (push (downcase current) new-terms)
-                (setq current "")))
-             ((or (and (> i 0)
-                       (char-uppercase-p at-char)
-                       (not (char-uppercase-p (aref term (1- i)))))
-                  (and (> i 0)
-                       (> (length term) (1+ i))
-                       (char-uppercase-p at-char)
-                       (char-uppercase-p (aref term (1- i)))
-                       (not (char-uppercase-p (aref term (1+ i))))))
-              (when (> (length current) 0)
-                (push (downcase current) new-terms)
-                (setq current ""))
-              (setq current (concat current (char-to-string at-char))))
-             (t (setq current (concat current (char-to-string at-char))))))
-          (cl-incf i))
-        (when (and (> (length current) 0)
-                   (not (equal current term)))
-          (push (downcase current) new-terms))
-        (setq broken-terms (append broken-terms new-terms))
-        (setq new-terms '())))
-    `((queries . ,terms)
-      (broken-terms . ,broken-terms))))
-
-(defun p-search--text-query-terms-expand (terms tool)
-  "For a given TOOL, return all query strings of TERMS.
-For example, a term is searched as a separate word and also as a
-composite word in camel case string.  This should not return the
-word as part of another word (e.g. \"text\" in \"context\")."
-  (pcase tool
-    ('ag
-     (seq-mapcat
-      (lambda (term)
-        (list (list (concat "\\b(?=\\w)" term "\\b(?<=\w)") :case-insensitive t)
-              (concat "[a-z]"
-                      (capitalize (substring term 0 1))
-                      (substring term 1))))
-      terms))
-    ('rg
-     (seq-mapcat
-      (lambda (term)
-        (list (list (concat "\\b" term "\\b") :case-insensitive t)
-              (concat "[a-z]"
-                      (capitalize (substring term 0 1))
-                      (substring term 1))))
-      terms))
-    ('emacs
-     (seq-mapcat
-      (lambda (term)
-        (list (list (concat "\\<" term "\\>") :case-insensitive t)
-              (concat "[a-z]"
-                      (capitalize (substring term 0 1))
-                      (substring term 1))))
-      terms))))
-
-(defun p-search--text-query-all-search-items (args &optional tool)
-  "Generate list of query strings based on prior's ARGS.
-If TOOL is provided, use it to override the tool in ARGS."
-  (let* ((query (alist-get 'query args))
-         (subword (alist-get 'subword args))
-         (tool (or tool (alist-get 'tool args)))
-         (terms (p-search--text-query-parse-terms query))
-         (query-terms (alist-get 'queries terms)))
-    (when subword
-      (setq query-terms (append query-terms (alist-get 'broken-terms terms))))
-    (p-search--text-query-terms-expand query-terms tool)))
-
 (defun p-search--text-query-template-init (prior)
   "Initialize search functions for text query PRIOR."
   (let* ((args (p-search-prior-arguments prior))
+         (query (alist-get 'query args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
-    (when (eq tool 'grep)
+    (when (eq tool 'grep 'ag)
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
-    (let* ((query-terms (p-search--text-query-all-search-items args)))
-      (let* ((results (make-vector (length query-terms) nil)))
-        (dotimes (i (length query-terms))
-          (p-search--text-query-bm25 prior i results (nth i query-terms) tool))))))
-
-(defun p-search--text-query-search-command (tool query case-insensitive)
-  "Return text query command list for QUERY using TOOL.
-If CASE-INSENSITIVE is non-nil, the command should add the
-case-insensitive flag."
-  (pcase tool
-    ('ag
-     `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,query))
-    ('rg
-     `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive '("-i")) ,query))))
-
-(defun p-search--text-query-bm25 (prior i results query tool)
-  "Perform BM25 query with QUERY-STRING and add result to RESULTS at index I.
-If all results are populated, finalize the PRIOR results."
-  (let* ((all-files (p-search-generate-search-space))
-         (query-string (if (listp query) (car query) query))
-         (case-i (and (listp query) (plist-get (cdr query) :case-insensitive)))
-         (buf (generate-new-buffer (format "*bm25 %s*" query-string)))
-         (cmd (p-search--text-query-search-command tool query-string case-i))
-         (file-counts (make-hash-table :test #'equal))
-         (file-scores (make-hash-table :test #'equal))
-         (total-counts 0)
-         (docs-containing 0)
-         (k1 1.2)
-         (b 0.75))
-    (make-process
-     :name "p-search-text-search"
-     :buffer buf
-     :command cmd
-     :sentinel (lambda (proc event)
-                 (when (or (member event '("finished\n" "deleted\n"))
-                           (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code" event))
-                   (let ((start-time (current-time)))
-                     (with-current-buffer (process-buffer proc)
-                       (let* ((files (string-split (buffer-string) "\n")))
-                         (dolist (f files)
-                           (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                             (let* ((fname (match-string 1 f))
-                                    (count (string-to-number (match-string 2 f))))
-                               (puthash (file-name-concat default-directory fname) count file-counts)
-                               (cl-incf docs-containing)
-                               (cl-incf total-counts count))))))
-                     (let* ((N (length all-files))
-                            (all-files-size 0))
-                       (dolist (file all-files)
-                         (cl-incf all-files-size (nth 7 (file-attributes file))))
-                       (let* ((idf (log (+ (/ (+ N (- docs-containing) 0.5)
-                                              (+ docs-containing 0.5))
-                                           1)))
-                              (avg-size (/ (float all-files-size) N)))
-                         (maphash
-                          (lambda (file count)
-
-                            (let* ((size (nth 7 (file-attributes file)))
-                                   (score (* idf (/ (* count (+ k1 1))
-                                                    (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
-                              (puthash file score file-scores)))
-                          file-counts)))
-                     (message "BM25 complete: %s" (time-since start-time))
-                     (setf (aref results i) file-scores)
-                     (when (seq-every-p #'identity results)
-                       (p-search--text-query-finalize-results prior results))))))))
-
-(defun p-search--text-query-finalize-results (prior results)
-  "Compute final calculations for PRIOR of RESULTS.
-RESULTS is a vector of hash table of file scores."
-  (let ((max-score 0)
-        (min-score most-positive-fixnum)
-        (probs (make-hash-table :test 'equal)))
-    (dotimes (i (1- (length results)))
-      (let* ((at (aref results i))
-             (next (aref results (1+ i))))
-        (maphash
-         (lambda (file score)
-           (let ((next-score (+ score (gethash file at 0))))
-             (puthash file next-score next)))
-         at)))
-    (maphash
-     (lambda (_ score)
-       (cond
-        ((> score max-score)
-         (setq max-score score))
-        ((< score min-score)
-         (setq min-score score))))
-     (aref results (1- (length results))))
-    (let* ((extra (/ min-score 2.0))) ;; smoothing
-      (maphash
-       (lambda (file score)
-         (puthash file (/ (+ (float score) extra)
-                          (+ max-score extra))
-                  probs))
-       (aref results (1- (length results))))
-      (setf (p-search-prior-results prior) probs)
-      (setf (p-search-prior-default-result prior) (/ extra (+ max-score extra)))
-      (p-search--notify-main-thread))))
+    (let* ((all-files (p-search-generate-search-space))
+           (total-size 0))
+      (dolist (file all-files)
+        (cl-incf total-size (nth 7 (file-attributes file))))
+      (p-search-query query (length all-files) total-size
+                      (lambda (p-ht)
+                        (setf (p-search-prior-results prior) p-ht))))))
 
 (defun p-search--text-search-hint (prior buffer)
   "Mark places where the query args of PRIOR matches text in BUFFER."
-  (let* ((search-regexps (p-search--text-query-all-search-items (p-search-prior-arguments prior) 'emacs))
-         (ress '()))
+  (let* ((args (p-search-prior-arguments prior))
+         (query (p-search-query-parse (alist-get 'query args))))
     (with-current-buffer buffer
-      (dolist (search-item search-regexps)
-        (let* ((regexp (if (listp search-item) (car search-item) search-item))
-               (case-fold-search (and (listp search-item) (plist-get (cdr search-item) :case-insensitive))))
-          (while (search-forward-regexp regexp nil t)
-            (push (cons (match-beginning 0) (match-end 0)) ress)))))
-    ress))
+      (p-search-query-mark query))))
 
 (provide 'p-search-prior)
 ;;; p-search-prior.el ends here

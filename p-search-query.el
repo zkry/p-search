@@ -392,9 +392,7 @@ sizes of all the documents."
                 (if res
                     (push `(TERM ,(buffer-substring-no-properties start (1- (point))))
                           tokens)
-                  (user-error "unmatched quote at position %d" start))))
-            (push 'quote tokens) ;; TODO
-            (forward-char 1))
+                  (user-error "unmatched quote at position %d" start)))))
            ((eql (char-after (point)) ?\()
             (push 'lparen tokens)
             (forward-char 1))
@@ -407,7 +405,9 @@ sizes of all the documents."
            (t
             (when (not pos)
               (setq pos (point)))
-            (forward-char 1))))))
+            (forward-char 1))))
+        (when pos
+          (push `(TERM ,(buffer-substring-no-properties pos (point))) tokens))))
     (push 'eoq tokens)
     (nreverse tokens)))
 
@@ -415,7 +415,14 @@ sizes of all the documents."
 (defvar p-search-query-parse--idx nil)
 
 (defun p-search-query-parse--at-token ()
-  (aref p-search-query-parse--tokens p-search-query-parse--idx))
+  (if (>= p-search-query-parse--idx (length p-search-query-parse--tokens))
+      'eoq
+    (aref p-search-query-parse--tokens p-search-query-parse--idx)))
+
+(defun p-search-query-parse--peek-token ()
+  (if (>= p-search-query-parse--idx (1- (length p-search-query-parse--tokens)))
+      'eoq
+    (aref p-search-query-parse--tokens (1+ p-search-query-parse--idx))))
 
 (defun p-search-query-parse--next-token ()
   (cl-incf p-search-query-parse--idx))
@@ -429,10 +436,16 @@ sizes of all the documents."
       (let* ((statement (p-search-query-parse--statement)))
         (when statement
           (push statement statements)))
-      (p-search-query-parse--next-token))))
+      (p-search-query-parse--next-token))
+    (setq statements (nreverse statements))
+    `(terms ,@statements)))
 
 (defun p-search-query-parse--statement ()
   (pcase (p-search-query-parse--at-token)
+    ('!
+     (p-search-query-parse--next-token)
+     (let* ((statement (p-search-query-parse--statement)))
+       `(not ,statement)))
     ('+
      (p-search-query-parse--next-token)
      (let* ((statement (p-search-query-parse--statement)))
@@ -450,34 +463,77 @@ sizes of all the documents."
             (push term terms))
            (token (error "unexpected token %s" token)))
          (p-search-query-parse--next-token))
-       (p-search-query-parse--next-token) ;; move after rparen
-       (while (member (p-search-query-parse--at-token) '(?~ ?^))
-         (pcase (p-search-query-parse--at-token)
-           (?~ nil)
-           (?^ nil)))))
+       (setq terms (nreverse terms))
+       (p-search-query-parse--postfix terms)))
     (`(TERM ,term)
-     term)))
+     (p-search-query-parse--postfix term))))
+
+(defun p-search-query-parse--postfix (elt)
+  (when (and (listp elt) (= 1 (length elt)))
+    (setq elt (car elt)))
+  (let ((boost)
+        (near))
+    (while (member (p-search-query-parse--peek-token) '(~ ^))
+      (pcase (p-search-query-parse--peek-token)
+        ('~
+         (setq near t)
+         (p-search-query-parse--next-token))
+        ('^
+         (setq boost 1)
+         (pcase (p-search-query-parse--peek-token)
+           (`(TERM ,term)
+            (when (string-match-p "[0-9]+" term)
+              (setq boost (string-to-number term))
+              (p-search-query-parse--next-token))))
+         (p-search-query-parse--next-token))))
+    (cond
+     ((and boost near)
+      (if (listp elt)
+          `(boost (near ,@elt) ,boost)
+        `(boost (loose ,elt) ,boost)))
+     (boost
+      (if (listp elt)
+          `(boost (and ,@elt) ,boost)
+        `(boost ,elt ,boost)))
+     (near
+      (if (listp elt)
+          `(near ,@elt)
+        `(loose ,elt)))
+     (t
+      (if (listp elt)
+          `(and ,@elt)
+        elt)))))
 
 
+
+;;; API
 
-;; query ::= term*
-;; term  ::= ('+ | '-)? term-item '~? ('^ NUMBER?)?
-;; term-item ::= TERM | '( TERM+ ')
+(defun p-search-query-parse (query-string)
+  (let* ((tokens (p-search-query-tokenize query-string))
+         (ast (p-search-query-parse-tokens tokens)))
+    ast))
 
-(p-search-query-tokenize "  (this is !\"not this\")^")
+(defun p-search-query (query-string N total-size p-callback)
+  (let* ((ast (p-search-query-parse query-string)))
+    (p-search-query-run ast
+                        (lambda (res)
+                          (let* ((scores (p-search-query-bm25 res N total-size ))
+                                 (probs (p-search-query-scores-to-p-linear scores)))
+                            (funcall p-callback probs))))))
 
-
+(p-search-query-parse-tokens (p-search-query-tokenize "one two three"))
+(p-search-query-parse-tokens (p-search-query-tokenize "\"one two three\""))
+(p-search-query-parse-tokens (p-search-query-tokenize "student !teacher"))
+(p-search-query-parse-tokens (p-search-query-tokenize "(student)^2"))
+(p-search-query-parse-tokens (p-search-query-tokenize "student^2"))
+(p-search-query-parse-tokens (p-search-query-tokenize "student~"))
+(p-search-query-parse-tokens (p-search-query-tokenize "+student^"))
+(p-search-query-parse-tokens (p-search-query-tokenize "-(student teacher)"))
+(p-search-query-parse-tokens (p-search-query-tokenize "teacher (items this)~^ "))
 
 
 
 ;;; scratch
-(let* ((default-directory "/Users/zromero/dev/go/delve"))
-  (p-search-query-run '(terms (must "text") (boost "node"))
-                      (lambda (res)
-                        (message "SCORES: %s" (p-search-query-bm25 res 1263 16682639))
-                        (message "PROBS: %s" (p-search-query-scores-to-p-linear (p-search-query-bm25 res 1263 16682639))))))
-
-
 
 
 
@@ -488,8 +544,8 @@ sizes of all the documents."
 "\"one two three\""
 '(terms "one two three")
 
-"student AND items"
-'(terms (and "student" "items"))
+;; "student AND items"
+;; '(terms (and "student" "items"))
 
 "student !teacher"
 '(terms "student" (not "teacher"))
@@ -509,11 +565,11 @@ sizes of all the documents."
 "(student items)~10w"
 '(terms (near "student" "items" :distance 10 :unit word))
 
-"title:.go"
-'(terms (field "title" ".go"))
+;; "title:.go"
+;; '(terms (field "title" ".go"))
 
-"string@items"
-'(terms (syntax string "items"))
+;; "string@items"
+;; '(terms (syntax string "items"))
 
 "teacher (string@items comment@this)~^ #title:(.html /.xmlx?/)"
 '(terms "teacher"
