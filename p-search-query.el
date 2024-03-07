@@ -159,7 +159,9 @@ A term regex is noted for marking boundary characters."
     elt))
 
 (defun p-search-query-run (query &optional finalize-func)
-  ""
+  "Dispatch processes according to QUERY syntax tree.
+All processes are concluded by calling FINALIZE-FUNC with
+resulting data hashmap."
   (pcase query
     (`(terms . ,elts)
      (let ((results (make-vector (length elts) nil))
@@ -366,6 +368,7 @@ sizes of all the documents."
 ;;; Query Parser
 
 (defun p-search-query-tokenize (query-str)
+  "Break QUERY-STR into consituent tokens."
   (let* ((tokens '()))
     (with-temp-buffer
       (insert query-str)
@@ -395,7 +398,7 @@ sizes of all the documents."
                 (if res
                     (push `(TERM ,(buffer-substring-no-properties start (1- (point))))
                           tokens)
-                  (user-error "unmatched quote at position %d" start)))))
+                  (user-error "Unmatched quote at position %d" start)))))
            ((eql (char-after (point)) ?\()
             (push 'lparen tokens)
             (forward-char 1))
@@ -414,20 +417,27 @@ sizes of all the documents."
     (push 'eoq tokens)
     (nreverse tokens)))
 
-(defvar p-search-query-parse--tokens nil)
-(defvar p-search-query-parse--idx nil)
+(defvar p-search-query-parse--tokens nil
+  "Variable to be used dynamically when parsing.
+Stores the list of tokens being parsed.")
+(defvar p-search-query-parse--idx nil
+  "Variable to be used dynamically when parsing.
+Indicates which token we are currently considering.")
 
 (defun p-search-query-parse--at-token ()
+  "When parsing p-search query, return the current token."
   (if (>= p-search-query-parse--idx (length p-search-query-parse--tokens))
       'eoq
     (aref p-search-query-parse--tokens p-search-query-parse--idx)))
 
 (defun p-search-query-parse--peek-token ()
+  "When parsing p-search query, return the peek token (i.e. one after at)."
   (if (>= p-search-query-parse--idx (1- (length p-search-query-parse--tokens)))
       'eoq
     (aref p-search-query-parse--tokens (1+ p-search-query-parse--idx))))
 
 (defun p-search-query-parse--next-token ()
+  "When parsing p-search query, move the parsing index forward by one token."
   (cl-incf p-search-query-parse--idx))
 
 (defun p-search-query-parse-tokens (tokens)
@@ -444,6 +454,10 @@ sizes of all the documents."
     `(terms ,@statements)))
 
 (defun p-search-query-parse--statement ()
+  "Parse a statement element (e.g. \"needle+\").
+This method assumes that the parse context is setup (i.e. the
+variables `p-search-query-parse--tokens' and
+`p-search-query-parse--idx' are set)."
   (pcase (p-search-query-parse--at-token)
     ('!
      (p-search-query-parse--next-token)
@@ -472,6 +486,9 @@ sizes of all the documents."
      (p-search-query-parse--postfix term))))
 
 (defun p-search-query-parse--postfix (elt)
+  "Parse any existing postfix elements of ELT.
+If postfix elements exist, return ELT wrapped in the correct AST
+structure."
   (when (and (listp elt) (= 1 (length elt)))
     (setq elt (car elt)))
   (let ((boost)
@@ -512,11 +529,19 @@ sizes of all the documents."
 ;;; API
 
 (defun p-search-query-parse (query-string)
+  "Parse QUERY-STRING and return its query AST."
   (let* ((tokens (p-search-query-tokenize query-string))
          (ast (p-search-query-parse-tokens tokens)))
     ast))
 
 (defun p-search-query (query-string N total-size p-callback)
+  "Dispatch query from QUERY-STRING.
+QUERY-STRING's parse is used to dispatch process calls.  N is the
+total number of files being considered and TOTAL-SIZE is the sum
+of the size (in bytes) of all N files.
+
+When all processes finish and results are combined, P-CALLBACK is
+called with one argument, the hashmap of files to probabilities."
   (let* ((ast (p-search-query-parse query-string)))
     (p-search-query-run ast
                         (lambda (res)
