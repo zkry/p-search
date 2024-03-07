@@ -566,9 +566,7 @@ Base priors are priors with a template that has a search-space-function."
     ("f s" "size"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--file-size-prior-template))) ;; byte string -> input
-    ("f c" "distance" zr/todo) ;; directory-name -> input
-    ]
+       (p-search-dispatch-prior-creation p-search--file-size-prior-template)))]
    ["Git"
     ("g a" "author"
      (lambda ()
@@ -585,11 +583,8 @@ Base priors are priors with a template that has a search-space-function."
     ("g m" "modification frequency"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template)))]] ;; date+sigma -> input
-  [
-   ;; ["Vector"
-   ;;  ("v d" "vector distance" zr/todo)]
-   ["Emacs"
+       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template)))]]
+  [["Emacs"
     ("e b" "open buffer"
      (lambda ()
        (interactive)
@@ -598,16 +593,12 @@ Base priors are priors with a template that has a search-space-function."
     ("t q" "text query"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--text-query-prior-template))) ;; string -> inptut
-    ("s c" "co-located text match" zr/todo) ;; multiple string -> input
-    ("s f" "text frequency" zr/todo)]  ;; string -> input
+       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]
    ["Source (Regexp) "
     ("r t" "regexp text match"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--textsearch-prior-template))) ;; string -> inptut
-    ("r c" "co-located regexp text match" zr/todo) ;; multiple string -> input
-    ("r f" "regexp frequency" zr/todo)]])
+       (p-search-dispatch-prior-creation p-search--textsearch-prior-template)))]])
 
 (provide 'p-search)
 

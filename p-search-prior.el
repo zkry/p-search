@@ -532,7 +532,7 @@ default inputs, with the args being set to nil."
          (query (alist-get 'query args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
-    (when (eq tool 'grep 'ag)
+    (when (not (eq tool 'rg))
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
