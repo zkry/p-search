@@ -444,8 +444,8 @@ Elements are of the type (FILE PROB).")
                                 `((include-directories . ,(and project-root (list project-root))))))))
     (setq p-search-priors nil)
     (setq p-search-base-prior (p-search-prior-create
-                               :template p-search-prior-base--filesystem
-                               :arguments (p-search-prior-default-arguments p-search-prior-base--filesystem)))))
+                               :template p-search-prior-base--multi-filesystem
+                               :arguments (p-search-prior-default-arguments p-search-prior-base--multi-filesystem)))))
 
 ;;;;;;;;;;;;;;;;;
 ;;; display ;;;;;

@@ -48,7 +48,7 @@ A term regex is noted for marking boundary characters."
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
   (let* ((escaped-string (p-search-query-rg-escape string)))
-    (list (list (concat "\\b(?=\\w)" escaped-string "\\b(?<=\w)") :case-insensitive t)
+    (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
           (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
                   (capitalize (substring escaped-string 0 1))
                   (substring escaped-string 1))))) ;; TODO - will these double-count camel case?
@@ -89,6 +89,9 @@ A term regex is noted for marking boundary characters."
   "Dynamic var used to determine which tool to use to dispatch commands.
 Can take symbols `grep', `rg', or `ag'.")
 
+(defvar p-seach-query-directories nil
+  "Dynamic var used to determine which directories to search in.")
+
 (defun p-search-query-commands (string)
   "Return list of runnable commands from STRING based on `p-search-query-tool'."
   (pcase p-search-query-tool
@@ -99,32 +102,34 @@ Can take symbols `grep', `rg', or `ag'.")
 
 (defun p-search-query-dispatch (string finalize-func)
   "Run query STRING.  Call FINALIZE-FUNC on obtained results."
-  (let* ((commands (p-search-query-commands string))
+  (let* ((directories (or p-seach-query-directories (list default-directory)))
+         (commands (p-search-query-commands string))
          (file-counts (make-hash-table :test #'equal))
          (proc-complete-ct 0))
     (dolist (cmd commands)
-      (let* ((buf (generate-new-buffer (format "*p-search %s*" p-search-query-tool)))) ;; TODO - better name
-        (make-process
-         :name "p-search-text-search"
-         :buffer buf
-         :command cmd
-         :sentinel
-         (lambda (proc event)
-           (when (or (member event '("finished\n" "deleted\n"))
-                     (string-prefix-p "exited abnormally with code" event)
-                     (string-prefix-p "failed with code" event))
-             (with-current-buffer (process-buffer proc)
-               (let* ((files (string-split (buffer-string) "\n")))
-                 (dolist (f files)
-                   (when (string-prefix-p "./" f)
-                     (setq f (substring f 2)))
-                   (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                     (let* ((fname (match-string 1 f))
-                            (count (string-to-number (match-string 2 f))))
-                       (puthash (file-name-concat default-directory fname) count file-counts))))
-                 (cl-incf proc-complete-ct)
-                 (when (= proc-complete-ct (length commands))
-                   (funcall finalize-func file-counts)))))))))))
+      (dolist (default-directory directories)
+        (let* ((buf (generate-new-buffer (format "*p-search %s*" p-search-query-tool)))) ;; TODO - better name
+          (make-process
+           :name "p-search-text-search"
+           :buffer buf
+           :command cmd
+           :sentinel
+           (lambda (proc event)
+             (when (or (member event '("finished\n" "deleted\n"))
+                       (string-prefix-p "exited abnormally with code" event)
+                       (string-prefix-p "failed with code" event))
+               (with-current-buffer (process-buffer proc)
+                 (let* ((files (string-split (buffer-string) "\n")))
+                   (dolist (f files)
+                     (when (string-prefix-p "./" f)
+                       (setq f (substring f 2)))
+                     (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                       (let* ((fname (match-string 1 f))
+                              (count (string-to-number (match-string 2 f))))
+                         (puthash (file-name-concat default-directory fname) count file-counts))))
+                   (cl-incf proc-complete-ct)
+                   (when (= proc-complete-ct (* (length commands) (length directories)))
+                     (funcall finalize-func file-counts))))))))))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
@@ -306,6 +311,8 @@ sizes."
            (avg-size (/ (float total-size) N)))
       (maphash
        (lambda (file count)
+         (unless (nth 7 (file-attributes file))
+           (error "bad file %s" file))
          (let* ((size (nth 7 (file-attributes file)))
                 (score (* idf (/ (* count (+ k1 1))
                                  (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))

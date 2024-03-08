@@ -85,6 +85,53 @@ default inputs, with the args being set to nil."
              (push file files)))
          (nreverse files))))))
 
+(defconst p-search-prior-base--multi-filesystem
+  (p-search-prior-template-create
+   :name "MULTI-FILESYSTEM"
+   :input-spec '((base-directories . (directory-names
+                                      :key "d"
+                                      :description "Directories"
+                                      :default (lambda () (list default-directory))))
+                 (filename-regexp . (regexp
+                                     :key "f"
+                                     :description "Filename Pattern"
+                                     :default ".*")))
+   :options-spec '((ignore . (regexp
+                              :key "-i"
+                              :description "Ignore Patterns"
+                              :multiple t))  ;; TODO - implement multiple
+                   (use-git-ignore . (toggle
+                                      :key "-g"
+                                      :description "Git Ignore"
+                                      :default-value on)))
+   :search-space-function #'p-search-prior-base--multi-filesystem-search-space))
+
+(defun p-search-prior-base--multi-filesystem-search-space (args)
+  (let-alist args
+    (let* ((files '()))
+      (dolist (default-directory .base-directories)
+        (dolist (file (if .use-git-ignore
+                          (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
+                        (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
+          (catch 'skip
+            (when (string-prefix-p "./" file)
+              (setq file (substring file 2)))
+            (unless (or (equal .filename-regexp ".*")
+                        (string-match-p .filename-regexp file))
+              (throw 'skip nil))
+            (when (and .ignore (string-match-p .ignore file))
+              (throw 'skip nil))
+            (setq file (file-name-concat default-directory file))
+            (push file files))))
+      (nreverse files))))
+
+(defun p-search-prior-get-base-directories ()
+  "Return list of base directories of the base prior."
+  (let* ((args (p-search-prior-arguments p-search-base-prior)))
+    (or (alist-get 'base-directories args)
+        (alist-get 'base-directory args)
+        (error "Filesystem directory not supported"))))
+
 (defconst p-search--subdirectory-prior-template
   (p-search-prior-template-create
    :name "subdirectory"
@@ -198,72 +245,15 @@ default inputs, with the args being set to nil."
      (p-search--notify-main-thread))))
 
 
-;;; Seach Priors
-
-
-(defconst p-search--textsearch-prior-template
-  (p-search-prior-template-create
-   :name "text search"
-   :input-spec
-   '((search-term . (regexp :key "i" :description "Pattern")))
-   :options-spec
-   '((tool . (choice
-              :key "-p"
-              :description "search program"
-              :choices
-              (rg ;; TODO - how to specify defaults
-               ag
-               grep)))
-     (strategy . (choice
-                  :choices
-                  (exact+case-insensitive+word-break
-                   exact)
-                  :key "-s"
-                  :description "search scheme")))
-   :initialize-function 'p-search--textsearch-prior-template-init
-   :default-result 'no))
-
-(defun p-search--textsearch-prior-template-init (prior)
-  "Initialize process fro the text-search PRIOR."
-  (let* ((args (p-search-prior-arguments prior))
-         (base-prior-args (p-search-prior-arguments p-search-base-prior))
-         (input (alist-get 'search-term args))
-         (default-directory (alist-get 'base-directory base-prior-args)) ;; TODO: allow for multiple
-         (ag-file-regex (alist-get 'filename-regexp base-prior-args))
-         (cmd `("ag" ,input "-l" "--nocolor"))
-         (buf (generate-new-buffer "*p-search-text-search*")))
-    (when ag-file-regex
-      (setq cmd (append cmd `("-G" ,ag-file-regex))))
-    (make-process
-     :name "p-search-text-search-prior"
-     :buffer buf
-     :command cmd
-     :sentinel (lambda (_proc event)
-                 (when (or (member event '("finished\n" "deleted\n"))
-                           (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code" event))
-                   (p-search--notify-main-thread)))
-     :filter (lambda (proc string)
-               (when (buffer-live-p (process-buffer proc))
-                 (with-current-buffer (process-buffer proc)
-                   (let ((moving (= (point) (process-mark proc))))
-                     (save-excursion
-                       (goto-char (process-mark proc))
-                       (insert string)
-                       (set-marker (process-mark proc) (point)))
-                     (if moving (goto-char (process-mark proc)))
-                     (let ((files (string-split string "\n"))
-                           (result-ht (p-search-prior-results prior)))
-                       (dolist (f files)
-                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
-
 ;;; Git Priors
 
 (defun p-seach--git-authors ()
   "Return list of git authors."
   (let* ((base-args (p-search-prior-arguments p-search-base-prior))
-         (default-directory (alist-get 'base-directory base-args)))
-    (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))
+         (base-directories (p-search-prior-get-base-directories))
+         (res '()))
+    (dolist (default-directory base-directories)
+      (setq res (append res (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t))))))
 
 (defun p-search--git-branches ()
   "Return list of all git branches."
@@ -288,33 +278,33 @@ default inputs, with the args being set to nil."
 (defun p-search--git-author-prior-template-init (prior)
   "Initialize process for git-author PRIOR."
   (let* ((args (p-search-prior-arguments prior))
-         (base-prior-args (p-search-prior-arguments p-search-base-prior))
          (author (alist-get 'git-author args))
-         (default-directory (alist-get 'base-directory base-prior-args))
-         (buf (generate-new-buffer "*p-search-git-author-search*"))
+         (base-directories (p-search-prior-get-base-directories))
          (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
-    (make-process
-     :name "p-seach-git-author-prior"
-     :buffer buf
-     :command `("sh" "-c" ,git-command)
-     :sentinel (lambda (_proc event)
-                 (when (or (member event '("finished\n" "deleted\n"))
-                           (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code" event))
-                   (p-search--notify-main-thread)))
-     :filter (lambda (proc string)
-               (when (buffer-live-p (process-buffer proc))
-                 (with-current-buffer (process-buffer proc)
-                   (let ((moving (= (point) (process-mark proc))))
-                     (save-excursion
-                       (goto-char (process-mark proc))
-                       (insert string)
-                       (set-marker (process-mark proc) (point)))
-                     (if moving (goto-char (process-mark proc)))
-                     (let ((files (string-split string "\n"))
-                           (result-ht (p-search-prior-results prior)))
-                       (dolist (f files)
-                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+    (dolist (default-directory base-directories)
+      (let* ((buf (generate-new-buffer "*p-search-git-author*")))
+        (make-process
+         :name "p-seach-git-author-prior"
+         :buffer buf
+         :command `("sh" "-c" ,git-command)
+         :sentinel (lambda (_proc event)
+                     (when (or (member event '("finished\n" "deleted\n"))
+                               (string-prefix-p "exited abnormally with code" event)
+                               (string-prefix-p "failed with code" event))
+                       (p-search--notify-main-thread)))
+         :filter (lambda (proc string)
+                   (when (buffer-live-p (process-buffer proc))
+                     (with-current-buffer (process-buffer proc)
+                       (let ((moving (= (point) (process-mark proc))))
+                         (save-excursion
+                           (goto-char (process-mark proc))
+                           (insert string)
+                           (set-marker (process-mark proc) (point)))
+                         (if moving (goto-char (process-mark proc)))
+                         (let ((files (string-split string "\n"))
+                               (result-ht (p-search-prior-results prior)))
+                           (dolist (f files)
+                             (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))))
 
 (defconst p-search--git-branch-prior-template
   (p-search-prior-template-create
@@ -338,31 +328,32 @@ default inputs, with the args being set to nil."
          (branch (alist-get 'branch args))
          (n (alist-get 'n args))
          (default-directory (alist-get 'base-directory base-prior-args))
-         (buf (generate-new-buffer "*p-search-git-branch-search*"))
          (git-command (format "git diff --name-only %s~%d %s"
                               branch n branch)))
-    (make-process
-     :name "p-seach-git-author-prior"
-     :buffer buf
-     :command `("sh" "-c" ,git-command)
-     :sentinel (lambda (_proc event)
-                 (when (or (member event '("finished\n" "deleted\n"))
-                           (string-prefix-p "exited abnormally with code" event)
-                           (string-prefix-p "failed with code" event))
-                   (p-search--notify-main-thread)))
-     :filter (lambda (proc string)
-               (when (buffer-live-p (process-buffer proc))
-                 (with-current-buffer (process-buffer proc)
-                   (let ((moving (= (point) (process-mark proc))))
-                     (save-excursion
-                       (goto-char (process-mark proc))
-                       (insert string)
-                       (set-marker (process-mark proc) (point)))
-                     (if moving (goto-char (process-mark proc)))
-                     (let ((files (string-split string "\n"))
-                           (result-ht (p-search-prior-results prior)))
-                       (dolist (f files)
-                         (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))
+    (dolist (default-directory base-directories)
+      (let* ((buf (generate-new-buffer "*p-search-git-branch*")))
+        (make-process
+         :name "p-seach-git-author-prior"
+         :buffer buf
+         :command `("sh" "-c" ,git-command)
+         :sentinel (lambda (_proc event)
+                     (when (or (member event '("finished\n" "deleted\n"))
+                               (string-prefix-p "exited abnormally with code" event)
+                               (string-prefix-p "failed with code" event))
+                       (p-search--notify-main-thread)))
+         :filter (lambda (proc string)
+                   (when (buffer-live-p (process-buffer proc))
+                     (with-current-buffer (process-buffer proc)
+                       (let ((moving (= (point) (process-mark proc))))
+                         (save-excursion
+                           (goto-char (process-mark proc))
+                           (insert string)
+                           (set-marker (process-mark proc) (point)))
+                         (if moving (goto-char (process-mark proc)))
+                         (let ((files (string-split string "\n"))
+                               (result-ht (p-search-prior-results prior)))
+                           (dolist (f files)
+                             (puthash (file-name-concat default-directory f) 'yes result-ht))))))))))))
 
 (defconst p-search--git-co-changes-prior-template
   (p-search-prior-template-create
@@ -528,10 +519,12 @@ default inputs, with the args being set to nil."
 
 (defun p-search--text-query-template-init (prior)
   "Initialize search functions for text query PRIOR."
-  (let* ((args (p-search-prior-arguments prior))
+  (let* ((init-buffer (current-buffer))
+         (args (p-search-prior-arguments prior))
          (query (alist-get 'query args))
          (algorithm (alist-get 'algorithm args))
-         (tool (alist-get 'tool args)))
+         (tool (alist-get 'tool args))
+         (base-directories (p-search-prior-get-base-directories)))
     (when (not (member tool '(ag rg grep)))
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
@@ -539,11 +532,17 @@ default inputs, with the args being set to nil."
     (let* ((all-files (p-search-generate-search-space))
            (total-size 0))
       (dolist (file all-files)
-        (cl-incf total-size (nth 7 (file-attributes file))))
-      (let ((p-search-query-tool tool))
+        (let ((size (nth 7 (file-attributes file))))
+          (unless size
+            (error "Invalid file %s" file))
+          (cl-incf total-size size)))
+      (let ((p-search-query-tool tool)
+            (p-seach-query-directories (p-search-prior-get-base-directories)))
         (p-search-query query (length all-files) total-size
                         (lambda (p-ht)
-                          (setf (p-search-prior-results prior) p-ht)))))))
+                          (setf (p-search-prior-results prior) p-ht)
+                          (with-current-buffer init-buffer
+                            (p-search--notify-main-thread))))))))
 
 (defun p-search--text-search-hint (prior buffer)
   "Mark places where the query args of PRIOR matches text in BUFFER."
