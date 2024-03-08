@@ -249,11 +249,11 @@ default inputs, with the args being set to nil."
 
 (defun p-seach--git-authors ()
   "Return list of git authors."
-  (let* ((base-args (p-search-prior-arguments p-search-base-prior))
-         (base-directories (p-search-prior-get-base-directories))
+  (let* ((base-directories (p-search-prior-get-base-directories))
          (res '()))
     (dolist (default-directory base-directories)
-      (setq res (append res (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t))))))
+      (setq res (append res (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t))))
+    res))
 
 (defun p-search--git-branches ()
   "Return list of all git branches."
@@ -277,7 +277,8 @@ default inputs, with the args being set to nil."
 
 (defun p-search--git-author-prior-template-init (prior)
   "Initialize process for git-author PRIOR."
-  (let* ((args (p-search-prior-arguments prior))
+  (let* ((init-buf (current-buffer))
+         (args (p-search-prior-arguments prior))
          (author (alist-get 'git-author args))
          (base-directories (p-search-prior-get-base-directories))
          (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
@@ -291,7 +292,8 @@ default inputs, with the args being set to nil."
                      (when (or (member event '("finished\n" "deleted\n"))
                                (string-prefix-p "exited abnormally with code" event)
                                (string-prefix-p "failed with code" event))
-                       (p-search--notify-main-thread)))
+                       (with-current-buffer init-buf
+                         (p-search--notify-main-thread))))
          :filter (lambda (proc string)
                    (when (buffer-live-p (process-buffer proc))
                      (with-current-buffer (process-buffer proc)
