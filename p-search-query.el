@@ -8,10 +8,10 @@
 
 (require 'range)
 
-(defun p-search-query-rg-escape (string)
-  "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
-  (let* ((meta-chars '(?\\ ?. ?+ ?* ?\? ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~))
-         (ret-str (make-string (* (length string) 2) 0))
+
+(defun p-search-query--escape (string meta-chars)
+  "Insert escape \\ characters in STRING for all chars in META-CHARS."
+  (let* ((ret-str (make-string (* (length string) 2) 0))
          (i 0))
     (dotimes (j (length string))
       (if (member (aref string j) meta-chars)
@@ -23,12 +23,44 @@
         (cl-incf i)))
     (substring ret-str 0 i)))
 
+(defun p-search-query-rg-escape (string)
+  "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
+  (p-search-query--escape string '(?\\ ?. ?+ ?* ?\? ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~)))
+
+(defun p-search-query-ag-escape (string)
+  "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
+  (p-search-query--escape string '(?\\ ?^ ?$ ?. ?\[ ?| ?\( ?\) ?* ?+ ?\? ?{)))
+
+(defun p-search-query-grep-escape (string)
+  "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
+  (p-search-query--escape string '(?\\ ?.)))
+
+(defun p-search-query-grep--term-regexp (string)
+  "Create a term regular expression from STRING.
+A term regex is noted for marking boundary characters."
+  (let* ((escaped-string (p-search-query-grep-escape string)))
+    (list (list (concat "\\<" escaped-string "\\>") :case-insensitive t)
+          (concat "\\B"
+                  (capitalize (substring escaped-string 0 1))
+                  (substring escaped-string 1)))))
+
 (defun p-search-query-rg--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (list (list (concat "\\b" string "\\b") :case-insensitive t)
-        (concat (capitalize (substring string 0 1))
-                (substring string 1))))
+  (let* ((escaped-string (p-search-query-rg-escape string)))
+    (list (list (concat "\\b(?=\\w)" escaped-string "\\b(?<=\w)") :case-insensitive t)
+          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
+                  (capitalize (substring escaped-string 0 1))
+                  (substring escaped-string 1))))) ;; TODO - will these double-count camel case?
+
+(defun p-search-query-ag--term-regexp (string)
+  "Create a term regular expression from STRING for ag tool.
+A term regex is noted for marking boundary characters."
+  (let* ((escaped-string (p-search-query-ag-escape string)))
+    (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
+          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
+                  (capitalize (substring escaped-string 0 1))
+                  (substring escaped-string 1)))))
 
 (defun p-search-query-emacs--term-regexp (string)
   "Create a term regular expression from STRING.
@@ -38,19 +70,40 @@ A term regex is noted for marking boundary characters."
                 (substring string 1))))
 
 
+(defun p-search-query-grep--command (term)
+  "Return command line arguments for rg search of TERM."
+  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
+    `("grep" "-c" ,@(and case-insensitive '("--ignore-case")) ,(p-search-query--metadata-elt term) ".")))
+
 (defun p-search-query-rg--command (term)
   "Return command line arguments for rg search of TERM."
   (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
     `("rg" "--count-matches" "--color" "never" "-i" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
 
-(defun p-search-query-rg (string finalize-func)
-  "Run query STRING using the rg tool.  Call FINALIZE-FUNC on obtained results."
-  (let* ((terms (p-search-query-rg--term-regexp string))
-         (commands (seq-map #'p-search-query-rg--command terms))
+(defun p-search-query-ag--command (term)
+  "Return command line arguments for ag search of TERM."
+  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
+    `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
+
+(defvar p-search-query-tool nil
+  "Dynamic var used to determine which tool to use to dispatch commands.
+Can take symbols `grep', `rg', or `ag'.")
+
+(defun p-search-query-commands (string)
+  "Return list of runnable commands from STRING based on `p-search-query-tool'."
+  (pcase p-search-query-tool
+    ('grep (seq-map #'p-search-query-grep--command (p-search-query-grep--term-regexp string))) ;; TODO
+    ('rg (seq-map #'p-search-query-rg--command (p-search-query-rg--term-regexp string)))
+    ('ag (seq-map #'p-search-query-ag--command (p-search-query-ag--term-regexp string)))
+    (_ (error "Unsupported tool `%s'" p-search-query-tool))))
+
+(defun p-search-query-dispatch (string finalize-func)
+  "Run query STRING.  Call FINALIZE-FUNC on obtained results."
+  (let* ((commands (p-search-query-commands string))
          (file-counts (make-hash-table :test #'equal))
          (proc-complete-ct 0))
     (dolist (cmd commands)
-      (let* ((buf (generate-new-buffer (format "*p-search rg*")))) ;; TODO - better name
+      (let* ((buf (generate-new-buffer (format "*p-search %s*" p-search-query-tool)))) ;; TODO - better name
         (make-process
          :name "p-search-text-search"
          :buffer buf
@@ -63,12 +116,14 @@ A term regex is noted for marking boundary characters."
              (with-current-buffer (process-buffer proc)
                (let* ((files (string-split (buffer-string) "\n")))
                  (dolist (f files)
+                   (when (string-prefix-p "./" f)
+                     (setq f (substring f 2)))
                    (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
                      (let* ((fname (match-string 1 f))
                             (count (string-to-number (match-string 2 f))))
                        (puthash (file-name-concat default-directory fname) count file-counts))))
                  (cl-incf proc-complete-ct)
-                 (when (= proc-complete-ct (length terms))
+                 (when (= proc-complete-ct (length commands))
                    (funcall finalize-func file-counts)))))))))))
 
 (defun p-search-query-and (results)
@@ -175,7 +230,7 @@ resulting data hashmap."
            (when (= i (length elts))
              (funcall finalize-func results)))))))
     ((cl-type string)
-     (p-search-query-rg query finalize-func))
+     (p-search-query-dispatch query finalize-func))
     (`(and . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
@@ -478,7 +533,7 @@ variables `p-search-query-parse--tokens' and
          (pcase (p-search-query-parse--at-token)
            (`(TERM ,term)
             (push term terms))
-           (token (error "unexpected token %s" token)))
+           (token (error "Unexpected token %s" token)))
          (p-search-query-parse--next-token))
        (setq terms (nreverse terms))
        (p-search-query-parse--postfix terms)))
@@ -541,7 +596,10 @@ total number of files being considered and TOTAL-SIZE is the sum
 of the size (in bytes) of all N files.
 
 When all processes finish and results are combined, P-CALLBACK is
-called with one argument, the hashmap of files to probabilities."
+called with one argument, the hashmap of files to probabilities.
+
+Callers of this function should bind `p-search-query-tool' to
+determine which tool is used to search."
   (let* ((ast (p-search-query-parse query-string)))
     (p-search-query-run ast
                         (lambda (res)
@@ -550,4 +608,5 @@ called with one argument, the hashmap of files to probabilities."
                             (funcall p-callback probs))))))
 
 (provide 'p-search-query)
+
 ;;; p-search-query.el ends here

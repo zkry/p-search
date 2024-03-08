@@ -532,7 +532,7 @@ default inputs, with the args being set to nil."
          (query (alist-get 'query args))
          (algorithm (alist-get 'algorithm args))
          (tool (alist-get 'tool args)))
-    (when (not (eq tool 'rg))
+    (when (not (member tool '(ag rg grep)))
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
@@ -540,9 +540,10 @@ default inputs, with the args being set to nil."
            (total-size 0))
       (dolist (file all-files)
         (cl-incf total-size (nth 7 (file-attributes file))))
-      (p-search-query query (length all-files) total-size
-                      (lambda (p-ht)
-                        (setf (p-search-prior-results prior) p-ht))))))
+      (let ((p-search-query-tool tool))
+        (p-search-query query (length all-files) total-size
+                        (lambda (p-ht)
+                          (setf (p-search-prior-results prior) p-ht)))))))
 
 (defun p-search--text-search-hint (prior buffer)
   "Mark places where the query args of PRIOR matches text in BUFFER."
