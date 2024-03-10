@@ -107,6 +107,7 @@ default inputs, with the args being set to nil."
    :search-space-function #'p-search-prior-base--multi-filesystem-search-space))
 
 (defun p-search-prior-base--multi-filesystem-search-space (args)
+  "Return search space of the multi-filesystem base prior with prior's ARGS.."
   (let-alist args
     (let* ((files '()))
       (dolist (default-directory .base-directories)
@@ -129,7 +130,7 @@ default inputs, with the args being set to nil."
   "Return list of base directories of the base prior."
   (let* ((args (p-search-prior-arguments p-search-base-prior)))
     (or (alist-get 'base-directories args)
-        (alist-get 'base-directory args)
+        (list (alist-get 'base-directory args))
         (error "Filesystem directory not supported"))))
 
 (defconst p-search--subdirectory-prior-template
@@ -443,7 +444,8 @@ default inputs, with the args being set to nil."
 
 (defun p-search--git-mod-freq-prior-template-init (prior)
   "Initialization function of git-mod-freq-prior-template PRIOR."
-  (let* ((args (p-search-prior-arguments prior))
+  (let* ((base-dirs (p-search-prior-get-base-directories))
+         (args (p-search-prior-arguments prior))
          (search-space (p-search-generate-search-space))
          (n-commits (alist-get 'n-commits args))
          (branch (alist-get 'branch args))
@@ -454,12 +456,13 @@ default inputs, with the args being set to nil."
          (file-counts (make-hash-table :test #'equal))
          (N (length search-space)) ;; apply laplace smoothing
          (result-ht (p-search-prior-results prior)))
-    (dolist (commit commits)
-      (let* ((files (string-lines (shell-command-to-string (format "git show --pretty=format:\"\" --name-only %s" commit)) t)))
-        (cl-incf N (length files))
-        (dolist (file files)
-          ;; default of 1 for laplace smoothing
-          (puthash file (1+ (gethash file file-counts 1)) file-counts))))
+    (dolist (default-directory base-dirs)
+      (dolist (commit commits)
+        (let* ((files (string-lines (shell-command-to-string (format "git show --pretty=format:\"\" --name-only %s" commit)) t)))
+          (cl-incf N (length files))
+          (dolist (file files)
+            ;; default of 1 for laplace smoothing
+            (puthash file (1+ (gethash file file-counts 1)) file-counts)))))
     (maphash
      (lambda (file count)
        (let* ((p (/ (float count) N)))

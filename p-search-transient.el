@@ -544,6 +544,22 @@ Base priors are priors with a template that has a search-space-function."
          (p-search-default-inputs (p-search-read-current-specs)))
     (call-interactively #'p-search-create-prior-dispatch)))
 
+(defun p-search--single-git-directory ()
+  (let ((base-dir (alist-get 'base-directory (p-search-prior-arguments p-search-base-prior))))
+    (when base-dir
+      (let ((default-directory base-dir))
+        (= (call-process "git" nil nil nil "status") 0)))))
+
+(defun p-search--multi-git-directory ()
+  "Return non-nil of base-prior has directories that are git repositories"
+  (catch 'done
+    (let* ((base-dirs (p-search-prior-get-base-directories)))
+
+      (dolist (default-directory base-dirs)
+        (unless (= (call-process "git" nil nil nil "status") 0)
+          (throw 'done nil)))
+      t)))
+
 (transient-define-prefix p-search-add-prior-dispatch ()
   "Dispatch an add-prior command."
   [["File System"
@@ -571,19 +587,23 @@ Base priors are priors with a template that has a search-space-function."
     ("g a" "author"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--git-author-prior-template))) ;; git -> read authors -> input
+       (p-search-dispatch-prior-creation p-search--git-author-prior-template))
+     :if p-search--multi-git-directory) ;; git -> read authors -> input
     ("g b" "branch"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--git-branch-prior-template))) ;; git -> read branches -> input
+       (p-search-dispatch-prior-creation p-search--git-branch-prior-template))
+     :if p-search--single-git-directory) ;; git -> read branches -> input
     ("g c" "file co-changes"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--git-co-changes-prior-template))) ;;; read file -> input
+       (p-search-dispatch-prior-creation p-search--git-co-changes-prior-template))
+     :if p-search--single-git-directory) ;;; read file -> input
     ("g m" "modification frequency"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template)))]]
+       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template))
+     :if p-search--multi-git-directory)]]
   [["Emacs"
     ("e b" "open buffer"
      (lambda ()
@@ -593,12 +613,7 @@ Base priors are priors with a template that has a search-space-function."
     ("t q" "text query"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]
-   ["Source (Regexp) "
-    ("r t" "regexp text match"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--textsearch-prior-template)))]])
+       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]])
 
 (provide 'p-search)
 
