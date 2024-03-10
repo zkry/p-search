@@ -560,7 +560,7 @@ Base priors are priors with a template that has a search-space-function."
           (throw 'done nil)))
       t)))
 
-(transient-define-prefix p-search-add-prior-dispatch ()
+(transient-define-prefix p-search-add-prior-dispatch--file-system ()
   "Dispatch an add-prior command."
   [["File System"
     ("f d" "directory"
@@ -610,6 +610,27 @@ Base priors are priors with a template that has a search-space-function."
        (interactive)
        (p-search-dispatch-prior-creation p-search--emacs-open-buffer-template)))]
    ["Text Query"
+    ("t q" "text query"
+     (lambda ()
+       (interactive)
+       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]])
+
+(transient-define-prefix p-search-add-prior-dispatch--buffers ()
+  "Dispatch an add-prior command."
+  [["Buffer"
+    ("b n" "buffer name"
+     (lambda ()
+       (interactive)
+       (error "not implemented")))
+    ("b m" "buffer major mode"
+     (lambda ()
+       (interactive)
+       (error "not implemented")))
+    ("b i" "buffer minor mode"
+     (lambda ()
+       (interactive)
+       (error "not implemented")))]]
+  [["Text Query"
     ("t q" "text query"
      (lambda ()
        (interactive)

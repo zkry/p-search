@@ -45,6 +45,31 @@ default inputs, with the args being set to nil."
                    res))))
     (nreverse res)))
 
+(defconst p-search-prior-base--buffers
+  (p-search-prior-template-create
+   :name "BUFFERS"
+   :input-spec '()
+   :options-spec '((major-mode . (string
+                                  :key "-m"
+                                  :description "Buffer major mode")))
+   :search-space-function
+   (lambda (args)
+     (let-alist args
+       (let* ((buffers (buffer-list))
+              (major-mode-sym (intern .major-mode)))
+         (when .major-mode
+           (setq buffers
+                 (seq-filter
+                  (lambda (buf)
+                    (with-current-buffer buf
+                      (eql major-mode-sym major-mode)))
+                  buffers)))
+         (seq-map
+          (lambda (buf)
+            (list 'buffer buf))
+          buffers))))
+   :add-prior-function #'p-search-add-prior-dispatch--buffers))
+
 (defconst p-search-prior-base--filesystem
   (p-search-prior-template-create
    :name "FILESYSTEM"
@@ -83,7 +108,8 @@ default inputs, with the args being set to nil."
                (throw 'skip nil))
              (setq file (file-name-concat default-directory file))
              (push file files)))
-         (nreverse files))))))
+         (nreverse files))))
+   :add-prior-function #'p-search-add-prior-dispatch--file-system))
 
 (defconst p-search-prior-base--multi-filesystem
   (p-search-prior-template-create
@@ -104,7 +130,8 @@ default inputs, with the args being set to nil."
                                       :key "-g"
                                       :description "Git Ignore"
                                       :default-value on)))
-   :search-space-function #'p-search-prior-base--multi-filesystem-search-space))
+   :search-space-function #'p-search-prior-base--multi-filesystem-search-space
+   :add-prior-function #'p-search-add-prior-dispatch--file-system))
 
 (defun p-search-prior-base--multi-filesystem-search-space (args)
   "Return search space of the multi-filesystem base prior with prior's ARGS.."

@@ -113,6 +113,39 @@
   "Face for highlighting in p-search mode with bold text and a box."
   :group 'p-search-faces)
 
+
+
+;;; Documents
+
+;; A document is an atomic unit of search.  In p-search, documents are
+;; identified with an S-expression which contains the data needed to
+;; retrieve the document's text.
+
+(defvar p-search-document-types
+  '((buffer . p-search-document--buffer-text)
+    (file . p-search-document--file-text)
+    (section . p-search-document--section-text)))
+
+(defun p-search-document--buffer-text (buffer-name)
+  (with-current-buffer buffer-name
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun p-search-document--file-text (file-name)
+  (with-temp-buffer
+    (insert-file-contents file-name)
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun p-search-document--section-text (child start end)
+  (substring (p-search-document-text child) start end))
+
+(defun p-search-document-text (document)
+  (let* ((sym (car document))
+         (dispatch-func (alist-get sym p-search-document-types)))
+    (unless dispatch-func
+      (error "Invalid document type %s" sym))
+    (apply dispatch-func (cdr document))))
+
+
 
 ;;; Priors
 
@@ -132,8 +165,9 @@
   (default-result nil :documentation "Result that should be returned if no file is specified.")
   (input-spec nil :documentation "Specification of inputs required for the function to function.")
   (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
-  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.")
-  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance."))
+  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.  This function existing determines if a prior is a \"base prior\".")
+  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance.")
+  (add-prior-function nil :documentation "Function for base priors that dispatches the add-prior transient."))
 
 (cl-defstruct (p-search-prior
                (:copier nil)
@@ -852,7 +886,9 @@ E.g., level 1 is everything folded except the top level."
 (defun p-search-add-prior ()
   "Command to add prior to current p-search session."
   (interactive)
-  (p-search-add-prior-dispatch))
+  (let* ((add-func (p-search-prior-template-add-prior-function
+                    (p-search-prior-template p-search-base-prior))))
+    (funcall add-func)))
 
 (defun p-search-kill-prior ()
   "Delete the prior under the point."
