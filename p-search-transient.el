@@ -621,20 +621,16 @@ Base priors are priors with a template that has a search-space-function."
     ("b n" "buffer name"
      (lambda ()
        (interactive)
-       (error "not implemented")))
+       (p-search-dispatch-prior-creation p-search--buffer-name-template)))
     ("b m" "buffer major mode"
      (lambda ()
        (interactive)
-       (error "not implemented")))
-    ("b i" "buffer minor mode"
-     (lambda ()
-       (interactive)
-       (error "not implemented")))]]
+       (p-search-dispatch-prior-creation p-search--buffer-major-mode)))]]
   [["Text Query"
     ("t q" "text query"
      (lambda ()
        (interactive)
-       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]])
+       (p-search-dispatch-prior-creation p-search--buffer-text-query-prior-template)))]])
 
 (provide 'p-search)
 

@@ -127,8 +127,10 @@
     (section . p-search-document--section-text)))
 
 (defun p-search-document--buffer-text (buffer-name)
-  (with-current-buffer buffer-name
-    (buffer-substring-no-properties (point-min) (point-max))))
+  (if (buffer-live-p buffer-name)
+    (with-current-buffer buffer-name
+      (buffer-substring-no-properties (point-min) (point-max)))
+    "<killed buffer>"))
 
 (defun p-search-document--file-text (file-name)
   (with-temp-buffer
@@ -144,6 +146,28 @@
     (unless dispatch-func
       (error "Invalid document type %s" sym))
     (apply dispatch-func (cdr document))))
+
+(defun p-search-document-size (document)
+  (pcase document
+    (`(section ,_ ,start ,end) ;; TODO should this be here?
+     (- end start))
+    (`(buffer ,buffer)
+     (buffer-size buffer))
+    (`(file ,file-name)
+     (nth 7 (file-attributes file)))
+    (_
+     (length (p-search-document-text document)))))
+
+(defun p-search-document-title (document)
+  (pcase document
+    (`(section ,child ,start ,end) ;; TODO should this be here?
+     (let ((child-title (p-search-document-title child)))
+       (format "%s[%d,%d]" child-title start end)))
+    (`(buffer ,buffer)
+     (buffer-name buffer))
+    (`(file ,file-name)
+     file-name)
+    (_ (format "%s" document))))
 
 
 
@@ -339,7 +363,7 @@ Elements are of the type (FILE PROB).")
          (dependent-priors p-search-priors)
          (marginal-p 0.0)
          (res (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
-                                           (string> (car a) (car b))
+                                           (string> (format "%s" (car a)) (format "%s" (car b)))
                                          (> (cadr a) (cadr b))))
                          (length files)))
          (start-time (current-time)))
@@ -478,8 +502,8 @@ Elements are of the type (FILE PROB).")
                                 `((include-directories . ,(and project-root (list project-root))))))))
     (setq p-search-priors nil)
     (setq p-search-base-prior (p-search-prior-create
-                               :template p-search-prior-base--filesystem
-                               :arguments (p-search-prior-default-arguments p-search-prior-base--filesystem)))))
+                               :template p-search-prior-base--buffers
+                               :arguments (p-search-prior-default-arguments p-search-prior-base--buffers)))))
 
 ;;;;;;;;;;;;;;;;;
 ;;; display ;;;;;
@@ -630,8 +654,8 @@ will be to display the results.")
      page-width
      (- page-width 12))))
 
-(defun p-search-result-window (file-name)
-  "Return the string of the contents of FILE-NAME to preview to user."
+(defun p-search-result-window (document)
+  "Return the string of the contents of DOCUMENT to preview to user."
   ;; TODO - apply major mode for faces
   ;; TODO - make sure this is customizable
   (let ((all-priors p-search-priors))
@@ -639,7 +663,7 @@ will be to display the results.")
       (let* ((line-nums '())
              (max-line 0)
              (has-matches t))
-        (insert-file-contents file-name)
+        (insert (p-search-document-text document))
         (funcall major-mode)
         (goto-char (point-min))
         (let* ((hints '()))
@@ -713,18 +737,19 @@ This function is expected to be called every so often in a p-search buffer."
                              'face 'p-search-section-heading))
                 (props . (p-search-results t))
                 (key . p-search-results-header))
-            (pcase-dolist (`(,name ,p) elts)
-              (let* ((heading-line-1
+            (pcase-dolist (`(,document ,p) elts)
+              (let* ((doc-name (p-search-document-title document))
+                     (heading-line-1
                       (concat (truncate-string-to-width
-                               (propertize (p-search-format-inputs name) 'face 'p-search-header-line-key) (- (cadr page-dims) 5))))
+                               (propertize (p-search-format-inputs doc-name) 'face 'p-search-header-line-key) (- (cadr page-dims) 5))))
                      (heading-line
                       (concat heading-line-1
                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
                               (format "%.10f" (/ p p-search-marginal)))))
                 (p-search-add-section `((heading . ,heading-line)
-                                        (props . (p-search-result ,name))
-                                        (key . ,name))
-                  (insert (p-search-result-window name))
+                                        (props . (p-search-result ,doc-name))
+                                        (key . ,doc-name))
+                  (insert (p-search-result-window document))
                   (insert "\n")))))
           (goto-char (point-min))
           (forward-line (1- start-line))

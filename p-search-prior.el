@@ -56,7 +56,7 @@ default inputs, with the args being set to nil."
    (lambda (args)
      (let-alist args
        (let* ((buffers (buffer-list))
-              (major-mode-sym (intern .major-mode)))
+              (major-mode-sym (and .major-mode (intern .major-mode))))
          (when .major-mode
            (setq buffers
                  (seq-filter
@@ -516,6 +516,109 @@ default inputs, with the args being set to nil."
     (dolist (file buffer-files)
       (puthash file 'yes result-ht))))
 
+;;; Buffers
+
+(defconst p-search--buffer-name-template
+  (p-search-prior-template-create
+   :name "buffer name"
+   :input-spec '((query . (string
+                           :key "q"
+                           :description "search query")))
+   :options-spec
+   '((regexp . (toggle
+                :key "-r"
+                :description "Regex"
+                :default-value nil)))
+   :initialize-function
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (query (alist-get 'query args))
+            (regexp-p (alist-get 'regexp args))
+            (all-docs (p-search-generate-search-space))
+            (result-ht (p-search-prior-results prior)))
+       (dolist (doc all-docs)
+         (pcase-let* ((`(buffer ,buf) doc)
+                      (name (buffer-name buffer))
+                      (matchp (if regexp-p
+                                  (string-match-p query name)
+                                (string-search query name))))
+           (if matchp
+               (puthash doc 'yes result-ht)
+             (puthash doc 'no result-ht))))))
+   :default-result 'no))
+
+(defun p-search--major-modes ()
+  "Return a list of symbols that are likely major mode commands."
+  (let ((modes '()))
+    (mapatoms (lambda (sym)
+                (when (and (fboundp sym)
+                           (string-suffix-p "-mode" (symbol-name sym)))
+                  (push sym modes))))
+    modes))
+
+(defconst p-search--buffer-major-mode
+  (p-search-prior-template-create
+   :name "buffer major mode"
+   :input-spec '((mode-symbol . (choice
+                                 :key "m"
+                                 :description "major mode"
+                                 :choices p-search--major-modes)))
+   :options-spec
+   '()
+   :initialize-function
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (mode-symbol (intern (alist-get 'mode-symbol args)))
+            (all-docs (p-search-generate-search-space))
+            (result-ht (p-search-prior-results prior)))
+       (dolist (doc all-docs)
+         (pcase-let* ((`(buffer ,buf) doc))
+           (when (buffer-live-p buf)
+             (with-current-buffer buf
+               (if (eq major-mode mode-symbol)
+                   (puthash doc 'yes result-ht)
+                 (puthash doc 'no result-ht))))))))
+   :default-result 'no))
+
+(defconst p-search--buffer-text-query-prior-template
+  (p-search-prior-template-create
+   :name "text query"
+   :input-spec '((query . (string
+                           :key "q"
+                           :description "search query")))
+   :options-spec
+   '((algorithm . (choice
+                   :key "-a"
+                   :description "search ranking algorithm"
+                   :default-value bm25
+                   :choices
+                   (bm25
+                    boolean
+                    tf-idf))))
+   :initialize-function #'p-search--buffer-text-query-template-init
+   :default-result 'no
+   :result-hint-function #'p-search--text-search-hint))
+
+(defun p-search--buffer-text-query-template-init (prior)
+  "Run text query for PRIOR."
+  (let* ((init-buffer (current-buffer))
+         (args (p-search-prior-arguments prior))
+         (query (alist-get 'query args))
+         (algorithm (alist-get 'algorithm args)))
+    (unless (eq algorithm 'bm25)
+      (error "Algorithm not implemented"))
+    (let* ((all-docs (p-search-generate-search-space))
+           (total-size 0))
+      (dolist (doc all-docs)
+        (let ((size (p-search-document-size doc)))
+          (unless size
+            (error "Invalid document %s" doc))
+          (cl-incf total-size size)))
+      (p-search-query query (length all-docs) total-size
+                      (lambda (p-ht)
+                        (setf (p-search-prior-results prior) p-ht)
+                        (with-current-buffer init-buffer
+                          (p-search--notify-main-thread)))))))
 
 ;;; Text search
 
@@ -526,11 +629,7 @@ default inputs, with the args being set to nil."
                            :key "q"
                            :description "search query")))
    :options-spec
-   '((subword . (toggle
-                 :key "-s"
-                 :description "break special casing to new queries"
-                 :default-value on))
-     (algorithm . (choice
+   '((algorithm . (choice
                    :key "-a"
                    :description "search ranking algorithm"
                    :default-value bm25
@@ -546,7 +645,7 @@ default inputs, with the args being set to nil."
                ag
                grep))))
    :initialize-function #'p-search--text-query-template-init
-   :default-result 0 ;; TODO: should actually be 'no
+   :default-result 'no
    :result-hint-function #'p-search--text-search-hint))
 
 (defun p-search--text-query-template-init (prior)
@@ -561,16 +660,16 @@ default inputs, with the args being set to nil."
       (error "Tool not implemented"))
     (unless (eq algorithm 'bm25)
       (error "Algorithm not implemented"))
-    (let* ((all-files (p-search-generate-search-space))
+    (let* ((all-docs (p-search-generate-search-space))
            (total-size 0))
-      (dolist (file all-files)
-        (let ((size (nth 7 (file-attributes file))))
+      (dolist (doc all-docs)
+        (let ((size (p-search-document-size doc)))
           (unless size
-            (error "Invalid file %s" file))
+            (error "Invalid file produced %s" file))
           (cl-incf total-size size)))
       (let ((p-search-query-tool tool)
             (p-seach-query-directories (p-search-prior-get-base-directories)))
-        (p-search-query query (length all-files) total-size
+        (p-search-query query (length all-docs) total-size
                         (lambda (p-ht)
                           (setf (p-search-prior-results prior) p-ht)
                           (with-current-buffer init-buffer

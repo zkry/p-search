@@ -8,6 +8,9 @@
 
 (require 'range)
 
+(declare-function p-search-document-size "p-search.el")
+(declare-function p-search-generate-search-space "p-search.el")
+(declare-function p-search-document-text "p-search.el")
 
 (defun p-search-query--escape (string meta-chars)
   "Insert escape \\ characters in STRING for all chars in META-CHARS."
@@ -295,6 +298,18 @@ resulting data hashmap."
            (p-search-query--metadata-add
             result :boost boost-amt))))))))
 
+(defun p-search-query-scan (query finalize-func)
+  "Scan entire search-space to find QUERY.  Call FINALIZE-FUNC on obtained results."
+  (let* ((docs (p-search-generate-search-space))
+         (results (make-hash-table :test #'equal)))
+    (dolist (doc docs)
+      (let* ((doc-text (p-search-document-text doc)))
+        (with-temp-buffer
+          (insert doc-text)
+          (let* ((intervals (p-search-query-mark query)))
+            (puthash doc (length intervals) results)))))
+    (funcall finalize-func (vector results))))
+
 (defun p-search-query-bm25* (result-ht N total-size)
   "Calculate the BM25 scores of RESULT-HT, a map of file name to counts.
 N is the total number of documents and TOTAL-SIZE is the sum of all files'
@@ -310,15 +325,12 @@ sizes."
                         1)))
            (avg-size (/ (float total-size) N)))
       (maphash
-       (lambda (file count)
-         (unless (nth 7 (file-attributes file))
-           (error "bad file %s" file))
-         (let* ((size (nth 7 (file-attributes file)))
+       (lambda (doc count)
+         (let* ((size (p-search-document-size doc))
                 (score (* idf (/ (* count (+ k1 1))
                                  (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
-           (puthash file score scores)))
+           (puthash doc score scores)))
        (p-search-query--metadata-elt result-ht)))
-    ;; TODO - consider boosts
     scores))
 
 (defun p-search-query-bm25 (results N total-size)
@@ -607,12 +619,14 @@ called with one argument, the hashmap of files to probabilities.
 
 Callers of this function should bind `p-search-query-tool' to
 determine which tool is used to search."
-  (let* ((ast (p-search-query-parse query-string)))
-    (p-search-query-run ast
-                        (lambda (res)
-                          (let* ((scores (p-search-query-bm25 res N total-size ))
-                                 (probs (p-search-query-scores-to-p-linear scores)))
-                            (funcall p-callback probs))))))
+  (let* ((ast (p-search-query-parse query-string))
+         (cb (lambda (res)
+               (let* ((scores (p-search-query-bm25 res N total-size ))
+                      (probs (p-search-query-scores-to-p-linear scores)))
+                 (funcall p-callback probs)))))
+    (if p-search-query-tool
+        (p-search-query-run ast cb)
+      (p-search-query-scan ast cb))))
 
 (provide 'p-search-query)
 
