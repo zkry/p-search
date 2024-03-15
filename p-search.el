@@ -57,6 +57,8 @@
 ;;; Code:
 (require 'heap)
 (require 'cl-lib)
+(require 'p-search-transient)
+(require 'p-search-prior)
 
 ;;; Options
 
@@ -173,6 +175,19 @@
 
 ;;; Priors
 
+(defvar p-search-base-prior)
+
+(defvarr p-search-available-base-prior-templates
+  (list p-search-prior-base--buffers
+        p-search-prior-base--filesystem
+        p-search-prior-base--multi-filesystem)
+  "Alist of available priors to use as a base.")
+
+(defvar p-search-default-base-prior-template
+  p-search-prior-base--filesystem
+  "Prior template to use for initial base.")
+
+
 (defconst p-search-importance-levls
   '(low medium high critical))
 
@@ -204,6 +219,10 @@ providing information to a search.in "
   (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
   (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
   (default-result nil :documentation "Override of the tempate's default result."))
+
+(defun p-search-base-prior-p (prior)
+  "Return non-nil if PRIOR is a base prior."
+  (p-search-prior-template-search-space-function (p-search-prior-template prior)))
 
 (defun p-search-expand-files (base-priors)
   "Return the list of files that should be considerd according to BASE-PRIORS."
@@ -491,19 +510,13 @@ Elements are of the type (FILE PROB).")
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; prior initialization ;;;;
 
-(defun p-search-setup-priors ()
+(defun p-search-setup-priors (&optional prior-template)
   "Set up the buffers pre-existing priors."
-  (let* ((proj (project-current))
-         (project-root (and proj (expand-file-name (project-root (project-current))))) ;; TODO - make this an opt
-         (initial-priors (list (p-search-prior-create
-                                :template p-search--subdirectory-prior-template
-                                :importance 'critical
-                                :arguments
-                                `((include-directories . ,(and project-root (list project-root))))))))
-    (setq p-search-priors nil)
+  (setq p-search-priors nil)
+  (let ((template (or prior-template p-search-default-base-prior-template)))
     (setq p-search-base-prior (p-search-prior-create
-                               :template p-search-prior-base--buffers
-                               :arguments (p-search-prior-default-arguments p-search-prior-base--buffers)))))
+                               :template template
+                               :arguments (p-search-prior-default-arguments template)))))
 
 ;;;;;;;;;;;;;;;;;
 ;;; display ;;;;;
@@ -915,13 +928,27 @@ E.g., level 1 is everything folded except the top level."
                     (p-search-prior-template p-search-base-prior))))
     (funcall add-func)))
 
+(defun p-search-swap-base-prior ()
+  "Change the base prior to a new type."
+  (interactive)
+  (let* ((choices (seq-map
+                   (lambda (prior-template)
+                     (cons (p-search-prior-template-name prior-template)
+                           prior-template))
+                   p-search-available-base-prior-templates))
+         (selected-base-prior (completing-read "Base: " choices nil t))
+         (template (alist-get selected-base-prior choices nil nil #'equal)))
+    (p-search-setup-priors template)))
+
 (defun p-search-kill-prior ()
   "Delete the prior under the point."
   (interactive)
   (let* ((prior (p-search--prior-at-point)))
-    (setq p-search-priors (remove prior p-search-priors))
-    (p-search-refresh-buffer)
-    (p-search--notify-main-thread)))
+    (if (p-search-base-prior-p prior)
+        (p-search-swap-base-prior)
+      (setq p-search-priors (remove prior p-search-priors)))
+    (p-search--notify-main-thread)
+    (p-search-refresh-buffer)))
 
 (defun p-search-reinstantiate-prior ()
   "Re-run the prior under the point.

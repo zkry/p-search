@@ -12,8 +12,6 @@
 (require 'subr-x)
 (require 'eieio)
 
-(defvar p-search-base-prior)
-
 (declare-function p-search-prior-arguments "p-search.el")
 (declare-function p-search-prior-results "p-search.el")
 (declare-function p-search-generate-search-space "p-search.el")
@@ -89,31 +87,33 @@ default inputs, with the args being set to nil."
                                       :key "-g"
                                       :description "Git Ignore"
                                       :default-value on)))
-   :search-space-function
-   (lambda (args)
-     (let-alist args
-       (let* ((default-directory .base-directory)
-              (file-candidates (if .use-git-ignore
-                                   (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
-                                 (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
-              (files '()))
-         (dolist (file file-candidates)
-           (catch 'skip
-             (when (string-prefix-p "./" file)
-               (setq file (substring file 2)))
-             (unless (or (equal .filename-regexp ".*")
-                         (string-match-p .filename-regexp file))
-               (throw 'skip nil))
-             (when (and .ignore (string-match-p .ignore file))
-               (throw 'skip nil))
-             (setq file (file-name-concat default-directory file))
-             (push file files)))
-         (nreverse files))))
+   :search-space-function #'p-search-prior-base--multi-filesystem-search-space
    :add-prior-function #'p-search-add-prior-dispatch--file-system))
+
+(defun p-search-prior-base--multi-filesystem-search-space (args)
+  "Generate search-space for filesystem base prior using ARGS."
+  (let-alist args
+    (let* ((default-directory .base-directory)
+           (file-candidates (if .use-git-ignore
+                                (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
+                              (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
+           (files '()))
+      (dolist (file file-candidates)
+        (catch 'skip
+          (when (string-prefix-p "./" file)
+            (setq file (substring file 2)))
+          (unless (or (equal .filename-regexp ".*")
+                      (string-match-p .filename-regexp file))
+            (throw 'skip nil))
+          (when (and .ignore (string-match-p .ignore file))
+            (throw 'skip nil))
+          (setq file (file-name-concat default-directory file))
+          (push `(file ,file) files)))
+      (nreverse files))))
 
 (defconst p-search-prior-base--multi-filesystem
   (p-search-prior-template-create
-   :name "MULTI-FILESYSTEM"
+   :name "FILESYSTEM-MULTIDIR"
    :input-spec '((base-directories . (directory-names
                                       :key "d"
                                       :description "Directories"
@@ -150,7 +150,7 @@ default inputs, with the args being set to nil."
             (when (and .ignore (string-match-p .ignore file))
               (throw 'skip nil))
             (setq file (file-name-concat default-directory file))
-            (push file files))))
+            (push `(file ,file) files))))
       (nreverse files))))
 
 (defun p-search-prior-get-base-directories ()
