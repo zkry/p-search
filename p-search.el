@@ -177,7 +177,7 @@
 
 (defvar p-search-base-prior)
 
-(defvarr p-search-available-base-prior-templates
+(defconst p-search-available-base-prior-templates
   (list p-search-prior-base--buffers
         p-search-prior-base--filesystem
         p-search-prior-base--multi-filesystem)
@@ -374,6 +374,12 @@ elements to search over.")
   "Heap of calculated posterior probabilities.
 Elements are of the type (FILE PROB).")
 
+(defun p-search--create-heap (&optional size)
+  (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
+                               (string> (format "%s" (car a)) (format "%s" (car b)))
+                             (> (cadr a) (cadr b))))
+             size))
+
 (defun p-search--calculate-probs ()
   "For all current priors, calculate element probabilities."
   (message "--- p-search--calculate-probs")
@@ -381,10 +387,7 @@ Elements are of the type (FILE PROB).")
          (files (p-search-generate-search-space))
          (dependent-priors p-search-priors)
          (marginal-p 0.0)
-         (res (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
-                                           (string> (format "%s" (car a)) (format "%s" (car b)))
-                                         (> (cadr a) (cadr b))))
-                         (length files)))
+         (res (p-search--create-heap (length files)))
          (start-time (current-time)))
     (setq p-search-posterior-probs res)
     (dolist (file files)
@@ -411,6 +414,17 @@ Elements are of the type (FILE PROB).")
     (setq p-search-marginal marginal-p)
     (message "--- p-search--calculate-probs done")
     res))
+
+(defun p-search-list-all-docs ()
+  "Return list of all docs contained in `p-search-posterior-probs' in order of probability."
+  (let ((elts '())
+        (copy (p-search--create-heap (heap-size p-search-posterior-probs))))
+    (while (not (heap-empty p-search-posterior-probs))
+      (let* ((elt (heap-delete-root p-search-posterior-probs)))
+        (push elt elts)
+        (heap-add copy elt)))
+    (setq p-search-posterior-probs copy)
+    elts))
 
 
 ;;; Posteriors
@@ -1039,6 +1053,11 @@ This is useful if the underlying data that the prior uses changes."
     (unless file-name
       (user-error "No file found at point"))
     (display-buffer (find-file-noselect file-name))))
+
+(defun p-search-minibuffer-results ()
+  "Display current results in minibuffer to select."
+  (interactive)
+  (let* ((all-documens (p-search-list-all-docs)))))
 
 (defun p-search ()
   "Start a p-search session."

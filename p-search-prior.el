@@ -43,6 +43,10 @@ default inputs, with the args being set to nil."
                    res))))
     (nreverse res)))
 
+(defun p-search-prior--git-available-p () ;; TODO - move this to common place
+  "Return non-nil if git is available from default directory."
+  (= (call-process "git" nil nil nil "status") 0))
+
 (defconst p-search-prior-base--buffers
   (p-search-prior-template-create
    :name "BUFFERS"
@@ -79,14 +83,14 @@ default inputs, with the args being set to nil."
                                      :key "f"
                                      :description "Filename Pattern"
                                      :default ".*")))
-   :options-spec '((ignore . (regexp
+   :options-spec '((ignore-pattern . (regexp
                               :key "-i"
                               :description "Ignore Patterns"
                               :multiple t))  ;; TODO - implement multiple
                    (use-git-ignore . (toggle
                                       :key "-g"
                                       :description "Git Ignore"
-                                      :default-value on)))
+                                      :default on)))
    :search-space-function #'p-search-prior-base--multi-filesystem-search-space
    :add-prior-function #'p-search-add-prior-dispatch--file-system))
 
@@ -94,22 +98,26 @@ default inputs, with the args being set to nil."
   "Generate search-space for filesystem base prior using ARGS."
   (let-alist args
     (let* ((default-directory .base-directory)
-           (file-candidates (if .use-git-ignore
-                                (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
-                              (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
-           (files '()))
-      (dolist (file file-candidates)
-        (catch 'skip
-          (when (string-prefix-p "./" file)
-            (setq file (substring file 2)))
-          (unless (or (equal .filename-regexp ".*")
-                      (string-match-p .filename-regexp file))
-            (throw 'skip nil))
-          (when (and .ignore (string-match-p .ignore file))
-            (throw 'skip nil))
-          (setq file (file-name-concat default-directory file))
-          (push `(file ,file) files)))
-      (nreverse files))))
+           (git-available-p (p-search-prior--git-available-p)))
+      (when (and .use-git-ignore (not git-available-p))
+        (message "Cannot use git ignore for directory %s.  Falling back on all files." default-directory))
+      (let* ((default-directory .base-directory)
+             (file-candidates (if (and .use-git-ignore git-available-p)
+                                  (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
+                                (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
+             (files '()))
+        (dolist (file file-candidates)
+          (catch 'skip
+            (when (string-prefix-p "./" file)
+              (setq file (substring file 2)))
+            (unless (or (equal .filename-regexp ".*")
+                        (string-match-p .filename-regexp file))
+              (throw 'skip nil))
+            (when (and .ignore-pattern (string-match-p .ignore-pattern file))
+              (throw 'skip nil))
+            (setq file (file-name-concat default-directory file))
+            (push `(file ,file) files)))
+        (nreverse files)))))
 
 (defconst p-search-prior-base--multi-filesystem
   (p-search-prior-template-create
@@ -122,10 +130,10 @@ default inputs, with the args being set to nil."
                                      :key "f"
                                      :description "Filename Pattern"
                                      :default ".*")))
-   :options-spec '((ignore . (regexp
-                              :key "-i"
-                              :description "Ignore Patterns"
-                              :multiple t))  ;; TODO - implement multiple
+   :options-spec '((ignore-pattern . (regexp
+                                       :key "-i"
+                                       :description "Ignore Patterns"
+                                       :multiple t))  ;; TODO - implement multiple
                    (use-git-ignore . (toggle
                                       :key "-g"
                                       :description "Git Ignore"
@@ -147,7 +155,7 @@ default inputs, with the args being set to nil."
             (unless (or (equal .filename-regexp ".*")
                         (string-match-p .filename-regexp file))
               (throw 'skip nil))
-            (when (and .ignore (string-match-p .ignore file))
+            (when (and .ignore-pattern (string-match-p .ignore-pattern file))
               (throw 'skip nil))
             (setq file (file-name-concat default-directory file))
             (push `(file ,file) files))))
