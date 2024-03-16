@@ -156,7 +156,7 @@
     (`(buffer ,buffer)
      (buffer-size buffer))
     (`(file ,file-name)
-     (nth 7 (file-attributes file)))
+     (nth 7 (file-attributes file-name)))
     (_
      (length (p-search-document-text document)))))
 
