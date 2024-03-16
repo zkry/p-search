@@ -423,7 +423,8 @@ sizes of all the documents."
   ;; TODO - better algorithm...
   (let* ((max-score 0)
          (min-score most-positive-fixnum)
-         (zero-score 0.4)
+         (zero-prob 0.4)
+         (max-prob 0.7)
          (results (make-hash-table :test #'equal)))
     (maphash
      (lambda (_doc score)
@@ -434,8 +435,14 @@ sizes of all the documents."
      scores)
     (maphash
      (lambda (doc score)
-       (puthash doc (+ (* (/ (- 1.0 zero-score) (- max-score min-score)) score) zero-score) results))
+       (if (= max-score min-score)
+           (puthash doc max-prob results)
+         (puthash doc (+ zero-prob
+                         (* (/ (- score min-score) (- max-score min-score))
+                            (- max-prob 0.5)))
+                  results)))
      scores)
+    (puthash :default zero-prob results)
     results))
 
 

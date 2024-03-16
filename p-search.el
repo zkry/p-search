@@ -395,7 +395,9 @@ Elements are of the type (FILE PROB).")
         (dolist (p dependent-priors)
           (let* ((prior-results (p-search-prior-results p))
                  (prior-template (p-search-prior-template p))
-                 (default-result (or (p-search-prior-default-result p) (p-search-prior-template-default-result prior-template)))
+                 (default-result (or (gethash :default prior-results)
+                                     (p-search-prior-default-result p)
+                                     (p-search-prior-template-default-result prior-template)))
                  (prior-importance (alist-get 'importance  (p-search-prior-arguments p) 'medium)) ;; TODO - Default?
                  (complement (alist-get 'complement  (p-search-prior-arguments p)))
                  (file-result (gethash file prior-results (or default-result 'neutral))) ;; TODO indecies?
@@ -791,7 +793,8 @@ This function is expected to be called every so often in a p-search buffer."
 
 (defun p-search--notify-main-thread ()
   "Notify that a calculation needs to be made."
-  (p-search--calculate-probs))
+  (p-search--calculate-probs)
+  (p-search-display-function))
 
 (defun p-search-main-thread ()
   "Initial function of the calculation thread."
