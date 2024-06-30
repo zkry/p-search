@@ -91,10 +91,10 @@ default inputs, with the args being set to nil."
                                       :key "-g"
                                       :description "Git Ignore"
                                       :default on)))
-   :search-space-function #'p-search-prior-base--multi-filesystem-search-space
+   :search-space-function #'p-search-prior-base--filesystem-search-space
    :add-prior-function #'p-search-add-prior-dispatch--file-system))
 
-(defun p-search-prior-base--multi-filesystem-search-space (args)
+(defun p-search-prior-base--filesystem-search-space (args)
   "Generate search-space for filesystem base prior using ARGS."
   (let-alist args
     (let* ((default-directory .base-directory)

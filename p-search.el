@@ -57,6 +57,33 @@
 ;;; Code:
 (require 'heap)
 (require 'cl-lib)
+
+(cl-defstruct (p-search-prior-template
+               (:copier nil)
+               (:constructor p-search-prior-template-create))
+  "Structure representing a class of priors."
+  (name nil :documentation "Name of prior, to be identified by the user")
+  (initialize-function nil :documentation "Function to populate prior results.  Called with three arguments: prior, base-priors, and args.")
+  (base-prior-key nil :documentation "Argument name that, when given a critical importance, is used to determine the base file listing, as well as given to other priors to optimize their performance.") ;; deprecated
+  (default-result nil :documentation "Result that should be returned if no file is specified.")
+  (input-spec nil :documentation "Specification of inputs required for the function to function.")
+  (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
+  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.  This function existing determines if a prior is a \"base prior\".")
+  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance.")
+  (add-prior-function nil :documentation "Function for base priors that dispatches the add-prior transient."))
+
+(cl-defstruct (p-search-prior
+               (:copier nil)
+               (:constructor p-search-prior-create))
+  "An instantiated prior created from a template which is actively
+providing information to a search.in "
+  (template nil :type p-search-prior-template)
+  (importance nil :documentation "How much the prior should influence results.") ;; TODO - identiy where values come from
+  (results nil :documentation "hash table containing the result.  Maps from file name to result indicator.")
+  (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
+  (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
+  (default-result nil :documentation "Override of the tempate's default result."))
+
 (require 'p-search-transient)
 (require 'p-search-prior)
 
@@ -194,31 +221,8 @@
 (defvar p-search-prior-templates nil
   "List of avalable prior templates.")
 
-(cl-defstruct (p-search-prior-template
-               (:copier nil)
-               (:constructor p-search-prior-template-create))
-  "Structure representing a class of priors."
-  (name nil :documentation "Name of prior, to be identified by the user")
-  (initialize-function nil :documentation "Function to populate prior results.  Called with three arguments: prior, base-priors, and args.")
-  (base-prior-key nil :documentation "Argument name that, when given a critical importance, is used to determine the base file listing, as well as given to other priors to optimize their performance.") ;; deprecated
-  (default-result nil :documentation "Result that should be returned if no file is specified.")
-  (input-spec nil :documentation "Specification of inputs required for the function to function.")
-  (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
-  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.  This function existing determines if a prior is a \"base prior\".")
-  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance.")
-  (add-prior-function nil :documentation "Function for base priors that dispatches the add-prior transient."))
-
-(cl-defstruct (p-search-prior
-               (:copier nil)
-               (:constructor p-search-prior-create))
-  "An instantiated prior created from a template which is actively
-providing information to a search.in "
-  (template nil :type p-search-prior-template)
-  (importance nil :documentation "How much the prior should influence results.") ;; TODO - identiy where values come from
-  (results nil :documentation "hash table containing the result.  Maps from file name to result indicator.")
-  (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
-  (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
-  (default-result nil :documentation "Override of the tempate's default result."))
+(let ((prior (p-search-prior-create)))
+  (setf (p-search-prior-results prior) 100))
 
 (defun p-search-base-prior-p (prior)
   "Return non-nil if PRIOR is a base prior."
@@ -422,10 +426,11 @@ Elements are of the type (FILE PROB).")
   (let ((elts '())
         (copy (p-search--create-heap (heap-size p-search-posterior-probs))))
     (while (not (heap-empty p-search-posterior-probs))
-      (let* ((elt (heap-delete-root p-search-posterior-probs)))
-        (push elt elts)
-        (heap-add copy elt)))
+      (pcase-let* ((`(,doc ,p) (heap-delete-root p-search-posterior-probs)))
+        (push (list doc (/ p p-search-marginal)) elts)
+        (heap-add copy (list doc p))))
     (setq p-search-posterior-probs copy)
+    (setq elts (nreverse elts))
     elts))
 
 
@@ -1060,7 +1065,27 @@ This is useful if the underlying data that the prior uses changes."
 (defun p-search-minibuffer-results ()
   "Display current results in minibuffer to select."
   (interactive)
-  (let* ((all-documens (p-search-list-all-docs)))))
+  (let* ((all-documents (p-search-list-all-docs))
+         (selections (seq-map (pcase-lambda (`(,doc ,p))
+                                (cons (p-search-document-title doc)
+                                      (list doc p)))
+                              all-documents))
+         (max-selection (seq-max (seq-map (lambda (sel) (length (car sel))) selections)))
+         (completion-extra-properties
+          (list :annotation-function
+                (lambda (selection)
+                  (format "%s%f"
+                          (make-string (- (+ 2 max-selection)
+                                          (length selection))
+                                       ?\s)
+                          (cadr (alist-get selection selections nil nil #'equal))))))
+         (selection (completing-read "Find search result: "
+                                     (lambda (string pred action)
+                                       (if (eq action 'metadata)
+                                           `(metadata (display-sort-function . ,#'identity))
+                                         (complete-with-action action selections string pred)))
+                                     nil
+                                     t)))))
 
 (defun p-search ()
   "Start a p-search session."
