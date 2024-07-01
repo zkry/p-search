@@ -28,20 +28,48 @@
 
 (defun p-search-query-rg-escape (string)
   "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
-  (p-search-query--escape string '(?\\ ?. ?+ ?* ?\? ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~)))
+  (p-search-query--escape string '(?\\ ?. ?+ ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~))) ;; ?* ?\?
 
 (defun p-search-query-ag-escape (string)
   "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
-  (p-search-query--escape string '(?\\ ?^ ?$ ?. ?\[ ?| ?\( ?\) ?* ?+ ?\? ?{)))
+  (p-search-query--escape string '(?\\ ?^ ?$ ?. ?\[ ?| ?\( ?\) ?+ ?{))) ;; ?* ?\?
 
 (defun p-search-query-grep-escape (string)
   "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
   (p-search-query--escape string '(?\\ ?.)))
 
+(defconst p-search-query-wildcards '((rg . "[^\w]")
+                                     (ag . "[^\s]")
+                                     (grep . "[^[:space:]]")))
+
+(defun p-search-query--replace-wildcards (string)
+  (let ((wildcard (or (alist-get p-search-query-tool p-search-query-wildcards)
+                      "[^[:blank:]]")))
+    (let ((pos 0)
+          (new-string ""))
+      ;; Replace * with wildcard*
+      (while-let ((match (string-search "*" string pos)))
+        (when (or (zerop match) (not (eql (aref string (1- match)) ?\\)))
+          (setq new-string (concat new-string
+                                   (substring string pos match)
+                                   wildcard "*")))
+        (setq pos (1+ match)))
+      ;; replace ? with wildcard
+      (let ((string (concat new-string (substring string pos)))
+            (pos 0)
+            (new-string ""))
+        (while-let ((match (string-search "?" string pos)))
+          (when (or (zerop match) (not (eql (aref string (1- match)) ?\\)))
+            (setq new-string (concat new-string
+                                     (substring string pos match)
+                                     wildcard)))
+          (setq pos (1+ match)))
+        (concat new-string (substring string pos))))))
+
 (defun p-search-query-grep--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query-grep-escape string)))
+  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-grep-escape string))))
     (list (list (concat "\\<" escaped-string "\\>") :case-insensitive t)
           (concat "\\B"
                   (capitalize (substring escaped-string 0 1))
@@ -50,7 +78,7 @@ A term regex is noted for marking boundary characters."
 (defun p-search-query-rg--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query-rg-escape string)))
+  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-rg-escape string))))
     (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
           (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
                   (capitalize (substring escaped-string 0 1))
@@ -59,7 +87,7 @@ A term regex is noted for marking boundary characters."
 (defun p-search-query-ag--term-regexp (string)
   "Create a term regular expression from STRING for ag tool.
 A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query-ag-escape string)))
+  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-ag-escape string))))
     (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
           (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
                   (capitalize (substring escaped-string 0 1))
@@ -68,7 +96,7 @@ A term regex is noted for marking boundary characters."
 (defun p-search-query-emacs--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (list (list (concat "\\<" string "\\>") :case-insensitive t)
+  (list (list (p-search-query--replace-wildcards (concat "\\<" string "\\>")) :case-insensitive t)
         (concat (capitalize (substring string 0 1))
                 (substring string 1))))
 
