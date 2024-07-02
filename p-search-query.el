@@ -70,7 +70,7 @@
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
   (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-grep-escape string))))
-    (list (list (concat "\\<" escaped-string "\\>") :case-insensitive t)
+    (list (list (concat "\\(\\<\\|_\\)" escaped-string "\\(\\>\\|_\\)") :case-insensitive t)
           (concat "\\B"
                   (capitalize (substring escaped-string 0 1))
                   (substring escaped-string 1)))))
@@ -79,7 +79,7 @@ A term regex is noted for marking boundary characters."
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
   (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-rg-escape string))))
-    (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
+    (list (list (concat "(\\b|_)" escaped-string "(\\b|_)") :case-insensitive t)
           (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
                   (capitalize (substring escaped-string 0 1))
                   (substring escaped-string 1))))) ;; TODO - will these double-count camel case?
@@ -88,7 +88,7 @@ A term regex is noted for marking boundary characters."
   "Create a term regular expression from STRING for ag tool.
 A term regex is noted for marking boundary characters."
   (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-ag-escape string))))
-    (list (list (concat "\\b" escaped-string "\\b") :case-insensitive t)
+    (list (list (concat "(\\b|_)" escaped-string "(\\b|_)") :case-insensitive t)
           (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
                   (capitalize (substring escaped-string 0 1))
                   (substring escaped-string 1)))))
