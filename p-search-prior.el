@@ -203,7 +203,7 @@ default inputs, with the args being set to nil."
             (fn-pattern (alist-get 'include-filename args))
             (result-ht (p-search-prior-results prior))) ;; normally should do async or lazily
        (dolist (file files)
-         (puthash file (if (string-match-p fn-pattern file) 'yes 'no) result-ht)))
+         (puthash file (if (string-match-p fn-pattern (p-search-document-titl file)) 'yes 'no) result-ht)))
      (p-search--notify-main-thread))))
 
 
@@ -218,10 +218,10 @@ default inputs, with the args being set to nil."
    (lambda (prior)
      (let* ((args (p-search-prior-arguments prior))
             (files (p-search-generate-search-space))
-            (ext-suffix (alist-get 'base-prior-args args))
+            (ext-suffix (alist-get 'extension args))
             (result-ht (p-search-prior-results prior)))
        (dolist (file files)
-         (puthash file (if (string-suffix-p ext-suffix file) 'yes 'no) result-ht)))
+         (puthash file (if (string-suffix-p ext-suffix (p-search-document-title file)) 'yes 'no) result-ht)))
      (p-search--notify-main-thread))))
 
 (defconst p-search--timestamp-high-to-days 0.758518518521)
