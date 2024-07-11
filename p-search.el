@@ -58,36 +58,10 @@
 (require 'heap)
 (require 'cl-lib)
 
-(cl-defstruct (p-search-prior-template
-               (:copier nil)
-               (:constructor p-search-prior-template-create))
-  "Structure representing a class of priors."
-  (name nil :documentation "Name of prior, to be identified by the user")
-  (initialize-function nil :documentation "Function to populate prior results.  Called with three arguments: prior, base-priors, and args.")
-  (base-prior-key nil :documentation "Argument name that, when given a critical importance, is used to determine the base file listing, as well as given to other priors to optimize their performance.") ;; deprecated
-  (default-result nil :documentation "Result that should be returned if no file is specified.")
-  (input-spec nil :documentation "Specification of inputs required for the function to function.")
-  (options-spec nil :documentation "Specification of parameters which alter the operation of the prior.")
-  (search-space-function nil :documentation "Function that when called returns a list of items to be the seach space.  This function existing determines if a prior is a \"base prior\".")
-  (result-hint-function nil :documentation "Optional function that takes the result in a buffer and returns ranges of significance.")
-  (add-prior-function nil :documentation "Function for base priors that dispatches the add-prior transient."))
-
-(cl-defstruct (p-search-prior
-               (:copier nil)
-               (:constructor p-search-prior-create))
-  "An instantiated prior created from a template which is actively
-providing information to a search.in "
-  (template nil :type p-search-prior-template)
-  (importance nil :documentation "How much the prior should influence results.") ;; TODO - identiy where values come from
-  (results nil :documentation "hash table containing the result.  Maps from file name to result indicator.")
-  (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
-  (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
-  (default-result nil :documentation "Override of the tempate's default result."))
-
 (defvar p-search-base-prior)
 
-(require 'p-search-transient)
 (require 'p-search-prior)
+(require 'p-search-transient)
 
 ;;; Options
 
