@@ -307,7 +307,7 @@ objects `default-value' slot."
   (cl-call-next-method)
   (oset obj prompt (format "%s: " (symbol-name (oref obj option-symbol))))
   (when-let (init-value (and (slot-boundp obj 'init-state) (oref obj init-state)))
-    (oset obj value init-state)))
+    (oset obj value init-value)))
 
 (cl-defmethod transient-infix-read ((obj p-search--toggle))
   (let* ((val (oref obj value)))
