@@ -58,8 +58,6 @@
 (require 'heap)
 (require 'cl-lib)
 
-(defvar p-search-base-prior)
-
 (require 'p-search-prior)
 (require 'p-search-transient)
 

@@ -8,10 +8,19 @@
 
 ;;; Reader Functions
 
-(require 'p-search)
 (require 'p-search-query)
 (require 'subr-x)
 (require 'eieio)
+
+(declare-function p-search-generate-search-space "p-search.el")
+(declare-function p-search--notify-main-thread "p-search.el")
+(declare-function p-search--notify-main-thread-after-init "p-search.el")
+(declare-function p-search-document-size "p-search.el")
+(declare-function p-search-document-title "p-search.el")
+(declare-function p-search-add-prior-dispatch--buffers "p-search-transient.el")
+(declare-function p-search-add-prior-dispatch--file-system "p-search-transient.el")
+
+(defvar p-search-base-prior)
 
 (cl-defstruct (p-search-prior-template
                (:copier nil)
@@ -38,22 +47,6 @@ providing information to a search.in "
   (proc-thread nil :documentation "This slot stores the process or thread that does main computation.")
   (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
   (default-result nil :documentation "Override of the tempate's default result."))
-
-(defvar p-search-base-prior)
-
-(declare-function p-search-prior-arguments "p-search.el")
-(declare-function p-search-prior-results "p-search.el")
-(declare-function p-search-generate-search-space "p-search.el")
-(declare-function p-search--notify-main-thread "p-search.el")
-(declare-function p-search--notify-main-thread-after-init "p-search.el")
-(declare-function p-search-prior-template-input-spec "p-search.el")
-(declare-function p-search-prior-template-options-spec "p-search.el")
-(declare-function p-search-prior-template-create "p-search.el")
-(declare-function p-search-document-size "p-search.el")
-(declare-function p-search-document-title "p-search.el")
-(declare-function p-search-add-prior-dispatch--buffers "p-search-transient.el")
-(declare-function p-search-add-prior-dispatch--file-system "p-search-transient.el")
-
 
 (defun p-search-prior-default-arguments (template)
   "Return default input and options of TEMPLATE as one alist.
