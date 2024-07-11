@@ -447,11 +447,18 @@ sizes of all the documents."
      (ignore))))
 
 (defun p-search-query-scores-to-p-linear (scores)
-  "Convert SCORES hashtable to hashtable of probabilities."
-  ;; TODO - better algorithm...
+  "Convert SCORES hashtable to hashtable of probabilities.
+
+SCORES is a hash-table of files to (BM25) scores.  There is no
+predetermined range of scores, so this function performs a
+min-max normalization so that files with a score fall in the
+range of min-prob to max-prob (as defined in the function), while
+files with no match (i.e. not in the SCORES hash-table), are
+given a value of zero-prob."
   (let* ((max-score 0)
          (min-score most-positive-fixnum)
-         (zero-prob 0.4)
+         (zero-prob 0.3)
+         (min-prob 0.5)
          (max-prob 0.7)
          (results (make-hash-table :test #'equal)))
     (maphash
@@ -465,9 +472,9 @@ sizes of all the documents."
      (lambda (doc score)
        (if (= max-score min-score)
            (puthash doc max-prob results)
-         (puthash doc (+ zero-prob
+         (puthash doc (+ min-prob
                          (* (/ (- score min-score) (- max-score min-score))
-                            (- max-prob 0.5)))
+                            (- max-prob min-prob)))
                   results)))
      scores)
     (puthash :default zero-prob results)

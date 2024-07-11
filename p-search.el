@@ -442,7 +442,7 @@ Elements are of the type (FILE PROB).")
 (defun p-search-obs-not-relevant ()
   "Mark the result under the point as not-relevant."
   (interactive)
-  (let* ((document (p-search--document-at-point)))  ;; TODO - use terminology "document" instead of "file"
+  (let* ((document (p-search--document-at-point)))
     (unless document
       (user-error "No document found at point"))
     (puthash document (* (gethash document p-search-observations 1) 0.3) p-search-observations)
@@ -781,7 +781,7 @@ This function is expected to be called every so often in a p-search buffer."
                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
                               (format "%.10f" (/ p p-search-marginal)))))
                 (p-search-add-section `((heading . ,heading-line)
-                                        (props . (p-search-result ,doc-name))
+                                        (props . (p-search-result ,document))
                                         (key . ,doc-name))
                   (insert (p-search-result-window document))
                   (insert "\n")))))
