@@ -20,6 +20,9 @@
 (declare-function p-search-prior-template-input-spec "p-search.el")
 (declare-function p-search-prior-template-options-spec "p-search.el")
 (declare-function p-search-prior-template-create "p-search.el")
+(declare-function p-search-document-size "p-search.el")
+(declare-function p-search-document-title "p-search.el")
+(declare-function p-search-add-prior-dispatch--buffers "p-search-transient.el")
 
 
 (defun p-search-prior-default-arguments (template)
@@ -203,7 +206,7 @@ default inputs, with the args being set to nil."
             (fn-pattern (alist-get 'include-filename args))
             (result-ht (p-search-prior-results prior))) ;; normally should do async or lazily
        (dolist (file files)
-         (puthash file (if (string-match-p fn-pattern (p-search-document-titl file)) 'yes 'no) result-ht)))
+         (puthash file (if (string-match-p fn-pattern (p-search-document-title file)) 'yes 'no) result-ht)))
      (p-search--notify-main-thread))))
 
 
@@ -277,7 +280,7 @@ default inputs, with the args being set to nil."
          (let* ((size (p-search-document-size doc))
                 (p (p-search--normal-pdf size mu-bytes sigma-bytes)))
            (message "p(%d, %d, %d) = %f" size mu-bytes sigma-bytes p)
-           (puthash file p result-ht))))
+           (puthash doc p result-ht))))
      (p-search--notify-main-thread))))
 
 
@@ -361,7 +364,8 @@ default inputs, with the args being set to nil."
 
 (defun p-search--git-branch-prior-template-init (prior)
   "Initialize function for git-branch PRIOR."
-  (let* ((args (p-search-prior-arguments prior))
+  (let* ((base-directories (p-search-prior-get-base-directories))
+         (args (p-search-prior-arguments prior))
          (base-prior-args (p-search-prior-arguments p-search-base-prior))
          (branch (alist-get 'branch args))
          (n (alist-get 'n args))
@@ -546,7 +550,7 @@ default inputs, with the args being set to nil."
             (result-ht (p-search-prior-results prior)))
        (dolist (doc all-docs)
          (pcase-let* ((`(buffer ,buf) doc)
-                      (name (buffer-name buffer))
+                      (name (buffer-name ,buf))
                       (matchp (if regexp-p
                                   (string-match-p query name)
                                 (string-search query name))))
@@ -673,7 +677,7 @@ default inputs, with the args being set to nil."
       (dolist (doc all-docs)
         (let ((size (p-search-document-size doc)))
           (unless size
-            (error "Invalid file produced %s" file))
+            (error "Invalid file produced %s" doc))
           (cl-incf total-size size)))
       (let ((p-search-query-tool tool)
             (p-seach-query-directories (p-search-prior-get-base-directories)))

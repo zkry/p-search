@@ -84,6 +84,8 @@ providing information to a search.in "
   (arguments nil :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
   (default-result nil :documentation "Override of the tempate's default result."))
 
+(defvar p-search-base-prior)
+
 (require 'p-search-transient)
 (require 'p-search-prior)
 
@@ -202,7 +204,7 @@ providing information to a search.in "
 
 ;;; Priors
 
-(defvar p-search-base-prior)
+
 
 (defconst p-search-available-base-prior-templates
   (list p-search-prior-base--buffers

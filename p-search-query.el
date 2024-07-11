@@ -12,6 +12,10 @@
 (declare-function p-search-generate-search-space "p-search.el")
 (declare-function p-search-document-text "p-search.el")
 
+(defvar p-search-query-tool nil
+  "Dynamic var used to determine which tool to use to dispatch commands.
+Can take symbols `grep', `rg', or `ag'.")
+
 (defun p-search-query--escape (string meta-chars)
   "Insert escape \\ characters in STRING for all chars in META-CHARS."
   (let* ((ret-str (make-string (* (length string) 2) 0))
@@ -115,10 +119,6 @@ A term regex is noted for marking boundary characters."
   "Return command line arguments for ag search of TERM."
   (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
     `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
-
-(defvar p-search-query-tool nil
-  "Dynamic var used to determine which tool to use to dispatch commands.
-Can take symbols `grep', `rg', or `ag'.")
 
 (defvar p-seach-query-directories nil
   "Dynamic var used to determine which directories to search in.")
