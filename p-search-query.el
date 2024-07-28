@@ -108,7 +108,7 @@ A term regex is noted for marking boundary characters."
 (defun p-search-query-grep--command (term)
   "Return command line arguments for rg search of TERM."
   (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
-    `("grep" "-c" ,@(and case-insensitive '("--ignore-case")) ,(p-search-query--metadata-elt term) ".")))
+    `("grep" "-r" "-c" ,@(and case-insensitive '("--ignore-case")) ,(p-search-query--metadata-elt term) ".")))
 
 (defun p-search-query-rg--command (term)
   "Return command line arguments for rg search of TERM."
@@ -653,7 +653,7 @@ structure."
 (defun p-search-query (query-string N total-size p-callback)
   "Dispatch query from QUERY-STRING.
 QUERY-STRING's parse is used to dispatch process calls.  N is the
-total number of files being considered and TOTAL-SIZE is the sum
+ptotal number of files being considered and TOTAL-SIZE is the sum
 of the size (in bytes) of all N files.
 
 When all processes finish and results are combined, P-CALLBACK is

@@ -176,8 +176,6 @@
 
 ;;; Priors
 
-
-
 (defconst p-search-available-base-prior-templates
   (list p-search-prior-base--buffers
         p-search-prior-base--filesystem
@@ -188,15 +186,11 @@
   p-search-prior-base--filesystem
   "Prior template to use for initial base.")
 
-
 (defconst p-search-importance-levls
   '(low medium high critical))
 
 (defvar p-search-prior-templates nil
   "List of avalable prior templates.")
-
-(let ((prior (p-search-prior-create)))
-  (setf (p-search-prior-results prior) 100))
 
 (defun p-search-base-prior-p (prior)
   "Return non-nil if PRIOR is a base prior."
@@ -276,7 +270,6 @@ elements to search over.")
                  :arguments args
                  :results (make-hash-table :test 'equal)
                  :importance (or importance 'medium)))
-         (base-priors (oref p-search-base-prior arguments))  ;; TODO - rename
          (init-res (funcall init-func prior)))
     (setf (p-search-prior-proc-thread prior) init-res)
     prior))
@@ -749,7 +742,8 @@ This function is expected to be called every so often in a p-search buffer."
               (let* ((doc-name (p-search-document-title document))
                      (heading-line-1
                       (concat (truncate-string-to-width
-                               (propertize (p-search-format-inputs doc-name) 'face 'p-search-header-line-key) (- (cadr page-dims) 5))))
+                               (propertize (p-search-format-inputs doc-name) 'face 'p-search-header-line-key)
+                               (- (cadr page-dims) 5))))
                      (heading-line
                       (concat heading-line-1
                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
