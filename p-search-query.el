@@ -12,7 +12,7 @@
 (require 'range)
 
 (declare-function 'p-search-document-property "p-search.el")
-(declare-function 'p-search-candidate-generator-term-freq-function "p-search.el")
+(declare-function 'p-search-candidate-generator-term-frequency-function "p-search.el")
 (declare-function 'p-search-document-property "p-search.el")
 
 (defvar p-search-active-candidate-generators "p-search.el")
@@ -48,7 +48,7 @@ Indicates which token we are currently considering.")
                    (when (= i n)
                      (funcall finalize-func combined-tf)))))
     (pcase-dolist (`(,generator . ,args) p-search-active-candidate-generators)
-      (let* ((tf-func (p-search-candidate-generator-term-freq-function generator)))
+      (let* ((tf-func (p-search-candidate-generator-term-frequency-function generator)))
         (funcall tf-func args term callback :case-insensitive t)))))
 
 (defun p-search-query-and (results)
@@ -492,4 +492,5 @@ probabilities."
                  (funcall p-callback probs)))))
     (p-search-query-run ast cb)))
 
+(provide 'p-search-query)
 ;;; p-search-query.el ends here
