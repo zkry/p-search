@@ -1,31 +1,17 @@
-;;; p-search-transient.el --- Support for transients  -*- lexical-binding:t -*-
+;;; p-search-transient.el --- Support for transients -*- lexical-binding:t -*-
 
 ;;; Commentary:
 
-;; This library implements p-search-specific prefix and suffix classes,
-;; and their methods.
-
 ;;; Code:
 
-;;; Reader Functions
-
 (require 'org)
-(require 'eieio)
 (require 'transient)
 
-(require 'p-search-prior)
+;;; Variables:
 
-(defvar p-search-priors)
-(defvar p-search-main-thread-calculate-flag)
+(defvar p-search-transient-default-inputs nil) ;; TODO: This can probably be removed
 
-(declare-function p-search-prior-template-name "p-search.el")
-(declare-function p-search-prior-template-input-spec "p-search.el")
-(declare-function p-search-prior-template-options-spec "p-search.el")
-(declare-function p-search--rerun-prior "p-search.el")
-(declare-function p-search--instantiate-prior "p-search.el")
-(declare-function p-search--validate-prior "p-search.el")
-(declare-function p-search-refresh-buffer "p-search.el")
-(declare-function p-search--notify-main-thread "p-search.el")
+;;; Transient Definitions:
 
 (defun p-search-read-date-dist (_prompt _init hist)
   "Read combination of date and stddev.
@@ -73,18 +59,7 @@ INIT and HIST the initial value and input history respectively."
                  (throw 'done (* (string-to-number num) to-byte))
                (beep)
                (message "invalid byte size input")
-               (sit-for 1))
-             )))))))
-
-
-;;; Transient Classes
-
-(defvar p-search-current-prior-template nil)
-(defvar p-search-default-inputs nil)
-(defvar p-search-prior-editing nil
-  "If nil, prior is being CREATED.
-If argument alist, provides initial args for transient.  When an
-alist, the prior key contains the prior to be UPDATED.")
+               (sit-for 1)))))))))
 
 (defclass p-search--option (transient-variable)
   ((option-symbol :initarg :option-symbol :initform nil)
@@ -100,31 +75,13 @@ alist, the prior key contains the prior to be UPDATED.")
 (cl-defmethod transient-init-value ((obj p-search--option))
   "Return initial value of OBJ.
 The initial value will either be: the value of the options symbol
-in `p-search-default-inputs' or the value in the transient
+in `p-search-transient-default-inputs' or the value in the transient
 objects `default-value' slot."
   (let* ((option-symbol (oref obj option-symbol))
          (default-value (and (slot-boundp obj 'default-value) (oref obj default-value)))
-         (init-value (or (alist-get option-symbol p-search-default-inputs) default-value)))
+         (init-value (or (alist-get option-symbol p-search-transient-default-inputs) default-value)))
     (when init-value
       (oset obj value init-value))))
-
-
-(defclass p-search--template (p-search--option)
-  ((template :initarg :template)))
-
-(cl-defmethod transient-init-value :around ((_obj p-search--template))
-  (ignore))
-
-(cl-defmethod transient-format-value ((obj p-search--template))
-  (p-search-prior-template-name (oref obj template)))
-
-(cl-defmethod transient-infix-value :around ((obj p-search--template))
-  (cons 'template
-        (oref obj template)))
-
-(transient-define-infix p-search--template-infix ()
-  :class p-search--template)
-
 
 (cl-defmethod transient-infix-set ((obj p-search--option) value)
   (oset obj value value))
@@ -140,24 +97,12 @@ objects `default-value' slot."
     (propertize "nil" 'face 'transient-inactive-value)))
 
 
-(defclass p-search--date+sigma (p-search--option)
-  ((reader :initform #'p-search-read-date-dist)
-   (prompt :initform "Date and σ days :")))
-
-(cl-defmethod transient-format-value ((obj p-search--date+sigma))
-  "Format value of OBJ.  Display value with normal distribution notation."
-  (if-let* ((value (and (slot-boundp obj 'value) (oref obj value))))
-      (propertize
-       (format "N(%s,%ddays)" (car value) (cdr value))
-       'face 'transient-value)
-    (propertize "N(?,?)" 'face 'transient-inactive-value)))
-
-(transient-define-infix p-search--date+sigma-infix ()
-  :class p-search--date+sigma)
-
+;;; TODO - make directory only accept single parameter
 
 (defclass p-search--directory (p-search--option)
-  ((multi-value :initarg :multi-value :initform nil)))
+  ((reader :initform (lambda (prompt init _hist)
+                       (read-directory-name prompt init nil nil init)))
+   (multi-value :initarg :multi-value :initform nil)))
 
 (cl-defmethod transient-init-value ((obj p-search--directory))
   "Return initial values of OBJ."
@@ -192,29 +137,24 @@ objects `default-value' slot."
      (t
       (propertize "nil" 'face 'transient-inactive-value)))))
 
-(transient-define-infix p-search--directory-infix ()
+(transient-define-infix p-search-infix-directory ()
   :class p-search--directory)
 
-
-(defclass p-search--file (p-search--option)
-  ((reader :initform #'p-search-read-file-name)
-   (prompt :initform "file: ")))
-
-(transient-define-infix p-search--file-infix ()
-  :class p-search--file)
+;; (transient-define-infix p-search-infix-file ()
+;;   :class p-search--file)
 
 
 (defclass p-search--regexp (p-search--option)
   ((reader :initform #'read-regexp)
    (prompt :initform "regexp: ")))
 
-(transient-define-infix p-search--regexp-infix ()
+(transient-define-infix p-search-infix-regexp ()
   :class p-search--regexp)
 
 
 (defclass p-search--string (p-search--option)
   ((reader :initform #'read-string)
-   (multi-value :initarg :multi-value :initform nil )))
+   (multi-value :initarg :multi-value :initform nil)))
 
 (cl-defmethod transient-init-value ((obj p-search--string))
   (cl-call-next-method)
@@ -248,7 +188,7 @@ objects `default-value' slot."
          val))
     nil))
 
-(transient-define-infix p-search--string-infix ()
+(transient-define-infix p-search-infix-string ()
   :class p-search--string)
 
 
@@ -256,7 +196,7 @@ objects `default-value' slot."
   ((reader :initform #'read-number)
    (prompt :initform "number: ")))
 
-(transient-define-infix p-search--number-infix ()
+(transient-define-infix p-search-infix-number ()
   :class p-search--number)
 
 
@@ -273,9 +213,8 @@ objects `default-value' slot."
        (t (format "%.2fGB" (/ bytes 1000000000))))
     (propertize "nil" 'face 'transient-inactive-value)))
 
-(transient-define-infix p-search--memory-infix ()
+(transient-define-infix p-search-infix-memory ()
   :class p-search--memory)
-
 
 (defclass p-search--choices (p-search--option)
   ((choices :initarg :choices)
@@ -296,7 +235,7 @@ objects `default-value' slot."
                choices)
              nil t))))
 
-(transient-define-infix p-search--choices-infix ()
+(transient-define-infix p-search-infix-choices ()
   :class p-search--choices)
 
 
@@ -315,324 +254,9 @@ objects `default-value' slot."
         nil
       'on)))
 
-(transient-define-infix p-search--toggle-infix ()
+(transient-define-infix p-search-infix-toggle ()
   :class p-search--toggle)
 
-;;;
-
-(defun p-search-transient-read-spec (spec)
-  "Call the read function for SPEC, returning it's value."
-  (let* ((prompt-string (symbol-name (car spec))))
-   (pcase spec
-     (`(,_ . (directory-names . ,_opts))
-      (p-search-read-directories (format "%s (comma separated): " prompt-string) nil nil))
-     (`(,_ . (directory-name . ,_opts))
-      (read-directory-name (format "%s (comma separated): " prompt-string)))
-     (`(,_ . (string . ,_opts))
-      (read-string (format "%s: " prompt-string)))
-     (`(,_ . (regexp . ,_opts))
-      (read-regexp (format "%s: " prompt-string)))
-     (`(,_ . (memory . ,_opts))
-      (p-search-read-bytes (format "%s: " prompt-string)))
-     (`(,_ . (number . ,_opts))
-      (read-number (format "%s: " prompt-string)))
-     (`(,_ . (toggle . ,_opts))
-      (error "Not implemented: switch"))
-     (`(,_ . (choice . ,opts))
-      (let* ((choices (plist-get opts :choices)))
-        (completing-read (format "%s: " prompt-string) (if (functionp choices) (funcall choices) choices)
-                         nil t)))
-     (_ (error "Unsupported spec %s" spec)))))
-
-(defun p-search-read-current-specs ()
-  "Read each input-spec item of `p-search-current-prior-template'."
-  (let* ((res '())
-         (template (p-search-prior-template-input-spec p-search-current-prior-template)))
-    (pcase-dolist (`(,name . ,spec) template)
-      (push (cons name (p-search-transient-read-spec (cons name spec))) res))
-    (nreverse res)))
-
-(defun p-search-transient-parse-spec (spec &optional always-read)
-  "For given SPEC, return its transient object.
-Pass value of ALWAYS-READ to transient object.  This is used for
-inputs which must always have a value."
-  (pcase spec
-    (`(,name . (directory-names . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--directory-infix
-               :multi-value t
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (directory-name . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--directory-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (file . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--file-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (regexp . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--regexp-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (choice . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description))
-            (choices (plist-get opts :choices)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--choices-infix
-               :init-choice ,(if (functionp choices) nil
-                               (car choices)) ;; First choice is default
-               :choices ,choices
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (toggle . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--toggle-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (memory . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--memory-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (string . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--string-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (`(,name . (number . ,opts))
-     (let* ((key (plist-get opts :key))
-            (description (plist-get opts :description)))
-       (transient-parse-suffix
-        transient--prefix
-        `(,key ,description
-               p-search--number-infix
-               :option-symbol ,name
-               :always-read ,always-read))))
-    (_ (error "Unsupported spec %s" spec))))
-
-(defun p-search-transient-input-suffixes ()
-  "Return list of suffixes for inputs of `p-search-current-prior-template'."
-  (let* ((ress (list (transient-parse-suffix
-                      transient--prefix
-                      `(" " ""
-                        p-search--template-infix
-                        :template ,p-search-current-prior-template
-                        :inapt-if always))))
-         (template (p-search-prior-template-input-spec p-search-current-prior-template)))
-    (dolist (spec template)
-      (push (p-search-transient-parse-spec spec t) ress))
-    (nreverse ress)))
-
-(defun p-search-transient-option-suffixes ()
-  "Return list of suffixes for options of `p-search-current-prior-template'."
-  (let* ((ress '())
-         (template (p-search-prior-template-options-spec p-search-current-prior-template)))
-    (dolist (spec template)
-      (push (p-search-transient-parse-spec spec) ress))
-    (nreverse ress)))
-
-(defun p-search--is-prior-edit-mode ()
-  "Return non-nil if editing.  Used for transient."
-  p-search-prior-editing)
-(defun p-search--is-prior-create-mode ()
-  "Return non-nil if creating.  Used for transient."
-  (not p-search-prior-editing))
-(defun p-search--is-base-prior-template ()
-  "Return non-nil if the prior under point is a base prior function.
-Base priors are priors with a template that has a search-space-function."
-  (oref p-search-current-prior-template search-space-function))
-
-(transient-define-prefix p-search-create-prior-dispatch ()
-  "Dispatch create-prior command."
-  ["Input"
-   :setup-children
-   (lambda (_)
-     (append
-      (list)
-      (p-search-transient-input-suffixes)))]
-  ["Options"
-   :setup-children
-   (lambda (_)
-     (append
-      (p-search-transient-option-suffixes)
-      (if (p-search--is-base-prior-template)
-          '()
-        (list (transient-parse-suffix
-               transient--prefix
-               `("-c" "complement"
-                 p-search--toggle-infix
-                 :init-state nil
-                 :option-symbol complement))
-              (transient-parse-suffix
-               transient--prefix
-               `("-i" "importance"
-                 p-search--choices-infix
-                 :choices ,p-search-importance-levls
-                 :init-choice medium
-                 :option-symbol importance))))))]
-  ["Actions"
-   ("c" "create"
-    (lambda ()
-      (interactive)
-      (p-search-transient-prior-create))
-    :if p-search--is-prior-create-mode)
-   ("e" "edit"
-    (lambda ()
-      (interactive)
-      (p-search-transient-prior-edit))
-    :if p-search--is-prior-edit-mode)])
-
-(defun p-search-transient-prior-create ()
-  (interactive)
-  (let* ((args (transient-args 'p-search-create-prior-dispatch))
-         (template (alist-get 'template args))
-         (prior (p-search--instantiate-prior template args)))
-    (p-search--validate-prior prior args)
-    (setq p-search-priors (append p-search-priors (list prior)))
-    (p-search-refresh-buffer)
-    (when (> (hash-table-count (p-search-prior-results prior)) 0)
-      (p-search--notify-main-thread))))
-
-(defun p-search-transient-prior-edit (&optional prior)
-  (interactive)
-  (let* ((prior (or prior (car (get-char-property-and-overlay (point) 'p-search-prior))))
-         (args (transient-args 'p-search-create-prior-dispatch)))
-    (p-search--validate-prior prior args)
-    (setf (p-search-prior-arguments prior) args)
-    (p-search--rerun-prior prior)
-    (p-search--notify-main-thread)
-    (p-search-refresh-buffer)))
-
-(defun p-search-dispatch-prior-creation (prior-template)
-  "Return a transient suffix from PRIOR-TEMPLATE."
-  (let* ((p-search-current-prior-template prior-template)
-         (p-search-default-inputs (p-search-read-current-specs)))
-    (call-interactively #'p-search-create-prior-dispatch)))
-
-(defun p-search--single-git-directory ()
-  (let ((base-dir (alist-get 'base-directory (p-search-prior-arguments p-search-base-prior))))
-    (when base-dir
-      (let ((default-directory base-dir))
-        (= (call-process "git" nil nil nil "status") 0)))))
-
-(defun p-search--multi-git-directory ()
-  "Return non-nil of base-prior has directories that are git repositories"
-  (catch 'done
-    (let* ((base-dirs (p-search-prior-get-base-directories)))
-
-      (dolist (default-directory base-dirs)
-        (unless (= (call-process "git" nil nil nil "status") 0)
-          (throw 'done nil)))
-      t)))
-
-(transient-define-prefix p-search-add-prior-dispatch--file-system ()
-  "Dispatch an add-prior command."
-  [["File System"
-    ("f d" "directory"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--subdirectory-prior-template)))
-    ("f n" "file name"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--filename-prior-template))) ;; regexp -> input
-    ("f t" "file type"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--filetype-prior-template))) ;; string -> input
-    ("f m" "modification date"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--modification-date-prior-template))) ;; date+sigma -> input
-    ("f s" "size"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--file-size-prior-template)))]
-   ["Git"
-    ("g a" "author"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--git-author-prior-template))
-     :if p-search--multi-git-directory) ;; git -> read authors -> input
-    ("g b" "branch"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--git-branch-prior-template))
-     :if p-search--single-git-directory) ;; git -> read branches -> input
-    ("g c" "file co-changes"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--git-co-changes-prior-template))
-     :if p-search--single-git-directory) ;;; read file -> input
-    ("g m" "modification frequency"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--git-mod-freq-prior-template))
-     :if p-search--multi-git-directory)]]
-  [["Emacs"
-    ("e b" "open buffer"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--emacs-open-buffer-template)))]
-   ["Text Query"
-    ("t q" "text query"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--text-query-prior-template)))]])
-
-(transient-define-prefix p-search-add-prior-dispatch--buffers ()
-  "Dispatch an add-prior command."
-  [["Buffer"
-    ("b n" "buffer name"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--buffer-name-template)))
-    ("b m" "buffer major mode"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--buffer-major-mode)))]]
-  [["Text Query"
-    ("t q" "text query"
-     (lambda ()
-       (interactive)
-       (p-search-dispatch-prior-creation p-search--buffer-text-query-prior-template)))]])
-
-(provide 'p-search)
-
 (provide 'p-search-transient)
+
 ;;; p-search-transient.el ends here

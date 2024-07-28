@@ -1,170 +1,59 @@
-;;; p-search-query.el --- Query dispatcher for p-search -*- lexical-binding: t; -*-
+;;; p-search-query.el --- Support for querys -*- lexical-binding:t -*-
 
 ;;; Commentary:
 
-;;
-
 ;;; Code:
+
+
+;;; Declarations, requirements:
+
+(require 'cl-lib)
 
 (require 'range)
 
-(declare-function p-search-document-size "p-search.el")
-(declare-function p-search-generate-search-space "p-search.el")
-(declare-function p-search-document-text "p-search.el")
+(declare-function 'p-search-document-property "p-search.el")
+(declare-function 'p-search-candidate-generator-term-freq-function "p-search.el")
+(declare-function 'p-search-document-property "p-search.el")
 
-(defvar p-search-query-tool nil
-  "Dynamic var used to determine which tool to use to dispatch commands.
-Can take symbols `grep', `rg', or `ag'.")
-
-(defun p-search-query--escape (string meta-chars)
-  "Insert escape \\ characters in STRING for all chars in META-CHARS."
-  (let* ((ret-str (make-string (* (length string) 2) 0))
-         (i 0))
-    (dotimes (j (length string))
-      (if (member (aref string j) meta-chars)
-          (progn
-            (aset ret-str i ?\\)
-            (aset ret-str (1+ i) (aref string j))
-            (cl-incf i 2))
-        (aset ret-str i (aref string j))
-        (cl-incf i)))
-    (substring ret-str 0 i)))
-
-(defun p-search-query-rg-escape (string)
-  "Insert escape \\ characters in STRING based on Rust's regex parser (used in rg)."
-  (p-search-query--escape string '(?\\ ?. ?+ ?\( ?\) ?| ?\[ ?\] ?\{ ?\} ?^ ?$ ?# ?& ?- ?~))) ;; ?* ?\?
-
-(defun p-search-query-ag-escape (string)
-  "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
-  (p-search-query--escape string '(?\\ ?^ ?$ ?. ?\[ ?| ?\( ?\) ?+ ?{))) ;; ?* ?\?
-
-(defun p-search-query-grep-escape (string)
-  "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
-  (p-search-query--escape string '(?\\ ?.)))
-
-(defconst p-search-query-wildcards '((rg . "[^\w]")
-                                     (ag . "[^\s]")
-                                     (grep . "[^[:space:]]")))
-
-(defun p-search-query--replace-wildcards (string)
-  (let ((wildcard (or (alist-get p-search-query-tool p-search-query-wildcards)
-                      "[^[:blank:]]")))
-    (let ((pos 0)
-          (new-string ""))
-      ;; Replace * with wildcard*
-      (while-let ((match (string-search "*" string pos)))
-        (when (or (zerop match) (not (eql (aref string (1- match)) ?\\)))
-          (setq new-string (concat new-string
-                                   (substring string pos match)
-                                   wildcard "*")))
-        (setq pos (1+ match)))
-      ;; replace ? with wildcard
-      (let ((string (concat new-string (substring string pos)))
-            (pos 0)
-            (new-string ""))
-        (while-let ((match (string-search "?" string pos)))
-          (when (or (zerop match) (not (eql (aref string (1- match)) ?\\)))
-            (setq new-string (concat new-string
-                                     (substring string pos match)
-                                     wildcard)))
-          (setq pos (1+ match)))
-        (concat new-string (substring string pos))))))
-
-(defun p-search-query-grep--term-regexp (string)
-  "Create a term regular expression from STRING.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-grep-escape string))))
-    (list (list (concat "\\(\\<\\|_\\)" escaped-string "\\(\\>\\|_\\)") :case-insensitive t)
-          (concat "\\B"
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1)))))
-
-(defun p-search-query-rg--term-regexp (string)
-  "Create a term regular expression from STRING.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-rg-escape string))))
-    (list (list (concat "(\\b|_)" escaped-string "(\\b|_)") :case-insensitive t)
-          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1))))) ;; TODO - will these double-count camel case?
-
-(defun p-search-query-ag--term-regexp (string)
-  "Create a term regular expression from STRING for ag tool.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search-query--replace-wildcards (p-search-query-ag-escape string))))
-    (list (list (concat "(\\b|_)" escaped-string "(\\b|_)") :case-insensitive t)
-          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1)))))
-
-(defun p-search-query-emacs--term-regexp (string)
-  "Create a term regular expression from STRING.
-A term regex is noted for marking boundary characters."
-  (list (list (p-search-query--replace-wildcards (concat "\\<" string "\\>")) :case-insensitive t)
-        (concat (capitalize (substring string 0 1))
-                (substring string 1))))
+(defvar p-search-active-candidate-generators "p-search.el")
 
 
-(defun p-search-query-grep--command (term)
-  "Return command line arguments for rg search of TERM."
-  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
-    `("grep" "-r" "-c" ,@(and case-insensitive '("--ignore-case")) ,(p-search-query--metadata-elt term) ".")))
+
+;;; Variables:
 
-(defun p-search-query-rg--command (term)
-  "Return command line arguments for rg search of TERM."
-  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
-    `("rg" "--count-matches" "--color" "never" "-i" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
+(defvar p-search-query-parse--tokens nil
+  "Variable to be used dynamically when parsing.
+Stores the list of tokens being parsed.")
 
-(defun p-search-query-ag--command (term)
-  "Return command line arguments for ag search of TERM."
-  (let* ((case-insensitive (p-search-query--metadata-get term :case-insensitive)))
-    `("ag" "-c" "--nocolor" ,@(and case-insensitive '("-i")) ,(p-search-query--metadata-elt term))))
+(defvar p-search-query-parse--idx nil
+  "Variable to be used dynamically when parsing.
+Indicates which token we are currently considering.")
 
-(defvar p-seach-query-directories nil
-  "Dynamic var used to determine which directories to search in.")
+
+;;; Query Runner:
 
-(defun p-search-query-commands (string)
-  "Return list of runnable commands from STRING based on `p-search-query-tool'."
-  (pcase p-search-query-tool
-    ('grep (seq-map #'p-search-query-grep--command (p-search-query-grep--term-regexp string))) ;; TODO
-    ('rg (seq-map #'p-search-query-rg--command (p-search-query-rg--term-regexp string)))
-    ('ag (seq-map #'p-search-query-ag--command (p-search-query-ag--term-regexp string)))
-    (_ (error "Unsupported tool `%s'" p-search-query-tool))))
-
-(defun p-search-query-dispatch (string finalize-func)
-  "Run query STRING.  Call FINALIZE-FUNC on obtained results."
-  (let* ((directories (or p-seach-query-directories (list default-directory)))
-         (commands (p-search-query-commands string))
-         (file-counts (make-hash-table :test #'equal))
-         (proc-complete-ct 0))
-    (dolist (cmd commands)
-      (dolist (default-directory directories)
-        (let* ((buf (generate-new-buffer (format "*p-search %s*" p-search-query-tool)))) ;; TODO - better name
-          (make-process
-           :name "p-search-text-search"
-           :buffer buf
-           :command cmd
-           :sentinel
-           (lambda (proc event)
-             (when (or (member event '("finished\n" "deleted\n"))
-                       (string-prefix-p "exited abnormally with code" event)
-                       (string-prefix-p "failed with code" event))
-               (with-current-buffer (process-buffer proc)
-                 (let* ((files (string-split (buffer-string) "\n")))
-                   (dolist (f files)
-                     (when (string-prefix-p "./" f)
-                       (setq f (substring f 2)))
-                     (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                       (let* ((fname (match-string 1 f))
-                              (count (string-to-number (match-string 2 f))))
-                         (puthash (list 'file (file-name-concat default-directory fname)) count file-counts))))
-                   (cl-incf proc-complete-ct)
-                   (when (= proc-complete-ct (* (length commands) (length directories)))
-                     (funcall finalize-func file-counts))))))))))))
+(defun p-search-query-dispatch (term finalize-func)
+  "Run query TERM  Call FINALIZE-FUNC on obtained results."
+  (pcase-let*
+      ((combined-tf (make-hash-table :test #'equal))
+       (n (length p-search-active-candidate-generators))
+       (i 0)
+       (callback (lambda (doc-to-tf)
+                   ;; Since candidate-generators should be mutually
+                   ;; exclusive, puthash is overwriting value, not adding.
+                   (cl-loop for k being the hash-keys of doc-to-tf
+                            using (hash-values v)
+                            do (puthash k v combined-tf))
+                   (cl-incf i)
+                   (when (= i n)
+                     (funcall finalize-func combined-tf)))))
+    (pcase-dolist (`(,generator . ,args) p-search-active-candidate-generators)
+      (let* ((tf-func (p-search-candidate-generator-term-freq-function generator)))
+        (funcall tf-func args term callback :case-insensitive t)))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
-  (let ((result (make-hash-table :test 'equal))
+  (let ((result (make-hash-tablbe :test 'equal))
         (res1 (aref results 0)))
     (maphash
      (lambda (k v)
@@ -184,72 +73,7 @@ A term regex is noted for marking boundary characters."
      res1)
     result))
 
-;; let subqueries near dotimes
-
-(defun p-search-query-near* (subqueries)
-  "Return ranges in current buffer where SUBQUERIES are close to eachother."
-  (let* ((ress '())
-         (distance 15)) ;; TODO - make configurable
-    (let* ((matches (seq-into (seq-map #'p-search-query-mark subqueries) 'vector)))
-      (while (seq-every-p #'identity matches)
-        (catch 'out
-          (let* ((first-matches (seq-map #'car matches))
-                 (ordered (seq-sort-by #'car #'< first-matches))
-                 (betweens (seq-mapn (lambda (a b)
-                                       (- (car b) (cdr a)))
-                                     ordered (cdr ordered))))
-            (dotimes (i (length betweens))
-              ;; if any of the matching intervals are too big,
-              ;; get the next matches of everything below the
-              ;; too-big interval.
-              (when (> (nth i betweens) distance)
-                (dotimes (j (1+ i))
-                  (let* ((elt (nth j ordered)))
-                    (dotimes (k (length matches))
-                      (when (equal elt (car (aref matches k)))
-                        (aset matches k (cdr (aref matches k)))))))
-                (throw 'out nil)))
-            (push (cons (caar ordered)
-                        (cdr (car (last ordered))))
-                  ress)
-            (dotimes (k (length matches))
-              (when (equal (car ordered) (car (aref matches k)))
-                (aset matches k (cdr (aref matches k)))))))))
-    (setq ress (nreverse ress))
-    ress))
-
-(defun p-search-query-near (subqueries results)
-  "Return subset of RESULTS where results of SUBQUERIES are close to eachother."
-  (let* ((ress (make-hash-table :test #'equal))
-         (intersect-results (p-search-query-and results)))
-    (maphash
-     (lambda (file _)
-       (with-temp-buffer
-         (insert-file-contents file)
-         (let* ((matching-intervals (p-search-query-near* subqueries)))
-           (puthash file (length matching-intervals) ress))))
-     intersect-results)))
-
-(defun p-search-query--metadata-add (elt md-key md-val)
-  "Add metadata MD-KEY MD-VAL to ELT."
-  (if (listp elt)
-      (let* ((md (cdr elt))
-             (new-md (plist-put md md-key md-val)))
-        (cons elt new-md))
-    (list elt md-key md-val)))
-
-(defun p-search-query--metadata-get (elt md-key)
-  "Return metadata value MD-KEY of ELT."
-  (when (listp elt)
-    (plist-get (cdr elt) md-key)))
-
-(defun p-search-query--metadata-elt (elt)
-  "Return original element of ELT."
-  (if (listp elt)
-      (car elt)
-    elt))
-
-(defun p-search-query-run (query &optional finalize-func)
+(defun p-search-query-run (query finalize-func)
   "Dispatch processes according to QUERY syntax tree.
 All processes are concluded by calling FINALIZE-FUNC with
 resulting data hashmap."
@@ -257,40 +81,40 @@ resulting data hashmap."
     (`(terms . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
-      (dolist (elt elts)
-        (p-search-query-run
-         elt
-         (lambda (result)
-           (aset results i result)
-           (cl-incf i)
-           (when (= i (length elts))
-             (funcall finalize-func results)))))))
+       (dolist (elt elts)
+         (p-search-query-run
+          elt
+          (lambda (result)
+            (aset results i result)
+            (cl-incf i)
+            (when (= i (length elts))
+              (funcall finalize-func results)))))))
     ((cl-type string)
      (p-search-query-dispatch query finalize-func))
     (`(and . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
-      (dolist (elt elts)
-        (p-search-query-run
-         elt
-         (lambda (result)
-           (aset results i result)
-           (cl-incf i)
-           (when (= i (length elts))
-             (let* ((and-res (p-search-query-and results)))
-               (funcall finalize-func and-res))))))))
-    (`(near . ,elts)
-     (let ((results (make-vector (length elts) nil))
-           (i 0))
-      (dolist (elt elts)
-        (p-search-query-run
-         elt
-         (lambda (result)
-           (aset results i result)
-           (cl-incf i)
-           (when (= i (length elts))
-             (let* ((near-res (p-search-query-near elts results)))
-               (funcall finalize-func near-res))))))))
+       (dolist (elt elts)
+         (p-search-query-run
+          elt
+          (lambda (result)
+            (aset results i result)
+            (cl-incf i)
+            (when (= i (length elts))
+              (let* ((and-res (p-search-query-and results)))
+                (funcall finalize-func and-res))))))))
+    ;; (`(near . ,elts)
+    ;;  (let ((results (make-vector (length elts) nil))
+    ;;        (i 0))
+    ;;    (dolist (elt elts)
+    ;;      (p-search-query-run
+    ;;       elt
+    ;;       (lambda (result)
+    ;;         (aset results i result)
+    ;;         (cl-incf i)
+    ;;         (when (= i (length elts))
+    ;;           (let* ((near-res (p-search-query-near elts results)))
+    ;;             (funcall finalize-func near-res))))))))
     (`(not ,elt)
      (p-search-query-run
       elt
@@ -326,17 +150,36 @@ resulting data hashmap."
            (p-search-query--metadata-add
             result :boost boost-amt))))))))
 
-(defun p-search-query-scan (query finalize-func)
-  "Scan entire search-space to find QUERY.  Call FINALIZE-FUNC on obtained results."
-  (let* ((docs (p-search-generate-search-space))
-         (results (make-hash-table :test #'equal)))
-    (dolist (doc docs)
-      (let* ((doc-text (p-search-document-text doc)))
-        (with-temp-buffer
-          (insert doc-text)
-          (let* ((intervals (p-search-query-mark query)))
-            (puthash doc (length intervals) results)))))
-    (funcall finalize-func (vector results))))
+
+;;; Metadata Objects:
+
+;; The need arose for objects like hash-tables to be enhanced with
+;; metadata for the final score calculation.  In this package, I am
+;; making the convention that an object with metadata is a list with
+;; the element as the first item and all metadata as subsequent plist
+;; items.
+
+(defun p-search-query--metadata-add (elt md-key md-val)
+  "Add metadata MD-KEY MD-VAL to ELT."
+  (if (listp elt)
+      (let* ((md (cdr elt))
+             (new-md (plist-put md md-key md-val)))
+        (cons elt new-md))
+    (list elt md-key md-val)))
+
+(defun p-search-query--metadata-get (elt md-key)
+  "Return metadata value MD-KEY of ELT."
+  (when (listp elt)
+    (plist-get (cdr elt) md-key)))
+
+(defun p-search-query--metadata-elt (elt)
+  "Return original element of ELT."
+  (if (listp elt)
+      (car elt)
+    elt))
+
+
+;;; Scoring:
 
 (defun p-search-query-bm25* (result-ht N total-size)
   "Calculate the BM25 scores of RESULT-HT, a map of file name to counts.
@@ -354,7 +197,7 @@ sizes."
            (avg-size (/ (float total-size) N)))
       (maphash
        (lambda (doc count)
-         (let* ((size (p-search-document-size doc))
+         (let* ((size (p-search-document-property doc 'size))
                 (score (* idf (/ (* count (+ k1 1))
                                  (+ count (* k1 (+ 1 (- b) (* b (/ (float size) avg-size)))))))))
            (puthash doc score scores)))
@@ -401,51 +244,6 @@ sizes of all the documents."
             (setq total-scores replace-total-scores)))))
     total-scores))
 
-
-
-;;; Mark
-
-(defun p-search-query-mark--term (string)
-  "Find and return locations of STRING in buffer."
-  (let* ((terms (p-search-query-emacs--term-regexp string))
-         (ress '()))
-    (dolist (term terms)
-      (save-excursion
-        (goto-char (point-min))
-        (let* ((case-fold-search (p-search-query--metadata-get term :case-insensitive)))
-          (while (search-forward-regexp (p-search-query--metadata-elt term) nil t)
-            (push (cons (match-beginning 0) (match-end 0)) ress)))))
-    (setq ress (nreverse ress))
-    ress))
-
-(defun p-search-query-mark (query)
-  "Return intervals where QUERY matches content in current buffer."
-  (pcase query
-    (`(terms . ,elts)
-     (let* ((ress '()))
-       (dolist (elt elts)
-         (let* ((res (p-search-query-mark elt)))
-           (when res
-             (setq ress (range-concat ress res)))))
-       ress))
-    ((cl-type string)
-     (p-search-query-mark--term query))
-    (`(and . ,elts)
-     (let* ((ress '()))
-       (dolist (elt elts)
-         (let* ((res (p-search-query-mark elt)))
-           (when res
-             (setq ress (range-concat ress res)))))
-       ress))
-    (`(near . ,elts)
-     (p-search-query-near* elts))
-    (`(not ,_elt)
-     (ignore))
-    (`(must ,elt)
-     (p-search-query-mark elt))
-    (`(must-not ,_elt)
-     (ignore))))
-
 (defun p-search-query-scores-to-p-linear (scores)
   "Convert SCORES hashtable to hashtable of probabilities.
 
@@ -481,7 +279,7 @@ given a value of zero-prob."
     results))
 
 
-;;; Query Parser
+;;; Query Parser:
 
 (defun p-search-query-tokenize (query-str)
   "Break QUERY-STR into consituent tokens."
@@ -532,13 +330,6 @@ given a value of zero-prob."
           (push `(TERM ,(buffer-substring-no-properties pos (point))) tokens))))
     (push 'eoq tokens)
     (nreverse tokens)))
-
-(defvar p-search-query-parse--tokens nil
-  "Variable to be used dynamically when parsing.
-Stores the list of tokens being parsed.")
-(defvar p-search-query-parse--idx nil
-  "Variable to be used dynamically when parsing.
-Indicates which token we are currently considering.")
 
 (defun p-search-query-parse--at-token ()
   "When parsing p-search query, return the current token."
@@ -640,36 +431,65 @@ structure."
           `(and ,@elt)
         elt)))))
 
-
-
-;;; API
-
 (defun p-search-query-parse (query-string)
   "Parse QUERY-STRING and return its query AST."
   (let* ((tokens (p-search-query-tokenize query-string))
          (ast (p-search-query-parse-tokens tokens)))
     ast))
 
-(defun p-search-query (query-string N total-size p-callback)
+
+;;; Mark
+
+(defun p-search--mark-query* (query mark-function)
+  "Return intervals where QUERY matches content in current buffer."
+  (pcase query
+    (`(terms . ,elts)
+     (let* ((ress '()))
+       (dolist (elt elts)
+         (let* ((res (p-search--mark-query* elt mark-function)))
+           (when res
+             (setq ress (range-concat ress res)))))
+       ress))
+    ((cl-type string)
+     (funcall mark-function query))
+    (`(and . ,elts)
+     (let* ((ress '()))
+       (dolist (elt elts)
+         (let* ((res (p-search--mark-query* elt mark-function)))
+           (when res
+             (setq ress (range-concat ress res)))))
+       ress))
+    ;; (`(near . ,elts)
+    ;;  (p-search-query-near* elts))
+    (`(not ,_elt)
+     (ignore))
+    (`(must ,elt)
+     (p-search--mark-query* elt mark-function))
+    (`(must-not ,_elt)
+     (ignore))))
+
+(defun p-search-mark-query (query mark-function)
+  "Dispatch terms of QUERY by MARK-FUNCTION to return match ranges."
+  (let* ((parsed (p-search-query-parse query)))
+    (p-search--mark-query* parsed mark-function)))
+
+
+;;; API Functions
+
+(defun p-search-query (query-string p-callback N total-size)
   "Dispatch query from QUERY-STRING.
-QUERY-STRING's parse is used to dispatch process calls.  N is the
-ptotal number of files being considered and TOTAL-SIZE is the sum
-of the size (in bytes) of all N files.
+
+This function should be called with N being the total number of
+documents and TOTAL-SIZE being the sum of all documents' size.
 
 When all processes finish and results are combined, P-CALLBACK is
-called with one argument, the hashmap of files to probabilities.
-
-Callers of this function should bind `p-search-query-tool' to
-determine which tool is used to search."
+called with one argument, the hashmap of documents to
+probabilities."
   (let* ((ast (p-search-query-parse query-string))
          (cb (lambda (res)
-               (let* ((scores (p-search-query-bm25 res N total-size ))
+               (let* ((scores (p-search-query-bm25 res N total-size))
                       (probs (p-search-query-scores-to-p-linear scores)))
                  (funcall p-callback probs)))))
-    (if p-search-query-tool
-        (p-search-query-run ast cb)
-      (p-search-query-scan ast cb))))
-
-(provide 'p-search-query)
+    (p-search-query-run ast cb)))
 
 ;;; p-search-query.el ends here
