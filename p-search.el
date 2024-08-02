@@ -274,7 +274,9 @@ Called with three arguments: prior, base-priors, and args.")
 
   (result-hint-function nil
    :documentation "Optional function that takes the result in a buffer and
-returns ranges of significance."))
+returns ranges of significance.")
+  (transient-key-string nil
+   :documentation "If non-nil, represents the sequences of characters to use for transient prefix."))
 
 (cl-defstruct (p-search-prior
                (:copier nil)
@@ -725,7 +727,7 @@ INIT is the initial value given to the reduce operation."
 
 (defconst p-search-prior-title
   (p-search-prior-template-create
-   :group 'general
+   :group ""
    :name "title heading"
    :required-properties '(title)
    :input-spec '((title . (p-search-infix-string
@@ -741,16 +743,17 @@ INIT is the initial value given to the reduce operation."
           (let* ((doc-title (p-search-document-property document 'title)))
             (when (string-search title doc-title)
               (p-search-set-score prior document p-search-score-yes))))
-        documents)))))
+        documents)))
+   :transient-key-string "he"))
 
 (defconst p-search-prior-suffix
   (p-search-prior-template-create
-   :group 'general
+   :group ""
    :name "suffix of title"
    :required-properties '(title)
    :input-spec '((suffix . (p-search-infix-string
                            :key "s"
-                           :description "Suffix")))
+                           :description "suffix")))
    :initialize-function
    (lambda (prior)
      (let* ((args (p-search-prior-arguments prior))
@@ -761,13 +764,14 @@ INIT is the initial value given to the reduce operation."
           (let* ((doc-title (p-search-document-property document 'title)))
             (when (string-suffix-p suffix doc-title)
               (p-search-set-score prior document p-search-score-yes))))
-        documents)))))
+        documents)))
+   :transient-key-string "su"))
 
 ;;; Buffer priors
 
 (defconst p-search-prior-major-mode
   (p-search-prior-template-create
-   :group 'emacs
+   :group "emacs"
    :name "major mode"
    :required-properties '(buffer)
    :input-spec '((major-mode . (p-search-infix-string
@@ -784,13 +788,14 @@ INIT is the initial value given to the reduce operation."
                  (ok (with-current-buffer buffer (eql major-mode-sym major-mode))))
             (when ok
               (p-search-set-score prior document p-search-score-yes))))
-        documents)))))
+        documents)))
+   :transient-key-string "mm"))
 
 ;;; File system priors
 
 (defconst p-search-prior-subdirectory
   (p-search-prior-template-create
-   :group 'filesystem
+   :group "filesystem"
    :name "subdirectory"
    :required-properties '(file-name)
    :input-spec '((include-directory . (p-search-infix-directory
@@ -813,7 +818,8 @@ INIT is the initial value given to the reduce operation."
                   (p-search-set-score prior document p-search-score-yes)
                 (p-search-set-score prior document p-search-score-no)
                 (throw 'out nil)))))
-        documents)))))
+        documents)))
+   :transient-key-string "sd"))
 
 (defconst p-search-prior-modification-date nil)
 
@@ -857,7 +863,7 @@ Called with user supplied ARGS for the prior."
 
 (defconst p-search-prior-query
   (p-search-prior-template-create
-   :group 'general
+   :group ""
    :name "text query"
    :required-properties '()
    :input-spec '((query-string . (p-search-infix-string
@@ -865,7 +871,8 @@ Called with user supplied ARGS for the prior."
                                   :description "Query string")))
    :options-spec '()
    :initialize-function #'p-search--prior-query-initialize-function
-   :result-hint-function #'p-search--text-search-hint))
+   :result-hint-function #'p-search--text-search-hint
+   :transient-key-string "qu"))
 
 ;;; Git Priors
 
@@ -917,7 +924,7 @@ Called with user supplied ARGS for the prior."
 
 (defconst p-search-prior-git-author
   (p-search-prior-template-create
-   :group 'git
+   :group "git"
    :name "Git Author"
    :required-properties '(git-root)
    :input-spec '((git-author . (p-search-infix-choices
@@ -925,7 +932,8 @@ Called with user supplied ARGS for the prior."
                                 :description "Git Author"
                                 :choices p-search--available-git-authors)))
    :options-spec '()
-   :initialize-function #'p-search--prior-git-author-initialize-function))
+   :initialize-function #'p-search--prior-git-author-initialize-function
+   :transient-key-string "au"))
 
 (defun p-search--prior-git-commit-frequency-initialize-function (prior)
   "Initialization for git commit frequency for PRIOR."
@@ -958,13 +966,14 @@ Called with user supplied ARGS for the prior."
 (defconst p-search-prior-git-commit-frequency
   (p-search-prior-template-create
    :name "git commit frequency"
-   :group 'git
+   :group "git"
    :input-spec
    '((n-commits . (p-search-infix-number
                    :key "n"
                    :description "Consider last N commits."
                    :default-value 20)))
-   :initialize-function #'p-search--prior-git-commit-frequency-initialize-function))
+   :initialize-function #'p-search--prior-git-commit-frequency-initialize-function
+   :transient-key-string "cf"))
 
 
 ;;; Queries
@@ -1139,7 +1148,7 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
 ;; Transient is the key which allows for easy configuration of the
 ;; information retrieval system's parameters.  Due to the generic
 ;; nature of the search system the various transient menus are created
-;; at runtime.
+;;n at runtime.
 (defun p-search--transient-suffix-from-spec (name+spec &optional always-read default-value)
   "Return a transient suffix from a NAME+SPEC cons.
 Pass value of ALWAYS-READ to transient object.  This is used for
@@ -1424,37 +1433,43 @@ This function will also start any process or thread described by TEMPLATE."
   "Dispatch transient menu for items in PRIOR-TEMPLATES."
   (let* ((prior-templates (p-search-relevant-prior-templates))
          (all-group-names (seq-map (lambda (tmpl)
-                                     (symbol-name (p-search-prior-template-group tmpl)))
+                                     (p-search-prior-template-group tmpl))
                                    prior-templates))
          (grouped-priors (seq-map
                           (lambda (group+templates)
                             (let* ((templates (cdr group+templates))
-                                   (template-names (seq-map #'p-search-prior-template-name templates))
-                                   (group (car group+templates))
-                                   (group-name (symbol-name group)))
+                                   (template-names (seq-map (lambda (template)
+                                                              (concat
+                                                               (or (p-search-prior-template-transient-key-string template) "")
+                                                               (p-search-prior-template-name template)))
+                                                            templates))
+                                   (group-name (car group+templates)))
                               ;; example of the format we're trying to put the data in:
                               ;; [["Buffer"
                               ;;   ("b n" "buffer name"
                               ;;    (lambda () (interactive) (myfunc)))]]
                               (vector
                                (seq-into
-                                `(,group-name
+                                `(,(if (string-blank-p group-name) "general" group-name)
                                   ,@(seq-map
                                      (lambda (template)
-                                       (list (concat (p-search--unique-prefix
-                                                      group-name
-                                                      all-group-names)
-                                                     " "
-                                                     (p-search--unique-prefix
-                                                      (p-search-prior-template-name template)
-                                                      template-names))
-                                             (p-search-prior-template-name template)
-                                             `(lambda ()
-                                                (interactive)
-                                                (message "dispatching %s"
-                                                         ,(p-search-prior-template-name template))
-                                                (p-search-dispatch-add-prior
-                                                 ,template))))
+                                       (let ((group-prefix (p-search--unique-prefix
+                                                            group-name
+                                                            all-group-names)))
+                                         (list (concat group-prefix
+                                                       (if (string-blank-p group-prefix) "" " ")
+                                                       (p-search--unique-prefix
+                                                        (concat
+                                                         (or (p-search-prior-template-transient-key-string template) "")
+                                                         (p-search-prior-template-name template))
+                                                        template-names))
+                                               (p-search-prior-template-name template)
+                                               `(lambda ()
+                                                  (interactive)
+                                                  (message "dispatching %s"
+                                                           ,(p-search-prior-template-name template))
+                                                  (p-search-dispatch-add-prior
+                                                   ,template)))))
                                      templates))
                                 'vector))))
                           (seq-group-by
@@ -1611,29 +1626,31 @@ the heading to the point where BODY leaves off."
 The number of lines returned is determined by `p-search-document-preview-size'."
   (let* ((document-contents (p-search-document-property document 'content))
          (buffer (generate-new-buffer "*test-buffer*"))
-         (priors p-search-priors))
+         (priors p-search-priors)
+         (preview-size p-search-document-preview-size))
     (with-current-buffer buffer
-      (insert document-contents)
-      ;; propertize buffer according to filename
-      (when (eql (car document) 'file)
-        (let ((buffer-file-name (cadr document)))
-          (set-auto-mode)))
-      (goto-char (point-min))
-      (let* ((hints (p-search--document-hints priors)))
-        (if hints
-            (progn
-              (font-lock-fontify-region (point-min) (point-max))
-              (p-search--preview-from-hints hints))
-          ;; if there are no hints, just get the first n lines
-          (let ((start (point)))
-            (forward-line p-search-document-preview-size)
-            (let ((end (point)))
-              (font-lock-fontify-region start end)
-              (let ((res (buffer-substring start end)))
-                (if (and (> (length res) 0)
-                         (eql (aref res (1- (length res))) ?\n))
-                    res
-                  (concat res "\n"))))))))))
+      (let* ((p-search-document-preview-size preview-size))
+        (insert document-contents)
+        ;; propertize buffer according to filename
+        (when (eql (car document) 'file)
+          (let ((buffer-file-name (cadr document)))
+            (set-auto-mode)))
+        (goto-char (point-min))
+        (let* ((hints (p-search--document-hints priors)))
+          (if hints
+              (progn
+                (font-lock-fontify-region (point-min) (point-max))
+                (p-search--preview-from-hints hints))
+            ;; if there are no hints, just get the first n lines
+            (let ((start (point)))
+              (forward-line p-search-document-preview-size)
+              (let ((end (point)))
+                (font-lock-fontify-region start end)
+                (let ((res (buffer-substring start end)))
+                  (if (and (> (length res) 0)
+                           (eql (aref res (1- (length res))) ?\n))
+                      res
+                    (concat res "\n")))))))))))
 
 (defun p-search--add-candidate-generator (generator args)
   "Append GENERATOR with ARGS to the current p-search session."
@@ -1837,18 +1854,19 @@ values of ARGS."
         (insert (propertize "Press \"c\" to add a candidate generator.\n\n"
                             'face 'shadow)))
       (dolist (generator-args p-search-active-candidate-generators)
-        (p-search--insert-candidate-generator generator-args)))
-    (insert "\n")
+        (p-search--insert-candidate-generator generator-args))
+      (insert "\n"))
     (p-search-add-section `((heading . ,(propertize (format "Priors (%d)" (length p-search-priors))
                                                     'face 'p-search-section-heading))
                             (props . (p-search-section-id priors)))
       (unless p-search-priors
         (insert (propertize "No priors currently being applied.
-Press \"a\" to add new search criteria.\n" 'face 'shadow)))
+Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (dolist (prior p-search-priors)
-        (p-search--insert-prior prior)))
+        (p-search--insert-prior prior))
+      (insert "\n"))
     ;; TODO - Toggle occluded sections
-    (insert "\n")
+
     (p-search--insert-results)
     (goto-char (point-min))
     (forward-line (1- at-line))
@@ -1931,9 +1949,25 @@ Press \"a\" to add new search criteria.\n" 'face 'shadow)))
   (unless (derived-mode-p 'p-search-mode)
     (error "No current p-search session found"))
   (let* ((val (get-char-property (point) 'p-search-section-id)))
-    (if (eql val 'candidate-generators)
-        (p-search-add-candidate-generator)
-      (p-search-add-prior))))
+    (cond ((eql val 'candidate-generators)
+           (p-search-add-candidate-generator))
+          ((eql val 'priors)
+           (p-search-add-prior))
+          (t
+           (beep)))))
+
+(defun p-search-decrease-preview-size (amt)
+  "Decrease the window size by AMT."
+  (interactive "p")
+  (when (> p-search-document-preview-size 0)
+    (cl-decf p-search-document-preview-size amt)
+    (p-search--reprint)))
+
+(defun p-search-increase-preview-size (amt)
+  "Increase the window size by AMT."
+  (interactive "p")
+  (cl-incf p-search-document-preview-size amt)
+  (p-search--reprint))
 
 (defun p-search-refresh-buffer ()
   "Redraw the buffer of current session."
@@ -1954,6 +1988,8 @@ Press \"a\" to add new search criteria.\n" 'face 'shadow)))
     ;; (keymap-set map "n" #'p-search-obs-not-relevant)
     ;; (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "P" #'p-search-add-prior)
+    (keymap-set map "+" #'p-search-increase-preview-size)
+    (keymap-set map "-" #'p-search-decrease-preview-size)
     (keymap-set map "<tab>" #'p-search-toggle-section)
     ;; (keymap-set map "<return>" #'p-search-find-file)
     ;; (keymap-set map "C-o" #'p-search-display-file)
