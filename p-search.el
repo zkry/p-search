@@ -88,6 +88,11 @@
   :group 'p-search
   :type 'integer)
 
+(defcustom p-search-initial-generator-function #'p-search-candidate-generator-from-project-root
+  "Function to call to get initial candidate generator."
+  :group 'p-search
+  :type 'function)
+
 
 ;;; Consts
 
@@ -1620,14 +1625,15 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (font-lock-fontify-region (point-min) (point-max))
               (p-search--preview-from-hints hints))
           ;; if there are no hints, just get the first n lines
-          (let* ((start (point)))
+          (let ((start (point)))
             (forward-line p-search-document-preview-size)
-            (font-lock-fontify-region start (point))
-            (let ((res (buffer-substring start (point))))
-              (if (and (> (length res) 0)
-                       (eql (aref res (1- (length res))) ?\n))
-                  res
-                (concat res "\n")))))))))
+            (let ((end (point)))
+              (font-lock-fontify-region start end)
+              (let ((res (buffer-substring start end)))
+                (if (and (> (length res) 0)
+                         (eql (aref res (1- (length res))) ?\n))
+                    res
+                  (concat res "\n"))))))))))
 
 (defun p-search--add-candidate-generator (generator args)
   "Append GENERATOR with ARGS to the current p-search session."
@@ -1672,8 +1678,24 @@ The number of lines returned is determined by `p-search-document-preview-size'."
 
 (defun p-search--setup-candidate-generators ()
   "Setup initial candidate generators for session."
-  ;; TODO: figure out how I want the user to specify desired initial priors.
-  (p-search--add-candidate-generator p-search-candidate-generator-buffers '()))
+  (when p-search-initial-generator-function
+    (pcase-let* ((`(,gen . ,args) (funcall p-search-initial-generator-function)))
+      (p-search--add-candidate-generator gen args))))
+
+(defun p-search-candidate-generator-from-project-root ()
+  "Return a cons of the filesystem generator with predefined defaults."
+  (let* ((root (project-root (project-current))))
+    (if root
+        (cons
+         p-search-candidate-generator-filesystem
+         `((base-directory . ,(expand-file-name root))
+          (filename-regexp . ".*")
+          (search-tool . ,p-search-default-search-tool)))
+      (cons
+         p-search-candidate-generator-filesystem
+         `((base-directory . ,(expand-file-name default-directory))
+          (filename-regexp . ".*")
+          (search-tool . ,p-search-default-search-tool))))))
 
 (defun p-search--display-columns ()
   "Return a list of two numbers: the start of column 2 and the end of column 2."
