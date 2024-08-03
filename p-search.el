@@ -93,6 +93,11 @@
   :group 'p-search
   :type 'function)
 
+(defcustom p-search-show-preview-lines t
+  "If non-nil, display line numbers in preview."
+  :group 'p-search
+  :type 'boolean)
+
 
 ;;; Consts
 
@@ -1584,7 +1589,7 @@ the heading to the point where BODY leaves off."
                                                      ,section-name)))))))
 
 
-;;; Display of p-search Major Mode
+;;; Display
 
 ;; This section contains the machinery for the p-search major mode.
 ;; The p-search major mode is for interacting with a search session.  The user
@@ -1602,6 +1607,26 @@ the heading to the point where BODY leaves off."
             (setq hints (range-concat hints hint-ranges))))))
     hints))
 
+(defun p-search--buffer-substring-line-number (start end)
+  "Return area of buffer from START to END with line numbers inserted."
+  (let* ((line-no (line-number-at-pos start))
+         (max-line-no (line-number-at-pos end))
+         (digit-ct (1+ (floor (log max-line-no 10))))
+         (substring (buffer-substring start end)))
+    (with-temp-buffer
+      (insert substring)
+      (goto-char (point-min))
+      (while (not (eobp))
+        (insert (propertize
+                 (format (concat "%"
+                                 (number-to-string digit-ct)
+                                 "d ")
+                         line-no)
+                 'face 'line-number))
+        (forward-line 1)
+        (cl-incf line-no))
+      (buffer-string))))
+
 (defun p-search--preview-from-hints (hints)
   "Return a string from current buffer highlighting the HINTS ranges."
   (let* ((output-string ""))
@@ -1612,7 +1637,9 @@ the heading to the point where BODY leaves off."
         (goto-char start)
         (let* ((line-no (line-number-at-pos)))
           (when (not (member line-no added-lines))
-            (let* ((line-str (buffer-substring (pos-bol) (pos-eol))))
+            (let* ((line-str (if p-search-show-preview-lines
+                                 (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                               (buffer-substring (pos-bol) (pos-eol)))))
               (push line-no added-lines)
               (setq output-string (concat output-string line-str "\n")))))))
     (concat
@@ -1646,7 +1673,9 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (forward-line p-search-document-preview-size)
               (let ((end (point)))
                 (font-lock-fontify-region start end)
-                (let ((res (buffer-substring start end)))
+                (let ((res (if p-search-show-preview-lines
+                               (p-search--buffer-substring-line-number start end)
+                             (buffer-substring start end))))
                   (if (and (> (length res) 0)
                            (eql (aref res (1- (length res))) ?\n))
                       res
