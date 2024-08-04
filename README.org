@@ -1,5 +1,21 @@
-* p-search: probablistic search tool aggregator
+* p-search
 
-  **This project is a work in progress**
+  p-search is an Emacs tool to find things.  It combines concepts from
+  information retrievial and Bayesian search theory to assist a user
+  in finding documents.
 
-  Once you see documentation here, you'll know it's usable.
+  Boolean searches (i.e. the document contains the word "X"), while
+  simple and useful, ofthen don't match the prior beliefs of the
+  searcher concerning where the relevant files are.  Often times the
+  searcher has specific ideas as to where the document is located.
+  Like what type of file it is, who authored the document, when the
+  document was created.  The searcher often times isn't fully
+  confident as to how the seach terms appear or whether they appear at
+  all.
+
+  p-search provides a framework to coherently combine all this data to
+  rank documents and to revise the rankings as the user searches
+  through documents.
+
+  This project is still a work in progress.  When you see
+  documentation here, it means that the package is ready to be used.
