@@ -884,7 +884,7 @@ Called with user supplied ARGS for the prior."
 (defun p-search--available-git-authors ()
   "Return list of all authors for current session."
   (let* ((authors '())
-         (git-roots (p-search2-unique-properties 'git-root)))
+         (git-roots (p-search-unique-properties 'git-root)))
     (dolist (git-root git-roots)
       (let ((default-directory git-root))
         (setq authors (append authors (string-lines (shell-command-to-string "git log --all --format='%aN' | sort -u") t)))))
@@ -2056,7 +2056,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
   "Post-command-hook for p-search mode."
   (p-search-highlight-point-section))
 
-(define-derived-mode p-search-mode special-mode "p-search2"
+(define-derived-mode p-search-mode special-mode "p-search"
   "Major mode for p-search."
   :group 'p-search
   (hack-dir-local-variables-non-file-buffer)

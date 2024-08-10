@@ -19,3 +19,5 @@
 
   This project is still a work in progress.  When you see
   documentation here, it means that the package is ready to be used.
+
+  [[./documents/screenshot.png]]
