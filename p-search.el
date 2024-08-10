@@ -1408,6 +1408,7 @@ This function will also start any process or thread described by TEMPLATE."
 (defun p-search-dispatch-edit-candidate-generator (generator+args)
   "Dispatch transient menu for editing GENERATOR+ARGS."
   (let* ((candidate-generator (car generator+args))
+         (prev-args (cdr generator+args))
          (input-specs (p-search-candidate-generator-input-spec candidate-generator))
          (option-specs (p-search-candidate-generator-options-spec candidate-generator)))
     (apply #'p-search-dispatch-transient
@@ -1417,16 +1418,19 @@ This function will also start any process or thread described by TEMPLATE."
                    (let* ((name (car name+spec))
                           (spec (p-search--resolve-spec (cdr name+spec)))
                           (reader (oref (get (car spec) 'transient--suffix) :reader))
-                          (default-value
-                           (or (plist-get (cdr spec) :default-value)
-                            (funcall reader (format "%s:" name) nil nil))))
+                          (default-value (alist-get (cdr spec) prev-args)))
                      (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
                  input-specs)]
              ["Options"
               ,@(seq-map (lambda (name+spec)
                            (let* ((name (car name+spec))
-                                  (spec (p-search--resolve-spec (cdr name+spec))))
-                             (p-search--transient-suffix-from-spec (cons name spec) nil)))
+                                  (spec (p-search--resolve-spec (cdr name+spec)))
+                                  ;; we don't want to use the specs default when editing
+                                  ;; we we reset it with append.
+                                  (spec (append spec
+                                                '(:default-value nil)))
+                                  (default-value (alist-get (cdr spec) prev-args)))
+                             (p-search--transient-suffix-from-spec (cons name spec) default-value)))
                          option-specs)]
              ["Actions"
               ("e" "edit"
@@ -1735,13 +1739,15 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         (cons
          p-search-candidate-generator-filesystem
          `((base-directory . ,(expand-file-name root))
-          (filename-regexp . ".*")
-          (search-tool . ,p-search-default-search-tool)))
+           (filename-regexp . ".*")
+           (search-tool . ,p-search-default-search-tool)
+           (use-git-ignore . on)))
       (cons
          p-search-candidate-generator-filesystem
          `((base-directory . ,(expand-file-name default-directory))
-          (filename-regexp . ".*")
-          (search-tool . ,p-search-default-search-tool))))))
+           (filename-regexp . ".*")
+           (search-tool . ,p-search-default-search-tool)
+           (use-git-ignore . on))))))
 
 (defun p-search--display-columns ()
   "Return a list of two numbers: the start of column 2 and the end of column 2."
@@ -1921,6 +1927,24 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (p-search--reprint)
       (p-search-calculate))
     buffer))
+
+
+
+;;; Debug
+(defun p-search-display-candidates ()
+  "Write the list of candidates into another buffer."
+  (let* ((candidates (p-search-candidates))
+         (outb (generate-new-buffer "*[DEBUG]p-search candidates*"))
+         (p-search-buffer (current-buffer)))
+    (with-current-buffer outb
+      (maphash
+       (lambda (id doc)
+         (let* ((title (with-current-buffer p-search-buffer
+                         (p-search-document-property id 'title))))
+           (insert title "\n")))
+       candidates))
+    (display-buffer outb)))
+
 
 
 ;;; Commands
