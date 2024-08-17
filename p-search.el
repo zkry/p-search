@@ -120,6 +120,10 @@ The documentizer is used to make common document types uniform and extendable.
 Documents are given ID of the form (list type-sym element), where element can
 be any Lisp object.")
 
+(defconst p-search-documentizer-function-properties (make-hash-table :test #'equal)
+  "Hashmap containing properties of documents.
+Key is of type (list type-symbol property-symbol).")
+
 (defconst p-search-candidate-generators '()
   "List of candidate-generator objects known to the p-search system.")
 
@@ -457,6 +461,21 @@ A term regex is noted for marking boundary characters."
 ;; extendible, being the bridge between entities (be it on the
 ;; filesystem or in Emacs) and IR documents.
 
+(defun p-search-def-function (type property-symbol value)
+  "Define function property PROPERTY-SYMBOL on TYPE."
+  (puthash
+   (list type property-symbol)
+   value
+   p-search-documentizer-function-properties))
+
+(defun p-search-run-document-function (document-id prop)
+  "Return the static property PROP of document DOCUMENT-ID."
+  (let* ((fn (gethash
+              (list (car document-id) prop)
+              p-search-documentizer-function-properties)))
+    (when fn
+      (funcall fn (cadr document-id)))))
+
 (defun p-search-def-property (type property-symbol function)
   "Define property PROPERTY-SYMBOL on TYPE by calling FUNCTION."
   (let* ((funcs (gethash type p-search-documentizer-functions))
@@ -484,12 +503,14 @@ A term regex is noted for marking boundary characters."
 (p-search-def-property 'buffer 'file-name #'buffer-file-name)
 (p-search-def-property 'buffer 'content (lambda (buf) (with-current-buffer buf (buffer-string))))
 (p-search-def-property 'buffer 'buffer #'identity)
+(p-search-def-function 'buffer 'p-search-goto-document #'display-buffer)
 
 (p-search-def-property 'file 'title #'identity)
 (p-search-def-property 'file 'content #'p-search--file-text)
 (p-search-def-property 'file 'file-name #'identity)
 (p-search-def-property 'file 'size #'p-search--file-size)
 (p-search-def-property 'file 'git-root #'p-search--file-git-root)
+(p-search-def-function 'file 'p-search-goto-document #'find-file-other-window)
 
 (p-search-def-property :default 'size #'p-search--size-from-content)
 
@@ -1642,9 +1663,11 @@ the heading to the point where BODY leaves off."
         (goto-char start)
         (let* ((line-no (line-number-at-pos)))
           (when (not (member line-no added-lines))
-            (let* ((line-str (if p-search-show-preview-lines
-                                 (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
-                               (buffer-substring (pos-bol) (pos-eol)))))
+            (let* ((line-str (propertize
+                              (if p-search-show-preview-lines
+                                  (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                                (buffer-substring (pos-bol) (pos-eol)))
+                              'p-search-document-line-no line-no)))
               (push line-no added-lines)
               (setq output-string (concat output-string line-str "\n")))))))
     (concat
@@ -1681,6 +1704,16 @@ The number of lines returned is determined by `p-search-document-preview-size'."
                 (let ((res (if p-search-show-preview-lines
                                (p-search--buffer-substring-line-number start end)
                              (buffer-substring start end))))
+                  ;; add line no text properties
+                  (setq res
+                        (string-join
+                         (seq-map-indexed
+                          (lambda (str i)
+                            (propertize (concat str "\n") 'p-search-document-line-no (1+ i)))
+                          (string-split res "\n"))
+                         ""))
+                  ;; remove final newline (needed to correctly propertize the "\n" using string-join)
+                  (setq res (substring res 0 (1- (length res))))
                   (if (and (> (length res) 0)
                            (eql (aref res (1- (length res))) ?\n))
                       res
@@ -2030,6 +2063,21 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (error "No current p-search session found"))
   (p-search--reprint))
 
+(defun p-search-find-file ()
+  "Find the file at the current point."
+  (interactive)
+  (let* ((document (get-char-property (point) 'p-search-result))
+         (line-no (get-char-property (point) 'p-search-document-line-no)))
+    (unless document
+      (user-error "No document found under point"))
+    (let* ((display-function (p-search-document-static-property document 'p-search-display-document)))
+      (unless display-function
+        (user-error "Can not display document of type %s" (car document)))
+      (p-search-run-document-function document 'p-search-goto-document)
+      (when line-no
+        (goto-char (point-min))
+        (forward-line (1- line-no))))))
+
 (defconst p-search-mode-map
   (let ((map (make-keymap)))
     (suppress-keymap map t)
@@ -2045,7 +2093,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (keymap-set map "+" #'p-search-increase-preview-size)
     (keymap-set map "-" #'p-search-decrease-preview-size)
     (keymap-set map "<tab>" #'p-search-toggle-section)
-    ;; (keymap-set map "<return>" #'p-search-find-file)
+    (keymap-set map "<return>" #'p-search-find-file)
     ;; (keymap-set map "C-o" #'p-search-display-file)
     ;; (keymap-set map "1" #'p-search-show-level-1)
     ;; (keymap-set map "2" #'p-search-show-level-2)
