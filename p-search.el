@@ -918,7 +918,7 @@ Called with user supplied ARGS for the prior."
          (init-buf (current-buffer))
          (author (alist-get 'git-author args))
          (base-directories (p-search-unique-properties 'git-root))
-         (git-command (format "git log --author=\"%s\" --name-only --pretty=format: | sort -u" author)))
+         (git-command (format "git log --author=\"%s\" --name-only --pretty=format:" author)))
     (dolist (default-directory base-directories)
       (let* ((buf (generate-new-buffer "*p-search-git-author*")))
         (make-process
@@ -936,14 +936,15 @@ Called with user supplied ARGS for the prior."
                          (with-current-buffer init-buf
                            (dolist (file (string-split content "\n"))
                              (when (> (length file) 0)
-                               (let ((doc-id (list 'file (file-name-concat root-dir file))))
-                                 (let ((count (1+ (gethash doc-id commit-counts 0))))
-                                   (when (> count max-counts)
-                                     (setq max-counts count))
-                                   (puthash doc-id count commit-counts)))))
+                               (when (not (string-blank-p file))
+                                 (let ((doc-id (list 'file (file-name-concat root-dir file))))
+                                   (let ((count (1+ (gethash doc-id commit-counts 0))))
+                                     (when (> count max-counts)
+                                       (setq max-counts count))
+                                     (puthash doc-id count commit-counts))))))
                            (maphash
                             (lambda (doc-id count)
-                              (let ((p (+ 0.5 (* 0.2 (/ count max-counts)))))
+                              (let ((p (+ 0.5 (* 0.2 (/ (float count) max-counts)))))
                                 (p-search-set-score prior doc-id p)))
                             commit-counts)
                            (p-search-set-score prior :default p-search-score-no)
@@ -1167,6 +1168,24 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
       (dolist (elt elts)
         (heap-add p-search-posterior-probs elt))
       elts)))
+
+(defun p-search--debug-document-posterior-calculations ()
+  "Print all document's posterior calculation in debug buffer."
+  (let* ((buffer (generate-new-buffer "*p-search-debug*"))
+         (posterior p-search-posterior-probs)
+         (elts))
+    (while (not (heap-empty p-search-posterior-probs))
+      (let* ((newelt (heap-delete-root p-search-posterior-probs)))
+        (push newelt elts)))
+    (setq elts (nreverse elts))
+    (setq elts (seq-filter #'identity elts))
+    (setq p-search-posterior-probs (p-search--create-heap (length elts)))
+    (dolist (elt elts)
+      (heap-add p-search-posterior-probs elt))
+    (with-current-buffer buffer
+      (pcase-dolist (`(,doc ,p) elts)
+        (insert (format "%15f %s\n" p doc))))
+    (display-buffer buffer)))
 
 
 ;;; Transient Integration
