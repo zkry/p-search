@@ -2090,13 +2090,10 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
          (line-no (get-char-property (point) 'p-search-document-line-no)))
     (unless document
       (user-error "No document found under point"))
-    (let* ((display-function (p-search-document-static-property document 'p-search-display-document)))
-      (unless display-function
-        (user-error "Can not display document of type %s" (car document)))
-      (p-search-run-document-function document 'p-search-goto-document)
-      (when line-no
-        (goto-char (point-min))
-        (forward-line (1- line-no))))))
+    (p-search-run-document-function document 'p-search-goto-document)
+    (when line-no
+      (goto-char (point-min))
+      (forward-line (1- line-no)))))
 
 (defconst p-search-mode-map
   (let ((map (make-keymap)))
