@@ -1107,6 +1107,19 @@ If SIZE is provided create the heap with this size."
   ;; TODO
   p)
 
+(defun p-search--p-prior-doc (prior doc-id)
+  "Return the probability of DOC-ID of given PRIOR."
+  (let* ((prior-results (p-search-prior-results prior))
+         (default-result (or (gethash :default prior-results)
+                             0.5))
+         (importance (alist-get 'importance (p-search-prior-arguments prior) 'medium))
+         (complement (alist-get 'complement (p-search-prior-arguments prior)))
+         (doc-result (gethash doc-id prior-results default-result))
+         (prior-p (p-search-prior-modified-p doc-result importance)))
+    (when complement
+      (setq prior-p (- 1.0 prior-p)))
+    prior-p))
+
 (defun p-search-calculate (&optional no-reprint)
   "Calculate the posterior probabilities of all search candidates.
 If NO-REPRINT is nil, don't redraw p-search buffer."
@@ -1120,15 +1133,7 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
      (lambda (id _)
        (let* ((probability 1.0))
          (dolist (prior priors)
-           (let* ((prior-results (p-search-prior-results prior))
-                  (default-result (or (gethash :default prior-results)
-                                      0.5))
-                  (importance (alist-get 'importance (p-search-prior-arguments prior) 'medium))
-                  (complement (alist-get 'complement (p-search-prior-arguments prior)))
-                  (doc-result (gethash id prior-results default-result))
-                  (prior-p (p-search-prior-modified-p doc-result importance)))
-             (when complement
-               (setq prior-p (- 1.0 prior-p)))
+           (let* ((prior-p (p-search--p-prior-doc prior id)))
              (setq probability (* probability prior-p))))
          (setq probability (* probability (gethash id p-search-observations 1.0)))
          (heap-add res (list id probability))
@@ -1186,6 +1191,26 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
       (pcase-dolist (`(,doc ,p) elts)
         (insert (format "%15f %s\n" p doc))))
     (display-buffer buffer)))
+
+;;; Entropy Calculation
+
+;; Entropy is the measurement of uncertainty. Each prior can have a
+;; certain level of uncertainty about it.  For example, assuming all
+;; documents have equal probability of being the target would have
+;; much higher entropy than a prior that narrows down the search
+;; results to a few documents.
+
+(defun p-search-entropy-from-prior (prior)
+  "Return the entropy of a PRIOR in nats."
+  (let* ((candidates (p-search-candidates))
+         (results (p-search-prior-results prior))
+         (H 0))
+    (maphash
+     (lambda (doc-id _)
+       (let* ((prob (p-search--p-prior-doc prior doc-id)))
+         (cl-incf H (* prob (log prob)))))
+     candidates)
+    (- H)))
 
 
 ;;; Transient Integration
@@ -1869,8 +1894,12 @@ values of ARGS."
                                                   (none . "-"))))
          (complement (alist-get 'complement args))
          (complement-char (if complement (propertize "-" 'face '(:weight extra-bold)) " "))
-         (heading-line (concat complement-char (or importance-char " ") " "
-                               (propertize name 'face 'p-search-prior)))
+         (page-dims (p-search--display-columns))
+         (heading-line-1 (concat complement-char (or importance-char " ") " "
+                                (propertize name 'face 'p-search-prior)))
+         (heading-line (concat heading-line-1
+                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                               (format "%.1f" (p-search-entropy-from-prior prior))))
          (condenced (concat " (" args-string ")")))
     (p-search-add-section
         `((heading . ,heading-line)
@@ -1955,7 +1984,6 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
         (p-search--insert-prior prior))
       (insert "\n"))
     ;; TODO - Toggle occluded sections
-
     (p-search--insert-results)
     (goto-char (point-min))
     (forward-line (1- at-line))
@@ -2095,6 +2123,20 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (goto-char (point-min))
       (forward-line (1- line-no)))))
 
+(defun p-search-display-document ()
+  "Find the file at the current point, displaying it in the other window."
+  (interactive)
+  (let* ((document (get-char-property (point) 'p-search-result))
+         (line-no (get-char-property (point) 'p-search-document-line-no))
+         (current-window (selected-window)))
+    (unless document
+      (user-error "No document found under point"))
+    (p-search-run-document-function document 'p-search-goto-document)
+    (when line-no
+      (goto-char (point-min))
+      (forward-line (1- line-no)))
+    (select-window current-window)))
+
 (defconst p-search-mode-map
   (let ((map (make-keymap)))
     (suppress-keymap map t)
@@ -2111,6 +2153,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (keymap-set map "-" #'p-search-decrease-preview-size)
     (keymap-set map "<tab>" #'p-search-toggle-section)
     (keymap-set map "<return>" #'p-search-find-document)
+    (keymap-set map "C-o" #'p-search-display-document)
     ;; (keymap-set map "C-o" #'p-search-display-file)
     ;; (keymap-set map "1" #'p-search-show-level-1)
     ;; (keymap-set map "2" #'p-search-show-level-2)
