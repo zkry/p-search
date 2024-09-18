@@ -3,7 +3,7 @@
 ;; Author: Zachary Romero
 ;; URL: https://github.com/zkry/p-search.el
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools
 ;;
 
@@ -62,9 +62,8 @@
 (require 'org)
 (require 'transient)
 
-(require 'p-search-transient)
-(require 'p-search-query)
-
+(require 'p-search-transient "p-search-transient.el" t) ;; TODO why is linting erroring
+(require 'p-search-query "p-search-query.el" t)
 
 
 ;;; Custom
@@ -331,13 +330,24 @@ Maps from file name to result indicator.")
   "Return non-nil if git is available from default directory."
   (= (call-process "git" nil nil nil "status") 0))
 
-
 
-;;; Search Tool Interface
+;;; Term Expansion
 
-;; External tools are used to support fast searching of files without
-;; building an index.  This section defineds an interface to work with
-;; these tools.
+;; The following section deals with expanding search terms to provide
+;; better results.  For example, if the user searches of the term
+;; bAnAnA, they may want the exact string "bAnAnA", but the word
+;; "banana" is simmilar enough that it may be what they are looking
+;; for.  The string "bananas" may indicate something they are
+;; searching for too.  Such expansion could take into account
+;; misspellings and alternate spellings, though this is outside the
+;; scope of the initial implementation.
+;;
+;; Terms are expressed via cons of Emacs rx lisp forms and a weight.
+;; The weight is used to give higher scores to terms that match the
+;; original query better.  NOTE: The form ?i is particular to this
+;; package and its presence indicates that case-fold-search should be
+;; bound to nil, making the search case insensitive, or the command
+;; should be ran case insensitively.
 
 (defun p-search--escape-term (string meta-chars)
   "Insert escape \\ characters in STRING for all chars in META-CHARS."
@@ -365,6 +375,173 @@ Maps from file name to result indicator.")
   "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
   (p-search--escape-term string '(?\\ ?.)))
 
+(defun p-search-break-term (term)
+  "Break TERM into sub-words."
+  (if (string-blank-p term)
+      '()
+    (let* ((i 1)
+           (first-char (aref term 0))
+           (term-part (if (eq (char-syntax first-char) ?w)
+                          (string first-char)
+                        ""))
+           (terms '()))
+      (while (< i (length term))
+        (let* ((prev-char (aref term (1- i)))
+               (prev-char-w-p (eq (char-syntax prev-char) ?w))
+               (prev-char-up-p (and prev-char-w-p
+                                    (eq (get-char-code-property prev-char 'general-category) 'Lu)))
+               (at-char (aref term i))
+               (at-char-w-p (eq (char-syntax at-char) ?w))
+               (at-char-up-p (and at-char-w-p
+                                  (eq (get-char-code-property at-char 'general-category) 'Lu))))
+          (when (not prev-char-w-p)
+            (when (not (string-blank-p term-part))
+              (push term-part terms))
+            (setq term-part ""))
+          (when (and prev-char-w-p
+                     (not prev-char-up-p)
+                     at-char-up-p)
+            (push term-part terms)
+            (setq term-part ""))
+          (when at-char-w-p
+            (setq term-part (concat term-part (string at-char)))))
+        (cl-incf i))
+      (when (not (string-blank-p term-part))
+        (push term-part terms))
+      (nreverse terms))))
+
+(defun p-search--term-bounded (term)
+  "Create rx structure from TERM, where TERM is surrounded by word-boundaries or underscore."
+  `(seq (or word-start "_") ,term (or word-end "_")))
+
+(defun p-search--term-relaxed (term)
+  "Create rx structure from TERM, where TERM is not at a word boundary."
+  `(?i (or (seq not-word-boundary ,term)
+           (seq ,term not-word-boundary))))
+
+(defun p-search--terms-to-camel (term-parts)
+  "Create rx structure where TERM-PARTS are in sequence in camel-case.
+Camel-case here is simplified as all the term parts concatanated
+into a single string with a case insensitive search."
+  `(?i ,(string-join term-parts "")))
+
+(defun p-search--terms-to-snake (term-parts)
+  "Create rx structure where TERM-PARTS are in snake-case form."
+  `(?i ,(string-join term-parts "_")))
+
+(defun p-search--terms-to-kebab (term-parts)
+  "Create rx structure where TERM-PARTS are in snake-case form."
+  `(?i ,(string-join term-parts "-")))
+
+(defun p-search--terms-to-seperated (term-parts)
+  "Create rx structure where TERM-PARTS are in snake-case form."
+  `(?i ,(string-join term-parts ".*")))
+
+(defun p-search-expand-term (term)
+  "Return the expansions of string TERM."
+  (let* ((term-parts (p-search-break-term term)))
+    (cond
+     ((null term-parts) nil) ;; no expansions => nothing to do
+     ((= (length term-parts) 1)
+      (list (cons (p-search--term-bounded term) 1.0)
+            (cons (p-search--term-relaxed term) 0.7)))
+     (t
+      (let* ((camel (p-search--terms-to-camel term-parts))
+             (snake (p-search--terms-to-snake term-parts))
+             (kebab (p-search--terms-to-kebab term-parts)))
+        (seq-filter
+         #'identity
+         (append (list (cons term 1.0)
+                       (and (not (equal term camel)) (cons camel 0.7))
+                       (and (not (equal term snake)) (cons snake 0.7))
+                       (and (not (equal term kebab)) (cons kebab 0.7))
+                       (cons (p-search--terms-to-seperated term-parts) 0.5))
+                 (seq-map
+                  (lambda (term-part)
+                    (cons term-part 0.3))
+                  term-parts))))))))
+
+(defun p-search--rx-special-string (cmd type)
+  "Return the special symbol of TYPE for CMD tool."
+  (alist-get
+   type
+   (alist-get
+    cmd
+    '((:grep . ((or . "\\|")
+                (lparen . "\\(")
+                (rparen . "\\)")
+                (word-start . "\\<")
+                (word-end . "\\>")
+                (not-word-boundary . "[[:alnum:]]")))
+      (:rg . ((or . "|")
+              (lparen . "(")
+              (rparen . ")")
+              (word-start . "\\b")
+              (word-end . "\\b")
+              (not-word-boundary . "\\B")))
+      (:ag . ((or . "|")
+              (lparen . "(")
+              (rparen . ")")
+              (word-start . "\\b")
+              (word-end . "\\b")
+              (not-word-boundary . "\\B")))))))
+
+
+(defun p-search--rx-to-string (rx-expr cmd)
+  "Convert an Lisp RX-EXPR to a grep string for CMD.
+Note that a small subset of the rx format is supported.  CMD
+should be the symbol of one of the supported tools."
+  (let* ((case-insensitive-p (and (consp rx-expr)
+                                  (eql (car rx-expr) ?i)))
+         (rx-expr (if case-insensitive-p (cadr rx-expr) rx-expr))
+         (rx-string (pcase rx-expr
+                      ('word-start
+                       (p-search--rx-special-string cmd 'word-start))
+                      ('word-end
+                       (p-search--rx-special-string cmd 'word-end))
+                      ('not-word-boundary
+                       (p-search--rx-special-string cmd 'not-word-boundary))
+                      ((pred (lambda (_) (eql cmd :emacs)))
+                       (rx-to-string rx-expr))
+                      (`(seq . ,rest)
+                       (let* ((sub-parts (seq-map (lambda (rx-expr)
+                                                    (p-search--rx-to-string rx-expr cmd))
+                                                  rest)))
+                         (string-join sub-parts "")))
+                      (`(or . ,rest)
+                       (let* ((sub-parts (seq-map (lambda (rx-expr)
+                                                    (p-search--rx-to-string rx-expr cmd))
+                                                  rest)))
+                         (concat
+                          (p-search--rx-special-string cmd 'lparen)
+                          (string-join sub-parts (p-search--rx-special-string cmd 'or))
+                          (p-search--rx-special-string cmd 'rparen))))
+                      ((pred stringp)
+                       (pcase cmd
+                         (:grep (p-search--grep-escape rx-expr))
+                         (:ag (p-search--ag-escape rx-expr))
+                         (:rg (p-search--rg-escape rx-expr)))))))
+    (if case-insensitive-p
+        (propertize rx-string 'p-search-case-insensitive t)
+      rx-string)))
+
+(defun p-search-expand-term-to-regexps (string cmd)
+  "Perform term expansion on STRING and convert to regexps for CMD."
+  (let* ((rx-expansions (p-search-expand-term string)))
+    (seq-map
+     (lambda (rx-expr+multiplier)
+       (cons (p-search--rx-to-string (car rx-expr+multiplier) cmd)
+             (cdr rx-expr+multiplier)))
+     rx-expansions)))
+
+
+;;; Search Tool Interface
+
+;; External tools are used to support fast searching of files without
+;; building an index.  This section defineds an interface to work with
+;; these tools.
+
+
 (defun p-search--replace-wildcards (string tool)
   "Replace wildcard character in STRING with the wildcard regex fragment.
 TOOL is used to look up the correct wildchard character."
@@ -391,32 +568,12 @@ TOOL is used to look up the correct wildchard character."
           (setq pos (1+ match)))
         (concat new-string (substring string pos))))))
 
-(defun p-search-query-grep--term-regexp (string)
-  "Create a term regular expression from STRING.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search--replace-wildcards (p-search--grep-escape string) :grep)))
-    (list (propertize (concat "\\(\\<\\|_\\)" escaped-string "\\(\\>\\|_\\)") 'p-search-case-insensitive t)
-          (concat "\\B"
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1)))))
 
-(defun p-search-query-rg--term-regexp (string)
-  "Create a term regular expression from STRING.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search--replace-wildcards (p-search--rg-escape string) :rg)))
-    (list (propertize (concat "(\\b|_)" escaped-string "(\\b|_)") 'p-search-case-insensitive t)
-          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1))))) ;; TODO - will these double-count camel case?
-
-(defun p-search-query-ag--term-regexp (string)
-  "Create a term regular expression from STRING for ag tool.
-A term regex is noted for marking boundary characters."
-  (let* ((escaped-string (p-search--replace-wildcards (p-search--ag-escape string) :ag)))
-    (list (propertize (concat "(\\b|_)" escaped-string "(\\b|_)") 'p-search-case-insensitive t)
-          (concat "[a-z]" ;; TODO - use not-in-word-boundary instead
-                  (capitalize (substring escaped-string 0 1))
-                  (substring escaped-string 1)))))
+(defun p-search-query--term-regexps (string cmd)
+  "Expand term STRING and convert them to regular expression strings for CMD.
+CMD should be a symbol for the various search tools such as :grep or :rg."
+  (let* ((escaped-string (p-search--replace-wildcards (p-search--rg-escape string) cmd)))
+    (p-search-expand-term-to-regexps escaped-string cmd)))
 
 (defun p-search-query-emacs--term-regexp (string)
   "Create a term regular expression from STRING.
@@ -425,28 +582,22 @@ A term regex is noted for marking boundary characters."
         (concat (capitalize (substring string 0 1))
                 (substring string 1))))
 
-(defun p-search-query-grep--command (term)
-  "Return command line arguments for rg search of TERM."
-  (let ((case-insensitive-p (get-text-property 0 'p-search-case-insensitive term)))
-    `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case")) ,term ".")))
-
-(defun p-search-query-rg--command (term)
-  "Return command line arguments for rg search of TERM."
-  (let ((case-insensitive-p (get-text-property 0 'p-search-case-insensitive term)))
-    `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive-p '("-i")) ,term)))
-
-(defun p-search-query-ag--command (term)
-  "Return command line arguments for ag search of TERM."
-  (let ((case-insensitive-p (get-text-property 0 'p-search-case-insensitive term)))
-    `("ag" "-c" "--nocolor" ,@(and case-insensitive-p '("-i")) ,term)))
+(defun p-search-query--command (term cmd)
+  "Create list of command args for search of TERM and command CMD."
+  (let* ((case-insensitive-p (get-text-property 0 'p-search-case-insensitive term)))
+    (pcase cmd
+      (:grep `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case")) ,term "."))
+      (:rg `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive-p '("-i")) ,term))
+      (:ag `("ag" "-c" "--nocolor" ,@(and case-insensitive-p '("-i")) ,term)))))
 
 (defun p-search-query-commands (string tool)
-  "Return list of runnable commands from STRING based on TOOL."
-  (pcase tool
-    (:grep (seq-map #'p-search-query-grep--command (p-search-query-grep--term-regexp string))) ;; TODO
-    (:rg (seq-map #'p-search-query-rg--command (p-search-query-rg--term-regexp string)))
-    (:ag (seq-map #'p-search-query-ag--command (p-search-query-ag--term-regexp string)))
-    (_ (error "Unsupported tool `%s'" tool))))
+  "Return cons of runnable commands from STRING based on TOOL with multiplier."
+  (seq-map
+   (lambda (term+multiplier)
+     (cons (p-search-query--command (car term+multiplier) tool)
+           (cdr term+multiplier)))
+   (p-search-query--term-regexps string tool)))
+
 
 
 ;;; Documentizer
@@ -719,17 +870,18 @@ INIT is the initial value given to the reduce operation."
     (lambda (args query-term callback &key _case-insensitive)
       (let* ((search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
-             (commands (p-search-query-commands query-term search-tool))
+             (commands+multipliers (p-search-query-commands query-term search-tool))
              (parent-buffer (current-buffer))
              (proc-complete-ct 0))
-        (dolist (cmd commands)
-          (let* ((buf (generate-new-buffer "*p-search rg")))
+        (dolist (cmd+multiplier commands+multipliers)
+          (let* ((buf (generate-new-buffer "*p-search rg"))
+                 (multiplier (cdr cmd+multiplier)))
             (with-current-buffer buf
               (setq p-search-parent-session-buffer parent-buffer))
             (make-process
              :name "p-search-text-search"
              :buffer buf
-             :command cmd
+             :command (car cmd+multiplier)
              :sentinel
              (lambda (proc event)
                (when (or (member event '("finished\n" "deleted\n"))
@@ -743,10 +895,14 @@ INIT is the initial value given to the reduce operation."
                          (setq f (substring f 2)))
                        (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
                          (let* ((fname (match-string 1 f))
-                                (count (string-to-number (match-string 2 f))))
-                           (puthash (list 'file (file-name-concat default-directory fname)) count file-counts))))
+                                (id (list 'file (file-name-concat default-directory fname)))
+                                (prev-count (gethash id file-counts 0))
+                                (count (* (string-to-number (match-string 2 f)) multiplier)))
+                           (puthash (list 'file (file-name-concat default-directory fname))
+                                    (+ prev-count count)
+                                    file-counts))))
                      (cl-incf proc-complete-ct)
-                     (when (= proc-complete-ct (length commands))
+                     (when (= proc-complete-ct (length commands+multipliers))
                        (with-current-buffer p-search-parent-session-buffer
                          (funcall callback file-counts)))))))))))))))
 
