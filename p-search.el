@@ -62,8 +62,9 @@
 (require 'org)
 (require 'transient)
 
-(require 'p-search-transient "p-search-transient.el" t) ;; TODO why is linting erroring
+(require 'p-search-transient "p-search-transient.el" t)
 (require 'p-search-query "p-search-query.el" t)
+
 
 
 ;;; Custom
@@ -103,7 +104,7 @@
 (defconst p-search-score-yes 0.7)
 (defconst p-search-score-neutral 0.3)
 (defconst p-search-score-no 0.3)
-(defconst p-search-importance-levels '(none low medium high critical))
+(defconst p-search-importance-levels '(none low medium high critical filter))
 (defconst p-search-query-wildcards '((:rg . "[^\w]")
                                      (:ag . "[^\s]")
                                      (:grep . "[^[:space:]]"))
@@ -868,20 +869,22 @@ INIT is the initial value given to the reduce operation."
    :term-frequency-function
    (cl-function
     (lambda (args query-term callback &key _case-insensitive)
-      (let* ((search-tool (alist-get 'search-tool args))
+      (let* ((default-directory (alist-get 'base-directory args))
+             (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
              (commands+multipliers (p-search-query-commands query-term search-tool))
              (parent-buffer (current-buffer))
              (proc-complete-ct 0))
         (dolist (cmd+multiplier commands+multipliers)
           (let* ((buf (generate-new-buffer "*p-search rg"))
-                 (multiplier (cdr cmd+multiplier)))
+                 (multiplier (cdr cmd+multiplier))
+                 (subcommand (car cmd+multiplier)))
             (with-current-buffer buf
               (setq p-search-parent-session-buffer parent-buffer))
             (make-process
              :name "p-search-text-search"
              :buffer buf
-             :command (car cmd+multiplier)
+             :command subcommand
              :sentinel
              (lambda (proc event)
                (when (or (member event '("finished\n" "deleted\n"))
@@ -2293,6 +2296,12 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (forward-line (1- line-no)))
     (select-window current-window)))
 
+(defun p-search-quit ()
+  "Quit the current session, asking for confirmation."
+  (interactive)
+  (when (y-or-n-p "Quit current p-search session?")
+    (quit-window)))
+
 (defconst p-search-mode-map
   (let ((map (make-keymap)))
     (suppress-keymap map t)
@@ -2310,6 +2319,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (keymap-set map "<tab>" #'p-search-toggle-section)
     (keymap-set map "<return>" #'p-search-find-document)
     (keymap-set map "C-o" #'p-search-display-document)
+    (keymap-set map "q" #'p-search-quit)
     ;; (keymap-set map "C-o" #'p-search-display-file)
     ;; (keymap-set map "1" #'p-search-show-level-1)
     ;; (keymap-set map "2" #'p-search-show-level-2)
