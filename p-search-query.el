@@ -29,6 +29,71 @@ Stores the list of tokens being parsed.")
   "Variable to be used dynamically when parsing.
 Indicates which token we are currently considering.")
 
+
+
+
+;;; Term Expansion:
+
+(defun p-search-query-break-term (term)
+  "Break TERM into sub-words."
+  (if (string-blank-p term)
+      '()
+    (let* ((i 1)
+           (first-char (aref term 0))
+           (term-part (if (eq (char-syntax first-char) ?w)
+                          (string first-char)
+                        ""))
+           (terms '()))
+      (while (< i (length term))
+        (let* ((prev-char (aref term (1- i)))
+               (prev-char-w-p (eq (char-syntax prev-char) ?w))
+               (prev-char-up-p (and prev-char-w-p
+                                    (eq (get-char-code-property prev-char 'general-category) 'Lu)))
+               (at-char (aref term i))
+               (at-char-w-p (eq (char-syntax at-char) ?w))
+               (at-char-up-p (and at-char-w-p
+                                  (eq (get-char-code-property at-char 'general-category) 'Lu))))
+          (when (not prev-char-w-p)
+            (when (not (string-blank-p term-part))
+              (push term-part terms))
+            (setq term-part ""))
+          (when (and prev-char-w-p
+                     (not prev-char-up-p)
+                     at-char-up-p)
+            (push term-part terms)
+            (setq term-part ""))
+          (when at-char-w-p
+            (setq term-part (concat term-part (string at-char)))))
+        (cl-incf i))
+      (when (not (string-blank-p term-part))
+        (push term-part terms))
+      (nreverse terms))))
+
+(defun p-search-query-expand-term (term)
+  "Return the expansions of string TERM."
+  (let* ((term-parts (p-search-break-term term)))
+    (cond
+     ((null term-parts)
+      (error "nil base term"))
+     ((= (length term-parts) 1)
+      (list term))
+     (t
+      (let* ((camel (propertize (string-join term-parts "") 'p-search-case-insensitive t))
+             (snake (propertize (string-join term-parts "_") 'p-search-case-insensitive t))
+             (kebab (propertize (string-join term-parts "-")  'p-search-case-insensitive t)))
+        (seq-filter
+         #'identity
+         (append (list `(q ,term)
+                       (and (not (equal term camel)) `(boost (q ,camel) 0.7))
+                       (and (not (equal term snake)) `(boost (q ,snake) 0.7))
+                       (and (not (equal term kebab)) `(boost (q ,kebab) 0.7))
+                       ;; `(near ,@term-parts)
+                       )
+                 (seq-map
+                  (lambda (term-part)
+                    `(boost (q ,(propertize term-part 'p-search-case-insensitive t)) 0.3))
+                  term-parts))))))))
+
 
 ;;; Query Runner:
 
@@ -78,6 +143,8 @@ Indicates which token we are currently considering.")
 All processes are concluded by calling FINALIZE-FUNC with
 resulting data hashmap."
   (pcase query
+    (`(q ,elt) ;; use quote to make sure no further expansion is done
+     (p-search-query-dispatch elt finalize-func))
     (`(terms . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
@@ -90,7 +157,11 @@ resulting data hashmap."
             (when (= i (length elts))
               (funcall finalize-func results)))))))
     ((cl-type string)
-     (p-search-query-dispatch query finalize-func))
+     (let* ((expansion-terms (p-search-query-expand-term query)))
+       (if (eql (length expansion-terms) 1)
+           ;; TODO (p-search-query-dispatch `(rx ,query) finalize-func)
+           (p-search-query-dispatch query finalize-func)
+         (p-search-query-run `(terms ,@expansion-terms) finalize-func))))
     (`(and . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
@@ -204,11 +275,22 @@ sizes."
        (p-search-query--metadata-elt result-ht)))
     scores))
 
+(defun p-search-query--flatten-vector (elts)
+  (seq-into
+   (seq-mapcat
+    (lambda (elt)
+      (if (vectorp elt)
+          (p-search-query--flatten-vector elt)
+        (list elt)))
+    elts)
+   'vector))
+
 (defun p-search-query-bm25 (results N total-size)
   "Compute BM25 from RESULTS.
 N is the number of documents and TOTAL-SIZE is the sum of the
 sizes of all the documents."
-  (let* ((total-scores (make-hash-table :test #'equal))
+  (let* ((results (p-search-query--flatten-vector results))
+         (total-scores (make-hash-table :test #'equal))
          (must-files (make-hash-table :test #'equal))
          (must-not-files (make-hash-table :test #'equal))
          (scores (seq-map (lambda (res)
@@ -443,6 +525,8 @@ structure."
 (defun p-search--mark-query* (query mark-function)
   "Return intervals where QUERY matches content in current buffer."
   (pcase query
+    (`(q ,elt)
+     (funcall mark-function elt))
     (`(terms . ,elts)
      (let* ((ress '()))
        (dolist (elt elts)
@@ -451,7 +535,11 @@ structure."
              (setq ress (range-concat ress res)))))
        ress))
     ((cl-type string)
-     (funcall mark-function query))
+     (let* ((expansion-terms (p-search-query-expand-term query)))
+       (if (eql (length expansion-terms) 1)
+           ;; TODO (funcall mark-function `(rx ,query))
+           (funcall mark-function query)
+         (p-search--mark-query* `(terms ,@expansion-terms) mark-function))))
     (`(and . ,elts)
      (let* ((ress '()))
        (dolist (elt elts)

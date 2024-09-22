@@ -376,41 +376,6 @@ Maps from file name to result indicator.")
   "Insert escape \\ characters in STRING based on PCRE regex pattern (used in ag)."
   (p-search--escape-term string '(?\\ ?.)))
 
-(defun p-search-break-term (term)
-  "Break TERM into sub-words."
-  (if (string-blank-p term)
-      '()
-    (let* ((i 1)
-           (first-char (aref term 0))
-           (term-part (if (eq (char-syntax first-char) ?w)
-                          (string first-char)
-                        ""))
-           (terms '()))
-      (while (< i (length term))
-        (let* ((prev-char (aref term (1- i)))
-               (prev-char-w-p (eq (char-syntax prev-char) ?w))
-               (prev-char-up-p (and prev-char-w-p
-                                    (eq (get-char-code-property prev-char 'general-category) 'Lu)))
-               (at-char (aref term i))
-               (at-char-w-p (eq (char-syntax at-char) ?w))
-               (at-char-up-p (and at-char-w-p
-                                  (eq (get-char-code-property at-char 'general-category) 'Lu))))
-          (when (not prev-char-w-p)
-            (when (not (string-blank-p term-part))
-              (push term-part terms))
-            (setq term-part ""))
-          (when (and prev-char-w-p
-                     (not prev-char-up-p)
-                     at-char-up-p)
-            (push term-part terms)
-            (setq term-part ""))
-          (when at-char-w-p
-            (setq term-part (concat term-part (string at-char)))))
-        (cl-incf i))
-      (when (not (string-blank-p term-part))
-        (push term-part terms))
-      (nreverse terms))))
-
 (defun p-search--term-bounded (term)
   "Create rx structure from TERM, where TERM is surrounded by word-boundaries or underscore."
   `(seq (or word-start "_") ,term (or word-end "_")))
@@ -420,47 +385,9 @@ Maps from file name to result indicator.")
   `(?i (or (seq not-word-boundary ,term)
            (seq ,term not-word-boundary))))
 
-(defun p-search--terms-to-camel (term-parts)
-  "Create rx structure where TERM-PARTS are in sequence in camel-case.
-Camel-case here is simplified as all the term parts concatanated
-into a single string with a case insensitive search."
-  `(?i ,(string-join term-parts "")))
-
-(defun p-search--terms-to-snake (term-parts)
-  "Create rx structure where TERM-PARTS are in snake-case form."
-  `(?i ,(string-join term-parts "_")))
-
-(defun p-search--terms-to-kebab (term-parts)
-  "Create rx structure where TERM-PARTS are in snake-case form."
-  `(?i ,(string-join term-parts "-")))
-
 (defun p-search--terms-to-seperated (term-parts)
   "Create rx structure where TERM-PARTS are in snake-case form."
   `(?i ,(string-join term-parts ".*")))
-
-(defun p-search-expand-term (term)
-  "Return the expansions of string TERM."
-  (let* ((term-parts (p-search-break-term term)))
-    (cond
-     ((null term-parts) nil) ;; no expansions => nothing to do
-     ((= (length term-parts) 1)
-      (list (cons (p-search--term-bounded term) 1.0)
-            (cons (p-search--term-relaxed term) 0.7)))
-     (t
-      (let* ((camel (p-search--terms-to-camel term-parts))
-             (snake (p-search--terms-to-snake term-parts))
-             (kebab (p-search--terms-to-kebab term-parts)))
-        (seq-filter
-         #'identity
-         (append (list (cons term 1.0)
-                       (and (not (equal term camel)) (cons camel 0.7))
-                       (and (not (equal term snake)) (cons snake 0.7))
-                       (and (not (equal term kebab)) (cons kebab 0.7))
-                       (cons (p-search--terms-to-seperated term-parts) 0.5))
-                 (seq-map
-                  (lambda (term-part)
-                    (cons term-part 0.3))
-                  term-parts))))))))
 
 (defun p-search--rx-special-string (cmd type)
   "Return the special symbol of TYPE for CMD tool."
@@ -525,15 +452,6 @@ should be the symbol of one of the supported tools."
     (if case-insensitive-p
         (propertize rx-string 'p-search-case-insensitive t)
       rx-string)))
-
-(defun p-search-expand-term-to-regexps (string cmd)
-  "Perform term expansion on STRING and convert to regexps for CMD."
-  (let* ((rx-expansions (p-search-expand-term string)))
-    (seq-map
-     (lambda (rx-expr+multiplier)
-       (cons (p-search--rx-to-string (car rx-expr+multiplier) cmd)
-             (cdr rx-expr+multiplier)))
-     rx-expansions)))
 
 
 ;;; Search Tool Interface
