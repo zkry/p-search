@@ -569,13 +569,6 @@ TOOL is used to look up the correct wildchard character."
           (setq pos (1+ match)))
         (concat new-string (substring string pos))))))
 
-
-(defun p-search-query--term-regexps (string cmd)
-  "Expand term STRING and convert them to regular expression strings for CMD.
-CMD should be a symbol for the various search tools such as :grep or :rg."
-  (let* ((escaped-string (p-search--replace-wildcards (p-search--rg-escape string) cmd)))
-    (p-search-expand-term-to-regexps escaped-string cmd)))
-
 (defun p-search-query-emacs--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
@@ -590,14 +583,6 @@ A term regex is noted for marking boundary characters."
       (:grep `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case")) ,term "."))
       (:rg `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive-p '("-i")) ,term))
       (:ag `("ag" "-c" "--nocolor" ,@(and case-insensitive-p '("-i")) ,term)))))
-
-(defun p-search-query-commands (string tool)
-  "Return cons of runnable commands from STRING based on TOOL with multiplier."
-  (seq-map
-   (lambda (term+multiplier)
-     (cons (p-search-query--command (car term+multiplier) tool)
-           (cdr term+multiplier)))
-   (p-search-query--term-regexps string tool)))
 
 
 
@@ -872,42 +857,36 @@ INIT is the initial value given to the reduce operation."
       (let* ((default-directory (alist-get 'base-directory args))
              (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
-             (commands+multipliers (p-search-query-commands query-term search-tool))
-             (parent-buffer (current-buffer))
-             (proc-complete-ct 0))
-        (dolist (cmd+multiplier commands+multipliers)
-          (let* ((buf (generate-new-buffer "*p-search rg"))
-                 (multiplier (cdr cmd+multiplier))
-                 (subcommand (car cmd+multiplier)))
-            (with-current-buffer buf
-              (setq p-search-parent-session-buffer parent-buffer))
-            (make-process
-             :name "p-search-text-search"
-             :buffer buf
-             :command subcommand
-             :sentinel
-             (lambda (proc event)
-               (when (or (member event '("finished\n" "deleted\n"))
-                         (string-prefix-p "exited abnormally with code" event)
-                         (string-prefix-p "failed with code" event))
-                 (with-current-buffer (process-buffer proc)
-                   (let* ((default-directory (expand-file-name default-directory))
-                          (files (string-split (buffer-string) "\n")))
-                     (dolist (f files)
-                       (when (string-prefix-p "./" f)
-                         (setq f (substring f 2)))
-                       (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                         (let* ((fname (match-string 1 f))
-                                (id (list 'file (file-name-concat default-directory fname)))
-                                (prev-count (gethash id file-counts 0))
-                                (count (* (string-to-number (match-string 2 f)) multiplier)))
-                           (puthash (list 'file (file-name-concat default-directory fname))
-                                    (+ prev-count count)
-                                    file-counts))))
-                     (cl-incf proc-complete-ct)
-                     (when (= proc-complete-ct (length commands+multipliers))
-                       (with-current-buffer p-search-parent-session-buffer
-                         (funcall callback file-counts)))))))))))))))
+             (command (p-search-query--command query-term search-tool))
+             (parent-buffer (current-buffer)))
+        (let* ((buf (generate-new-buffer "*p-search rg")))
+          (with-current-buffer buf
+            (setq p-search-parent-session-buffer parent-buffer))
+          (make-process
+           :name "p-search-text-search"
+           :buffer buf
+           :command command
+           :sentinel
+           (lambda (proc event)
+             (when (or (member event '("finished\n" "deleted\n"))
+                       (string-prefix-p "exited abnormally with code" event)
+                       (string-prefix-p "failed with code" event))
+               (with-current-buffer (process-buffer proc)
+                 (let* ((default-directory (expand-file-name default-directory))
+                        (files (string-split (buffer-string) "\n")))
+                   (dolist (f files)
+                     (when (string-prefix-p "./" f)
+                       (setq f (substring f 2)))
+                     (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                       (let* ((fname (match-string 1 f))
+                              (id (list 'file (file-name-concat default-directory fname)))
+                              (prev-count (gethash id file-counts 0))
+                              (count (string-to-number (match-string 2 f))))
+                         (puthash (list 'file (file-name-concat default-directory fname))
+                                  (+ prev-count count)
+                                  file-counts))))
+                   (with-current-buffer p-search-parent-session-buffer
+                     (funcall callback file-counts)))))))))))))
 
 ;;; Generic priors
 
