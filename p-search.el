@@ -1983,7 +1983,7 @@ values of ARGS."
           `((heading . ,(propertize
                          (format "Search Results (%d)" (heap-size p-search-posterior-probs))
                          'face 'p-search-section-heading))
-            (props . (p-search-results t))
+            (props . (p-search-results t p-search-section-id results))
             (key . p-search-results-header))
         (when (= (length top-results) 0)
           (insert (propertize "No results exist.  Add a candidate generator with \"c\"\nto provide the candidates to search from." 'face 'shadow))) ;; TODO "c" to keybinding face
@@ -2193,6 +2193,31 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (forward-line (1- line-no)))
     (select-window current-window)))
 
+(defun p-search--jump-to-section-id (section-id)
+  "Move the point to the beginning of section of SECTION-ID."
+  (let ((pos (point-min)))
+    (while (and pos (not (eq (get-char-property pos 'p-search-section-id) section-id)))
+      (setq pos (next-single-char-property-change pos 'p-search-section-id)))
+    (unless pos
+      (error "Section %s not found" section-id))
+    (when pos
+      (goto-char pos))))
+
+(defun p-search-jump-candidate-generators ()
+  "Move point to the Candidate Generators section of the buffer."
+  (interactive)
+  (p-search--jump-to-section-id 'candidate-generators))
+
+(defun p-search-jump-priors ()
+  "Move point to the Priors section of the buffer."
+  (interactive)
+  (p-search--jump-to-section-id 'priors))
+
+(defun p-search-jump-results ()
+  "Move point to the Search Results section of the buffer."
+  (interactive)
+  (p-search--jump-to-section-id 'results))
+
 (defun p-search-quit ()
   "Quit the current session, asking for confirmation."
   (interactive)
@@ -2221,6 +2246,9 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     ;; (keymap-set map "1" #'p-search-show-level-1)
     ;; (keymap-set map "2" #'p-search-show-level-2)
     ;; (keymap-set map "3" #'p-search-show-level-3)
+    (keymap-set map "j g"  #'p-search-jump-candidate-generators)
+    (keymap-set map "j p"  #'p-search-jump-priors)
+    (keymap-set map "j r"  #'p-search-jump-results)
     map)
   "Mode-map for p-search-mode.")
 
