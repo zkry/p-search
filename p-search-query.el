@@ -69,7 +69,7 @@ Indicates which token we are currently considering.")
         (push term-part terms))
       (nreverse terms))))
 
-(defun p-search-query-expand-term (term)
+(defun p-search-query-expand-term (term) ;; TODO - rename to start with p-search-query-
   "Return the expansions of string TERM."
   (let* ((term-parts (p-search-break-term term)))
     (cond
@@ -527,6 +527,8 @@ structure."
   (pcase query
     (`(q ,elt)
      (funcall mark-function elt))
+    (`(boost . ,rest)
+     (p-search--mark-query* (car rest) mark-function))
     (`(terms . ,elts)
      (let* ((ress '()))
        (dolist (elt elts)

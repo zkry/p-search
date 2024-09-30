@@ -1723,10 +1723,10 @@ the heading to the point where BODY leaves off."
 ;; various priors being applied.  The p-search major mode is also used for
 ;; interacting with the various search results.
 
-(defun p-search--document-hints (p-search-priors)
+(defun p-search--document-hints (priors)
   "Return the documents hints for the current buffer."
   (let ((hints))
-    (dolist (prior p-search-priors)
+    (dolist (prior priors)
       (let ((prior-template (p-search-prior-template prior)))
         (when-let ((hint-func (p-search-prior-template-result-hint-function prior-template)))
           (let ((hint-ranges (funcall hint-func prior)))
