@@ -135,6 +135,12 @@ Key is of type (list type-symbol property-symbol).")
 
 
 
+;;; Global Vars
+
+(defvar p-search-current-active-session-buffer nil
+  "Buffer of most recent viewed p-search session.")
+
+
 ;;; Session Vars
 
 ;; The vars in this section are used on a per-search-session basis.
@@ -176,6 +182,13 @@ Elements are of the type (DOC-ID PROB).")
 (defvar-local p-search-git-roots nil
   "List of known git roots used as cache.")
 
+(defvar-local p-search-peruse-data nil
+  "Record of peruse data for current session.
+Data is alist of form (DOC-ID -> ((:max-range . X) (:ranges . RANGE-OBJ))).")
+
+(defvar-local p-search-session nil
+  "Variable to store the assocciated session of a peruse buffer.")
+
 
 ;;; Faces
 (defgroup p-search-faces nil
@@ -195,7 +208,7 @@ Elements are of the type (DOC-ID PROB).")
 
 (defface p-search-section-heading
   `((((class color) (background light))
-     ,@(and (>= emacs-major-version 27) '(:extend t))
+     ,@(and (>= emacs-major-versionp 27) '(:extend t))
      :foreground "DarkGoldenrod4"
      :weight bold)
     (((class color) (background  dark))
@@ -559,6 +572,7 @@ A term regex is noted for marking boundary characters."
 (p-search-def-property 'buffer 'content (lambda (buf) (with-current-buffer buf (buffer-string))))
 (p-search-def-property 'buffer 'buffer #'identity)
 (p-search-def-function 'buffer 'p-search-goto-document #'display-buffer)
+(p-search-def-function 'buffer 'p-search-buffer #'identity)
 
 (p-search-def-property 'file 'title #'identity)
 (p-search-def-property 'file 'content #'p-search--file-text)
@@ -566,6 +580,7 @@ A term regex is noted for marking boundary characters."
 (p-search-def-property 'file 'size #'p-search--file-size)
 (p-search-def-property 'file 'git-root #'p-search--file-git-root)
 (p-search-def-function 'file 'p-search-goto-document #'find-file-other-window)
+(p-search-def-function 'file 'p-search-buffer #'get-file-buffer)
 
 (p-search-def-property :default 'size #'p-search--size-from-content)
 
@@ -1827,6 +1842,113 @@ This function will also start any process or thread described by TEMPLATE."
     (apply #'p-search-dispatch-transient grouped-priors)))
 
 
+;;; Peruse Mode
+
+;; When performing a search, knowing what you have and haven't
+;; observed is important. Peruse mode is a feature to keep track of
+;; such information.  It works by tracking your active p-search
+;; session and which documents map to which buffer.  If you are
+;; viewing a buffer which corresponds to a top p-search result (as
+;; defined in `p-search-top-n'), the peruse tracking mode is enabled
+;; and p-search will keep track of all visible portions of the buffer.
+;; Such information can be then used to update the posterior
+;; probability of the result.
+
+(define-minor-mode p-search-peruse-mode
+  "Toggle p-search peruse mode.
+When p-search peruse mode is enabled, the viewing of search
+results from a p-seach session is tracked."
+  :require 'p-search
+  :global t
+  (if p-search-peruse-mode
+      (add-hook 'window-buffer-change-function #'p-search-peruse-buffer-change-function)
+    (remove-hook 'window-buffer-change-function #'p-search-peruse-buffer-change-function)))
+
+(define-minor-mode p-search-peruse-tracking-mode
+  "Toggle p-search-peruse-tracking-mode.
+When p-search-peruse-tracking-mode is enabled, any movement in
+the current buffer records viewable portion of the current buffer
+for the current active p-search session."
+  :global nil
+  (if p-search-peruse-tracking-mode
+      (progn
+        (add-hook 'post-command-hook #'p-search-peruse-tracking-post-command-hook nil t)
+        (p-search-peruse-tracking-post-command-hook))
+    (remove-hook 'post-command-hook #'p-search-peruse-tracking-post-command-hook)))
+
+(defun p-search-peruse-add-range (doc-id range max)
+  "Add RANGE in peruse tracker for DOC-ID.
+Assumes curent-buffer is a p-search session."
+  (message "For doc %s, adding range %s" doc-id range)
+  (let* ((entry (assoc doc-id p-search-peruse-data #'equal))
+         (prev-range (alist-get :range (cdr entry)))
+         (new-range (range-concat prev-range range)))
+    (if entry
+        (setcdr entry `((:range . ,new-range) (:max-range . ,max)))
+      (setq p-search-peruse-data
+            (cons (cons doc-id entry) p-search-peruse-data)))
+    ;; Update peruse-tracker percentage in-place
+    (catch 'done
+     (let* ((pos (point-min)))
+       (while (and (setq pos (next-single-property-change pos 'p-search-peruse-tracker)))
+         (when (equal (get-text-property pos 'p-search-peruse-tracker) doc-id)
+           (save-excursion
+             (let* ((inhibit-read-only t)
+                    (percentage (p-search-peruse-percentage doc-id))
+                    (percentage-text (propertize (format "%3d%% " percentage) 'p-search-peruse-tracker doc-id)))
+               (goto-char pos)
+               (delete-char 5)
+               (insert percentage-text)))))))))
+
+(defun p-search-peruse-tracking-post-command-hook ()
+  "Hook function for peruse tracking.
+Record in the current p-search session the viewed ranges for the
+current document."
+  (let* ((new-range (cons (window-start) (window-end nil t)))
+         (doc-id (p-search-viewing-document (current-buffer)))
+         (size (- (point-max) (point-min))))
+    (with-current-buffer p-search-session
+      (p-search-peruse-add-range doc-id new-range size))))
+
+(defun p-search-peruse-candidates ()
+  "Return the document IDs of documents which can be perused.
+This is usually the top N (`p-search-top-n') search results
+viewable on the search results page."
+  ;; TODO - check for active session
+  (with-current-buffer p-search-current-active-session-buffer
+    (seq-map #'car (p-search-top-results))))
+
+(defun p-search-viewing-document (buf)
+  "If viewing document, return the document-id of currently viewed document in BUF.
+If no document is being viewed, return nil."
+  (catch 'done
+    (let* ((candidates (p-search-peruse-candidates)))
+      (dolist (candidate-doc candidates)
+        (let ((candidate-buffer (p-search-run-document-function candidate-doc 'p-search-buffer)))
+          (when (equal candidate-buffer buf)
+            (throw 'done candidate-doc)))))))
+
+(defun p-search-peruse-buffer-change-function (frame)
+  "Check if FRAME's current buffer is viewing a search result.
+If it is viewing a serch result, activate the p-search-peruse-tracking-mode."
+  (if (equal major-mode 'p-search-mode)
+      (setq p-search-current-active-session-buffer (current-buffer))
+    (let* ((new-buf (window-buffer (frame-selected-window frame)))
+           (doc-id (p-search-viewing-document new-buf)))
+      (when doc-id
+        (with-current-buffer new-buf
+          (setq p-search-session p-search-current-active-session-buffer)
+          (p-search-peruse-tracking-mode 1))))))
+
+(defun p-search-peruse-percentage (doc-id)
+  "Return percentage as number of the viewed DOC-ID according to peruse tracker.
+This function assumes the context of a p-search session."
+  (when-let* ((peruse-data (alist-get doc-id p-search-peruse-data nil nil #'equal))
+              (total (alist-get :max-range peruse-data))
+              (range (alist-get :range peruse-data)))
+    (floor (* (/ (float (range-length range)) total) 100))))
+
+
 ;;; Sections
 
 (defun p-search-highlight-point-section ()
@@ -2211,10 +2333,19 @@ values of ARGS."
                                   (substring (propertize (or doc-title "???") 'face 'p-search-header-line-key)
                                              (max (- (length doc-title) (cadr page-dims))
                                                   0))))
+                 (view-percentage (p-search-peruse-percentage document))
+                 (view-percentage-text
+                  (propertize
+                   (if view-percentage
+                       (format "%3d%% " view-percentage)
+                     "     ")
+                   'p-search-peruse-tracker document))
                  (heading-line (concat
                                 heading-line-1
                                 (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
-                                (format "%.10f" (/ p p-search-marginal))))) ;; TODO Divide by marginal prob
+                                view-percentage-text
+                                (format "%.10f"
+                                        (/ p p-search-marginal))))) ;; TODO Divide by marginal prob
             ;; TODO: figure out what to do with too long names
             (p-search-add-section `((heading . ,heading-line)
                                     (props . (p-search-result ,document))
@@ -2282,6 +2413,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
       (p-search--setup-candidate-generators)
       (p-search--reprint)
       (p-search-calculate))
+    (setq p-search-current-active-session-buffer buffer)
     buffer))
 
 
@@ -2435,6 +2567,12 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
   "Move point to the Search Results section of the buffer."
   (interactive)
   (p-search--jump-to-section-id 'results))
+
+(defun p-search-clear-peruse-data ()
+  "Delete peruse data for current session."
+  (interactive)
+  (setq p-search-peruse-data nil)
+  (p-search--reprint))
 
 (defun p-search-quit ()
   "Quit the current session, asking for confirmation."
