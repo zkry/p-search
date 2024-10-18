@@ -105,6 +105,7 @@
 (defconst p-search-score-neutral 0.3)
 (defconst p-search-score-no 0.3)
 (defconst p-search-importance-levels '(none low medium high critical filter))
+(defconst p-search-default-observation-level 0.3)
 (defconst p-search-query-wildcards '((:rg . "[^\w]")
                                      (:ag . "[^\s]")
                                      (:grep . "[^[:space:]]"))
@@ -2379,15 +2380,22 @@ values of ARGS."
       (dolist (generator-args p-search-active-candidate-generators)
         (p-search--insert-candidate-generator generator-args))
       (insert "\n"))
-    (p-search-add-section `((heading . ,(propertize (format "Priors (%d)" (length p-search-priors))
-                                                    'face 'p-search-section-heading))
-                            (props . (p-search-section-id priors)))
-      (unless p-search-priors
-        (insert (propertize "No priors currently being applied.
+    (let* ((page-dims (p-search--display-columns))
+           (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
+                                               'face 'p-search-section-heading))
+           (heading (concat heading-line-1
+                            (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                            (if (> (length p-search-priors) 0)
+                                (propertize "H" 'face 'bold)
+                              " "))))
+      (p-search-add-section `((heading . ,heading)
+                              (props . (p-search-section-id priors)))
+        (unless p-search-priors
+          (insert (propertize "No priors currently being applied.
 Press \"P\" to add new search criteria.\n" 'face 'shadow)))
-      (dolist (prior p-search-priors)
-        (p-search--insert-prior prior))
-      (insert "\n"))
+        (dolist (prior p-search-priors)
+          (p-search--insert-prior prior))
+        (insert "\n")))
     ;; TODO - Toggle occluded sections
     (p-search--insert-results)
     (goto-char (point-min))
@@ -2568,6 +2576,21 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
   (interactive)
   (p-search--jump-to-section-id 'results))
 
+(defun p-search-observe (prefix)
+  "Perform observation on search result at point.
+If called with PREFIX, prompt user to input probability."
+  (interactive "p")
+  (let* ((document (get-char-property (point) 'p-search-result))
+         (p-obs (if (= prefix 4)
+                    (read-number "Observation prob (0.0 certain not it, 1.0 does nothing):" p-search-default-observation-level)
+                  p-search-default-observation-level)))
+    (when (or (< p-obs 0.0) (> p-obs 1.0))
+      (user-error "Invalid observation probability %s" p-obs))
+    (unless document
+      (user-error "No document found under point"))
+    (puthash document (* p-obs (gethash document p-search-observations 1.0)) p-search-observations)
+    (p-search-calculate)))
+
 (defun p-search-clear-peruse-data ()
   "Delete peruse data for current session."
   (interactive)
@@ -2590,6 +2613,7 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     ;; (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
     ;; (keymap-set map "n" #'p-search-obs-not-relevant)
+    (keymap-set map "o" #'p-search-observe)
     ;; (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "P" #'p-search-add-prior)
     (keymap-set map "+" #'p-search-increase-preview-size)
