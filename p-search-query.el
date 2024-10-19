@@ -461,7 +461,7 @@ given a value of zero-prob."
               (let* ((start (1+ (point)))
                      (res (search-forward-regexp "[^\"]\"" nil t)))
                 (if res
-                    (push `(TERM ,(buffer-substring-no-properties start (1- (point))))
+                    (push `(QUOTED-TERM ,(buffer-substring-no-properties start (1- (point))))
                           tokens)
                   (user-error "Unmatched quote at position %d" start)))))
            ((eql (char-after (point)) ?\()
@@ -541,7 +541,9 @@ variables `p-search-query-parse--tokens' and
        (setq terms (nreverse terms))
        (p-search-query-parse--postfix terms)))
     (`(TERM ,term)
-     (p-search-query-parse--postfix term))))
+     (p-search-query-parse--postfix term))
+    (`(QUOTED-TERM ,term)
+     `(q ,(p-search-query-parse--postfix term)))))
 
 (defun p-search-query-parse--postfix (elt)
   "Parse any existing postfix elements of ELT.
