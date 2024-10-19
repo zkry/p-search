@@ -1947,7 +1947,7 @@ This function assumes the context of a p-search session."
   (when-let* ((peruse-data (alist-get doc-id p-search-peruse-data nil nil #'equal))
               (total (alist-get :max-range peruse-data))
               (range (alist-get :range peruse-data)))
-    (floor (* (/ (float (range-length range)) total) 100))))
+    (min (floor (* (/ (float (range-length range)) total) 100)) 100)))
 
 
 ;;; Sections
@@ -2339,7 +2339,7 @@ values of ARGS."
                  (view-percentage-text
                   (propertize
                    (if view-percentage
-                       (format "%3d%% " (min view-percentage 100))
+                       (format "%3d%% " view-percentage)
                      "     ")
                    'p-search-peruse-tracker document))
                  (heading-line (concat

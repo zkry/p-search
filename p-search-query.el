@@ -573,6 +573,7 @@ structure."
          (p-search-query-parse--next-token))
         ('^
          (setq boost p-search-default-boost-amount)
+         (p-search-query-parse--next-token)
          (pcase (p-search-query-parse--peek-token)
            (`(TERM ,term)
             (when (string-match-p "[0-9]+" term)
