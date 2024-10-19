@@ -2339,7 +2339,7 @@ values of ARGS."
                  (view-percentage-text
                   (propertize
                    (if view-percentage
-                       (format "%3d%% " view-percentage)
+                       (format "%3d%% " (min view-percentage 100))
                      "     ")
                    'p-search-peruse-tracker document))
                  (heading-line (concat

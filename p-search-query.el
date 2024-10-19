@@ -131,15 +131,15 @@ Indicates which token we are currently considering.")
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
-  (let ((result (make-hash-tablbe :test 'equal))
-        (res1 (aref results 0)))
+  (let ((result (make-hash-table :test 'equal))
+        (res1 (aref (aref results 0) 0)))
     (maphash
      (lambda (k v)
        (catch 'out
          (let* ((min-ct v)
                 (i 1))
            (while (< i (length results))
-             (let* ((val (gethash k (aref results i))))
+             (let* ((val (gethash k (aref (aref results i) 0))))
                (unless val
                  (throw 'out nil))
                (when (< val min-ct)
@@ -264,10 +264,13 @@ resulting data hashmap."
      (p-search-query-run
       elt
       (lambda (result)
-        (funcall
-         finalize-func
-         (p-search-query--metadata-add
-          result :calc-type 'must)))))
+        (let* ((result (if (vectorp result)
+                           (aref result 0)
+                         result)))
+          (funcall
+           finalize-func
+           (p-search-query--metadata-add
+            result :calc-type 'must))))))
     (`(must-not ,elt)
      (p-search-query-run
       elt
