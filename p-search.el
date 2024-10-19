@@ -504,9 +504,9 @@ TOOL is used to look up the correct wildchard character."
 (defun p-search-query-emacs--term-regexp (string)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (list (propertize (p-search--replace-wildcards (concat "\\<" string "\\>") :emacs) 'p-search-case-insensitive t)
-        (concat (capitalize (substring string 0 1))
-                (substring string 1))))
+  (if (get-text-property 0 'p-search-case-insensitive string)
+      (list (propertize (p-search--replace-wildcards string :emacs) 'p-search-case-insensitive t))
+    (list (p-search--replace-wildcards string :emacs))))
 
 (defun p-search-query--command (term cmd)
   "Create list of command args for search of TERM and command CMD."
