@@ -31,6 +31,16 @@ nearness match wouldn't count."
   :group 'p-search-query
   :type 'integer)
 
+(defcustom p-search-default-boost-amount 1.3
+  "Default max number of line differences to count for a near query.
+
+For example, the query (fox bear)~ with this variable set to 3
+would indicate that if the line of a found \"fox\" match minus
+the line of a found \"bear\" match is greater than 3, the
+nearness match wouldn't count."
+  :group 'p-search-query
+  :type 'integer)
+
 
 ;;; Variables:
 
@@ -281,14 +291,17 @@ resulting data hashmap."
           result :calc-type 'must-not)))))
     (`(boost . ,rest)
      (let* ((boost-elt (car rest))
-            (boost-amt (or (nth 1 rest) 1)))
+            (boost-amt (or (nth 1 rest) 1.3)))
        (p-search-query-run
         boost-elt
         (lambda (result)
-          (funcall
-           finalize-func
-           (p-search-query--metadata-add
-            result :boost boost-amt))))))))
+          (let* ((result (if (vectorp result)
+                             (aref result 0)
+                           result)))
+            (funcall
+             finalize-func
+             (p-search-query--metadata-add
+              result :boost boost-amt)))))))))
 
 
 ;;; Metadata Objects:
@@ -559,7 +572,7 @@ structure."
          (setq near t)
          (p-search-query-parse--next-token))
         ('^
-         (setq boost 1)
+         (setq boost p-search-default-boost-amount)
          (pcase (p-search-query-parse--peek-token)
            (`(TERM ,term)
             (when (string-match-p "[0-9]+" term)
