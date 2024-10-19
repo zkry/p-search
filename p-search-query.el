@@ -19,6 +19,19 @@
 
 
 
+;;; Customs:
+
+(defcustom p-search-default-near-line-length 3
+  "Default max number of line differences to count for a near query.
+
+For example, the query (fox bear)~ with this variable set to 3
+would indicate that if the line of a found \"fox\" match minus
+the line of a found \"bear\" match is greater than 3, the
+nearness match wouldn't count."
+  :group 'p-search-query
+  :type 'integer)
+
+
 ;;; Variables:
 
 (defvar p-search-query-parse--tokens nil
@@ -138,6 +151,62 @@ Indicates which token we are currently considering.")
      res1)
     result))
 
+(defun p-search-query-near (sub-elts results)
+  "Return a result from RESULTS array where SUB-ELTS are near one another."
+  (if (equal (length results) 1)
+      results
+    (let* ((intersection-documents (make-hash-table :test #'equal))
+           (result-ht (make-hash-table :test #'equal)))
+      (maphash
+       (lambda (doc ct)
+         (cl-loop for i from 1 to (1- (length results))
+                  always (gethash doc (aref results i))
+                  finally (puthash doc 0 intersection-documents)))
+       (aref results 0))
+      ;; now intersection-documents contains possible candidate documents for near
+      (maphash
+       (lambda (document _)
+         (catch 'done
+           (let* ((contents (p-search-document-property document 'content)))
+             (with-temp-buffer
+               ; add spaces to make sure the next-single-char-property-change loop works
+               (insert " " contents " ")
+               (goto-char (point-min))
+               ;; 1. Mark all matches for earch sub element in for the text of current document
+               (dolist (elt sub-elts)
+                 (let* ((ranges (p-search--mark-query*
+                                 elt
+                                 (lambda (query) ;; TODO This function is used somewhere else, maybe extract it
+                                   (let* ((terms (p-search-query-emacs--term-regexp query))
+                                          (ress '()))
+                                     (dolist (term terms)
+                                       (save-excursion
+                                         (goto-char (point-min))
+                                         (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
+                                           (while (search-forward-regexp term nil t)
+                                             (push (cons (match-beginning 0) (match-end 0)) ress)))))
+                                     (setq ress (nreverse ress))
+                                     ress)))))
+                   (pcase-dolist (`(,start . ,end) ranges)
+                     (add-text-properties start end `(near-elt ,elt)))))
+               ;; 2. Perform nearness check
+               (let* ((pos (point-min))
+                      (elts-set (make-hash-table :test #'equal)))
+                 (while (< pos (point-max))
+                   (let ((next-pos (next-single-char-property-change pos 'near-elt)))
+                     (when (> (- (line-number-at-pos next-pos) (line-number-at-pos pos))
+                              p-search-default-near-line-length)
+                       (setq elts-set (make-hash-table :test #'equal)))
+                     (let ((near-elt (get-char-property next-pos 'near-elt)))
+                       (when near-elt
+                         (puthash near-elt t elts-set)
+                         (when (= (hash-table-count elts-set) (length sub-elts))
+                           (puthash document 1 result-ht)
+                           (throw 'done nil))))
+                     (setq pos next-pos))))))))
+       intersection-documents)
+      result-ht)))
+
 (defun p-search-query-run (query finalize-func)
   "Dispatch processes according to QUERY syntax tree.
 All processes are concluded by calling FINALIZE-FUNC with
@@ -174,18 +243,18 @@ resulting data hashmap."
             (when (= i (length elts))
               (let* ((and-res (p-search-query-and results)))
                 (funcall finalize-func and-res))))))))
-    ;; (`(near . ,elts)
-    ;;  (let ((results (make-vector (length elts) nil))
-    ;;        (i 0))
-    ;;    (dolist (elt elts)
-    ;;      (p-search-query-run
-    ;;       elt
-    ;;       (lambda (result)
-    ;;         (aset results i result)
-    ;;         (cl-incf i)
-    ;;         (when (= i (length elts))
-    ;;           (let* ((near-res (p-search-query-near elts results)))
-    ;;             (funcall finalize-func near-res))))))))
+    (`(near . ,elts)
+     (let ((results (make-vector (length elts) nil))
+           (i 0))
+       (dolist (elt elts)
+         (p-search-query-run
+          elt
+          (lambda (result)
+            (aset results i result)
+            (cl-incf i)
+            (when (= i (length elts))
+              (let* ((near-res (p-search-query-near elts results)))
+                (funcall finalize-func near-res))))))))
     (`(not ,elt)
      (p-search-query-run
       elt

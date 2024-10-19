@@ -2068,10 +2068,9 @@ the heading to the point where BODY leaves off."
   "Return the documents hints for the current buffer."
   (let ((hints))
     (dolist (prior priors)
-      (let ((prior-template (p-search-prior-template prior)))
-        (when-let ((hint-func (p-search-prior-template-result-hint-function prior-template)))
-          (let ((hint-ranges (funcall hint-func prior)))
-            (setq hints (range-concat hints hint-ranges))))))
+      (when-let ((hint-func (p-search-prior-template-result-hint-function (p-search-prior-template prior))))
+        (let ((hint-ranges (funcall hint-func prior)))
+          (setq hints (range-concat hints hint-ranges)))))
     hints))
 
 (defun p-search--buffer-substring-line-number (start end)
@@ -2126,6 +2125,8 @@ The number of lines returned is determined by `p-search-document-preview-size'."
          (preview-size p-search-document-preview-size))
     (with-current-buffer buffer
       (let* ((p-search-document-preview-size preview-size))
+        ;; TODO: Add local variable to be able to refer to document
+        ;;       Like how would git author provide text hints?
         (insert document-contents)
         ;; propertize buffer according to filename
         (when (eql (car document) 'file)
@@ -2525,6 +2526,13 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (error "No current p-search session found"))
   (p-search--reprint))
 
+(defun p-search-hard-refresh-buffer ()
+  "Perform all recalculations and refresh buffer."
+  (interactive)
+  (unless (derived-mode-p 'p-search-mode)
+    (error "No current p-search session found"))
+  (p-search-restart-calculation))
+
 (defun p-search-find-document ()
   "Find the file at the current point."
   (interactive)
@@ -2610,6 +2618,7 @@ If called with PREFIX, prompt user to input probability."
     (keymap-set map "e" #'p-search-edit-dwim)
     (keymap-set map "C" #'p-search-add-candidate-generator)
     (keymap-set map "g" #'p-search-refresh-buffer)
+    (keymap-set map "G" #'p-search-hard-refresh-buffer)
     ;; (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
     ;; (keymap-set map "n" #'p-search-obs-not-relevant)
