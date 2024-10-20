@@ -98,6 +98,31 @@
   :group 'p-search
   :type 'boolean)
 
+(defcustom p-search-session-presets '()
+  "List of presets to easily apply to a p-search session."
+  :group 'p-search
+  :type '(repeat (plist :key-type (choice (const :candidate-generator)
+                                          (const :prior-template)
+                                          (const :args)
+                                          (const :name)
+                                          (const :group)))))
+
+(setq p-search-session-presets
+      '((:candidate-generator p-search-candidate-generator-filesystem
+                              :args ((search-tool . :rg)
+                                     (filename-regexp . ".*")
+                                     (base-directory . "/home/zkry/dev/go/")))
+        (:candidate-generator p-search-candidate-generator-filesystem
+                              :args ((search-tool . :rg)
+                                     (filename-regexp . ".*")
+                                     (base-directory . "/home/zkry/dev/go/delve/"))
+                              :name "Delve FS")
+        (:candidate-generator p-search-candidate-generator-filesystem
+                              :args ((search-tool . :rg)
+                                     (filename-regexp . ".*")
+                                     (base-directory . "/home/zkry/dev/emacs/"))
+                              :name "Emacs Files")))
+
 
 ;;; Consts
 
@@ -209,7 +234,7 @@ Data is alist of form (DOC-ID -> ((:max-range . X) (:ranges . RANGE-OBJ))).")
 
 (defface p-search-section-heading
   `((((class color) (background light))
-     ,@(and (>= emacs-major-versionp 27) '(:extend t))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
      :foreground "DarkGoldenrod4"
      :weight bold)
     (((class color) (background  dark))
@@ -1074,6 +1099,89 @@ Called with user supplied ARGS for the prior."
                    :default-value 20)))
    :initialize-function #'p-search--prior-git-commit-frequency-initialize-function
    :transient-key-string "cf"))
+
+
+;;; Data Priors and Candidate Generators
+
+;; This section contains the code to read and write priors and
+;; candidate generators as Lisp data structures.  The primary function
+;; for this is to be able to have predefined search setups.
+;;
+;; The data representation of priors is a plist as follows:
+;;
+;; (:prior-template PRIOR-TEMPLATE :args MERGED-ARGS-AND-OPTIONS ...)
+;;
+;; Note that MERGED-ARGS-AND-OPTIONS can also contain 'complement and
+;; 'importance keys.
+;;
+;; The data representation of a candidate generator is a plist as follows:
+;;
+;; (:candidate-generator CANDIDATE-GENERATOR :args ARGS ..)
+;;
+;; A configuration preset is a list of the above items.  Other
+;; properties of the plist may exist such indicating when the item is
+;; applicable.
+
+(defun p-search-apply-preset (preset-elt &optional no-calc)
+  "Apply preset PRESET-ELT which is a preset plist.
+If NO-CALC is non-nil, don't perform any recalcuation operation,
+instead return a function which will run the function.
+ A preset plist should contain the entry :name STR
+and one of the following:
+
+- :candidate-generator GENERATOR-OBJ-SYM and :args ARG-ALISt
+- :prior-template TEMPLATE-OBJ-SYM and :args ARG-ALIST
+- :group LIST-OF-PRESET-ELTS"
+  (let* ((prior-template (plist-get preset-elt :prior-template))
+         (candidate-generator (plist-get preset-elt :candidate-generator))
+         (group (plist-get preset-elt :group))
+         (args (plist-get preset-elt :args))
+         (inputs (plist-get preset-elt :input-functions)))
+    (when (and inputs group)
+      (error "Error applying preset: inputs not allowed with group"))
+    (pcase-dolist (`(,input-symbol . ,input-function) inputs)
+      (let* ((value (funcall input-function)))
+        (setq args (cons (cons input-symbol value) args))))
+    (cond
+     (group
+      (dolist (elt group)
+        (let* ((fns (p-search-apply-preset elt t)))
+          (if no-calc
+              (lambda ()
+                (dolist (fn fns)
+                  (funcall fn)))
+            (dolist (fn fns)
+              (funcall fn))))))
+     (prior-template
+      (let* ((prior (p-search--instantiate-prior (symbol-value prior-template) args)))
+        (p-search--validate-prior prior args)
+        (setq p-search-priors (append p-search-priors (list prior)))
+        (if (and (not no-calc) (> (hash-table-count (p-search-prior-results prior)) 0))
+            (if no-calc
+                (lambda () (p-search-calculate))
+              (p-search-calculate))
+          (if no-calc
+              (lambda () (p-search--reprint))
+            (p-search--reprint)))))
+     (candidate-generator
+      (p-search--add-candidate-generator (symbol-value candidate-generator) args)
+      (if no-calc
+          (lambda () (p-search-restart-calculation))
+        (p-search-restart-calculation))))))
+
+(defun p-search-prompt-preset ()
+  "Prompt the user for a preset and return preset p-list."
+  (let* ((selections->result-ht (make-hash-table :test #'equal))
+         (selections (seq-map
+                      (lambda (preset-plist)
+                        (let ((name (plist-get preset-plist :name)))
+                          (unless name
+                            (setq name (format "%s" preset-plist)))
+                          (puthash name preset-plist selections->result-ht)
+                          name))
+                      p-search-session-presets))
+         (selection (completing-read "Select preset: " selections nil t)))
+    (gethash selection selections->result-ht)))
 
 
 ;;; Queries
@@ -2410,8 +2518,9 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
               (goto-char (overlay-start ov))
               (p-search-toggle-section))))))))
 
-(defun p-search-setup-buffer ()
-  "Initial setup for p-search buffer."
+(defun p-search-setup-buffer (&optional preset)
+  "Initial setup for p-search buffer.
+If PRESET is non-nil, set up session with PRESET."
   (let* ((buffer (generate-new-buffer "p-search")))
     (with-current-buffer buffer
       (p-search-mode)
@@ -2421,7 +2530,8 @@ Press \"P\" to add new search criteria.\n" 'face 'shadow)))
     (with-current-buffer buffer
       (p-search--setup-candidate-generators)
       (p-search--reprint)
-      (p-search-calculate))
+      (p-search-calculate)
+      (p-search-apply-preset preset))
     (setq p-search-current-active-session-buffer buffer)
     buffer))
 
@@ -2599,6 +2709,11 @@ If called with PREFIX, prompt user to input probability."
     (puthash document (* p-obs (gethash document p-search-observations 1.0)) p-search-observations)
     (p-search-calculate)))
 
+(defun p-search-add-preset (preset)
+  "Prompt user to select PRESET from `p-search-session-presets' and add to current session."
+  (interactive (list (p-search-prompt-preset)))
+  (p-search-apply-preset preset))
+
 (defun p-search-clear-peruse-data ()
   "Delete peruse data for current session."
   (interactive)
@@ -2655,7 +2770,7 @@ If called with PREFIX, prompt user to input probability."
 (defun p-search ()
   "Start a p-search session."
  (interactive)
-  (p-search-setup-buffer))
+ (p-search-setup-buffer))
 
 
 ;;; Spec Helpers
