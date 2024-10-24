@@ -94,7 +94,7 @@ Indicates which token we are currently considering.")
 
 (defun p-search-query-expand-term (term) ;; TODO - rename to start with p-search-query-
   "Return the expansions of string TERM."
-  (let* ((term-parts (p-search-break-term term)))
+  (let* ((term-parts (p-search-query-break-term term)))
     (cond
      ((null term-parts)
       (error "nil base term"))
