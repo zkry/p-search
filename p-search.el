@@ -2206,18 +2206,23 @@ the heading to the point where BODY leaves off."
   (let* ((output-string ""))
     (pcase-dolist (`(,start . ,end) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
-    (let* ((added-lines '()))
-      (pcase-dolist (`(,start . ,_end) hints)
-        (goto-char start)
-        (let* ((line-no (line-number-at-pos)))
-          (when (not (member line-no added-lines))
-            (let* ((line-str (propertize
-                              (if p-search-show-preview-lines
-                                  (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
-                                (buffer-substring (pos-bol) (pos-eol)))
-                              'p-search-document-line-no line-no)))
-              (push line-no added-lines)
-              (setq output-string (concat output-string line-str "\n")))))))
+    (catch 'out
+     (let* ((added-lines '())
+            (i 0))
+       (pcase-dolist (`(,start . ,_end) hints)
+         (goto-char start)
+         (let* ((line-no (line-number-at-pos)))
+           (when (not (member line-no added-lines))
+             (let* ((line-str (propertize
+                               (if p-search-show-preview-lines
+                                   (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                                 (buffer-substring (pos-bol) (pos-eol)))
+                               'p-search-document-line-no line-no)))
+               (push line-no added-lines)
+               (setq output-string (concat output-string line-str "\n"))
+               (cl-incf i)
+               (when (= i p-search-document-preview-size)
+                 (throw 'out nil))))))))
     (concat
      (string-join
       (seq-take (string-split output-string "\n") p-search-document-preview-size)
