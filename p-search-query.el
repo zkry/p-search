@@ -15,7 +15,7 @@
 (declare-function 'p-search-candidate-generator-term-frequency-function "p-search.el")
 (declare-function 'p-search-document-property "p-search.el")
 
-(defvar p-search-active-candidate-generators "p-search.el")
+(defvar p-search-active-candidate-generators)
 
 
 

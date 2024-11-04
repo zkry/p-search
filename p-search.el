@@ -215,6 +215,20 @@ Data is alist of form (DOC-ID -> ((:max-range . X) (:ranges . RANGE-OBJ))).")
 (defvar-local p-search-session nil
   "Variable to store the assocciated session of a peruse buffer.")
 
+(defvar-local p-search-engine-specification nil
+  "List to specify p-search engine specific data.  Contents are as follows:
+(PRIOR SEARCH-BAR-ARG-SYM)
+
+Prior is the prior which the search bar is integrated
+with. SEARCH-BAR-ARG-SYM is the arg symbol that should be updated
+with a search operation.
+
+p-search engine is defined to be enabled if this variable is
+non-nil for the current session.")
+
+(defvar-local p-search-engine--search-field nil)
+(defvar-local p-search-engine--search-button nil)
+
 
 ;;; Faces
 (defgroup p-search-faces nil
@@ -1131,12 +1145,19 @@ and one of the following:
 
 - :candidate-generator GENERATOR-OBJ-SYM and :args ARG-ALISt
 - :prior-template TEMPLATE-OBJ-SYM and :args ARG-ALIST
-- :group LIST-OF-PRESET-ELTS"
+- :group LIST-OF-PRESET-ELTS
+
+Function returs cons pair (PRIOR . ARG-NAME) of the first
+:prior-template preset with a property :search-engine-arg-name.
+The :search-engine-arg-name property indicates to the
+p-search-engine mode which field should be updated when
+performing a search."
   (let* ((prior-template (plist-get preset-elt :prior-template))
          (candidate-generator (plist-get preset-elt :candidate-generator))
          (group (plist-get preset-elt :group))
          (args (plist-get preset-elt :args))
-         (inputs (plist-get preset-elt :input-functions)))
+         (inputs (plist-get preset-elt :input-functions))
+         (engine-arg-name (plist-get preset-elt :search-engine-arg-name)))
     (when (and inputs group)
       (error "Error applying preset: inputs not allowed with group"))
     (pcase-dolist (`(,input-symbol . ,input-function) inputs)
@@ -1145,29 +1166,22 @@ and one of the following:
     (cond
      (group
       (dolist (elt group)
-        (let* ((fns (p-search-apply-preset elt t)))
-          (if no-calc
-              (lambda ()
-                (dolist (fn fns)
-                  (funcall fn)))
-            (dolist (fn fns)
-              (funcall fn))))))
+        (p-search-apply-preset elt t))
+      (and no-calc
+           (lambda ()
+             (dolist (fn fns)
+               (funcall fn)))))
      (prior-template
       (let* ((prior (p-search--instantiate-prior (symbol-value prior-template) args)))
         (p-search--validate-prior prior args)
         (setq p-search-priors (append p-search-priors (list prior)))
-        (if (and (not no-calc) (> (hash-table-count (p-search-prior-results prior)) 0))
-            (if no-calc
-                (lambda () (p-search-calculate))
-              (p-search-calculate))
-          (if no-calc
-              (lambda () (p-search--reprint))
-            (p-search--reprint)))))
+        (when engine-arg-name
+          (setq p-search-engine-specification
+                (list prior engine-arg-name)))))
      (candidate-generator
-      (p-search--add-candidate-generator (symbol-value candidate-generator) args)
-      (if no-calc
-          (lambda () (p-search-restart-calculation))
-        (p-search-restart-calculation))))))
+      (p-search--add-candidate-generator (symbol-value candidate-generator) args)))
+    (unless no-calc
+      (p-search-restart-calculation))))
 
 (defun p-search-prompt-preset ()
   "Prompt the user for a preset and return preset p-list."
@@ -2062,19 +2076,20 @@ This function assumes the context of a p-search session."
 
 (defun p-search-highlight-point-section ()
   "Put a highlight property on section overlay at point."
-  (let* ((ovs (overlays-in (point-min) (point-max))))
-    (dolist (ov ovs)
-      (overlay-put ov 'face nil)))
-  (let* ((ovs (overlays-at (point)))
-         (max-ov nil)
-         (max-section -1))
-    (dolist (ov ovs)
-      (let* ((section (overlay-get ov 'p-search-section-level)))
-        (when (and section (> section max-section))
-          (setq max-ov ov)
-          (setq max-section section))))
-    (when max-ov
-      (overlay-put max-ov 'face 'p-search-section-highlight))))
+  (unless p-search-engine-specification
+    (let* ((ovs (overlays-in (point-min) (point-max))))
+      (dolist (ov ovs)
+        (overlay-put ov 'face nil)))
+    (let* ((ovs (overlays-at (point)))
+           (max-ov nil)
+           (max-section -1))
+      (dolist (ov ovs)
+        (let* ((section (overlay-get ov 'p-search-section-level)))
+          (when (and section (> section max-section))
+            (setq max-ov ov)
+            (setq max-section section))))
+      (when max-ov
+        (overlay-put max-ov 'face 'p-search-section-highlight)))))
 
 (defun p-search-deepest-section-overlays-at-point ()
   "Return the overlay at POSITION with the highest section level."
@@ -2470,58 +2485,60 @@ values of ARGS."
 
 (defun p-search--reprint ()
   "Redraw the current buffer from the session's state."
-  (unless (derived-mode-p 'p-search-mode)
-    (error "Unable to print p-search state of buffer not in p-search-mode"))
-  (let* ((inhibit-read-only t)
-         (at-line (line-number-at-pos))
-         (occlusion-states '()))
-    ;; TODO - occlusion states
-    (dolist (ov (overlays-in (point-min) (point-max)))
-      (when (overlay-get ov 'p-search-key)
-        (push (cons (overlay-get ov 'p-search-key)
-                    (overlay-get ov 'p-search-section-hidden))
-              occlusion-states))
-      (delete-overlay ov))
-    (erase-buffer)
-    (p-search-add-section
-        `((heading . ,(propertize (format "Candidate Generators (%d)"
-                                          (length p-search-active-candidate-generators))
-                                  'face 'p-search-section-heading))
-          (props . (p-search-section-id candidate-generators)))
-      (when (= 0 (length p-search-active-candidate-generators))
-        (insert (propertize "Press \"c\" to add a candidate generator.\n\n"
-                            'face 'shadow)))
-      (dolist (generator-args p-search-active-candidate-generators)
-        (p-search--insert-candidate-generator generator-args))
-      (insert "\n"))
-    (let* ((page-dims (p-search--display-columns))
-           (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
-                                               'face 'p-search-section-heading))
-           (heading (concat heading-line-1
-                            (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
-                            (if (> (length p-search-priors) 0)
-                                (propertize "H" 'face 'bold)
-                              " "))))
-      (p-search-add-section `((heading . ,heading)
-                              (props . (p-search-section-id priors)))
-        (unless p-search-priors
-          (insert (propertize "No priors currently being applied.
+  ;; (unless (derived-mode-p 'p-search-mode)
+  ;;   (error "Unable to print p-search state of buffer not in p-search-mode"))
+  (if p-search-engine-specification
+      (p-search--reprint-engine)
+    (let* ((inhibit-read-only t)
+           (at-line (line-number-at-pos))
+           (occlusion-states '()))
+      ;; TODO - occlusion states
+      (dolist (ov (overlays-in (point-min) (point-max)))
+        (when (overlay-get ov 'p-search-key)
+          (push (cons (overlay-get ov 'p-search-key)
+                      (overlay-get ov 'p-search-section-hidden))
+                occlusion-states))
+        (delete-overlay ov))
+      (erase-buffer)
+      (p-search-add-section
+          `((heading . ,(propertize (format "Candidate Generators (%d)"
+                                            (length p-search-active-candidate-generators))
+                                    'face 'p-search-section-heading))
+            (props . (p-search-section-id candidate-generators)))
+        (when (= 0 (length p-search-active-candidate-generators))
+          (insert (propertize "Press \"c\" to add a candidate generator.\n\n"
+                              'face 'shadow)))
+        (dolist (generator-args p-search-active-candidate-generators)
+          (p-search--insert-candidate-generator generator-args))
+        (insert "\n"))
+      (let* ((page-dims (p-search--display-columns))
+             (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
+                                         'face 'p-search-section-heading))
+             (heading (concat heading-line-1
+                              (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                              (if (> (length p-search-priors) 0)
+                                  (propertize "H" 'face 'bold)
+                                " "))))
+        (p-search-add-section `((heading . ,heading)
+                                (props . (p-search-section-id priors)))
+          (unless p-search-priors
+            (insert (propertize "No priors currently being applied.
 Press \"P\" to add new search criteria.\n" 'face 'shadow)))
-        (dolist (prior p-search-priors)
-          (p-search--insert-prior prior))
-        (insert "\n")))
-    ;; TODO - Toggle occluded sections
-    (p-search--insert-results)
-    (goto-char (point-min))
-    (forward-line (1- at-line))
-    (save-excursion
-      (let* ((ovs (overlays-in (point-min) (point-max))))
-        (dolist (ov ovs)
-          (let* ((key (overlay-get ov 'p-search-key))
-                 (is-hidden (alist-get key occlusion-states nil nil #'equal)))
-            (when is-hidden
-              (goto-char (overlay-start ov))
-              (p-search-toggle-section))))))))
+          (dolist (prior p-search-priors)
+            (p-search--insert-prior prior))
+          (insert "\n")))
+      ;; TODO - Toggle occluded sections
+      (p-search--insert-results)
+      (goto-char (point-min))
+      (forward-line (1- at-line))
+      (save-excursion
+        (let* ((ovs (overlays-in (point-min) (point-max))))
+          (dolist (ov ovs)
+            (let* ((key (overlay-get ov 'p-search-key))
+                   (is-hidden (alist-get key occlusion-states nil nil #'equal)))
+              (when is-hidden
+                (goto-char (overlay-start ov))
+                (p-search-toggle-section)))))))))
 
 (defun p-search-setup-buffer (&optional preset)
   "Initial setup for p-search buffer.
@@ -2534,12 +2551,78 @@ If PRESET is non-nil, set up session with PRESET."
       (select-window win))
     (with-current-buffer buffer
       (p-search--setup-candidate-generators)
-      (p-search--reprint)
-      (p-search-calculate)
-      (p-search-apply-preset preset))
+      (if preset
+          (p-search-apply-preset preset)
+        (p-search--reprint)
+        (p-search-calculate)))
     (setq p-search-current-active-session-buffer buffer)
     buffer))
 
+
+;;; Display Engine
+
+(defun widget-test ()
+  (interactive)
+  (let* ((new-buffer (get-buffer-create "*widget-test*")))
+    (with-current-buffer new-buffer
+      (special-mode)
+      (let ((inhibit-read-only t))
+        (erase-buffer))
+      (remove-overlays)
+      (widget-insert "Here is some documentation.\n\n")
+      (widget-create 'editable-field
+                     :size 13
+                     :format "Name: %v " ; Text after the field!
+                     "My Name")
+      (widget-insert " ")
+      (use-local-map widget-keymap)
+      (widget-setup))
+    (display-buffer new-buffer)))
+
+(defun p-search--reprint-engine ()
+  "Redraw the current buffer from the session's state in engine mode."
+  (when p-search-engine--search-field
+    (widget-delete p-search-engine--search-field))
+  (when p-search-engine--search-button
+    (widget-delete p-search-engine--search-button))
+  (let ((inhibit-read-only t))
+    (erase-buffer))
+  (remove-overlays)
+  (widget-insert "\n\n")
+  (setq p-search-engine--search-field
+        (widget-create 'editable-field
+                        :size 20
+                        :format "Search: %v " ; Text after the field!
+                        "funny"))
+  (widget-insert " ")
+  (setq p-search-engine--search-button
+        (widget-create 'push-button
+                        :notify (lambda (&rest ignore)
+                                  (p-search-engine-run-search))
+                        "Search"))
+
+  (when p-search-posterior-probs
+    (widget-insert "\n\nSearch Results:\n")
+    (let* ((top-results (p-search-top-results)))
+      (pcase-dolist (`(,document ,_p) top-results)
+        (let* ((doc-title (p-search-document-property document 'title)))
+          (widget-insert doc-title "\n")))))
+  (use-local-map widget-keymap)
+  (widget-setup)
+  (goto-char (point-min)))
+
+(defun p-search-engine (preset)
+  "Initialize a p-search engine session with PRESET configuration."
+  (let* ((buffer (generate-new-buffer "p-search")))
+    (with-current-buffer buffer
+      (p-search-initialize-session-variables))
+    (let ((win (display-buffer buffer nil)))
+      (select-window win))
+    (with-current-buffer buffer
+      (p-search--setup-candidate-generators)
+      (p-search-apply-preset preset))
+    (setq p-search-current-active-session-buffer buffer)
+    buffer))
 
 
 ;;; Debug
@@ -2715,7 +2798,8 @@ If called with PREFIX, prompt user to input probability."
     (p-search-calculate)))
 
 (defun p-search-add-preset (preset)
-  "Prompt user to select PRESET from `p-search-session-presets' and add to current session."
+  "Prompt user to select PRESET and add to current session.
+Presets come from the variable `p-search-session-presets'."
   (interactive (list (p-search-prompt-preset)))
   (p-search-apply-preset preset))
 
@@ -2833,6 +2917,16 @@ If called with PREFIX, prompt user to input probability."
 (add-to-list 'p-search-prior-templates p-search-prior-query)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
+
+
+(p-search-engine
+ '(:group ((:candidate-generator p-search-candidate-generator-filesystem
+            :args ((search-tool . :rg)
+                   (filename-regexp . ".*")
+                   (base-directory . "/home/zkry/dev/go/delve/")))
+           (:prior-template p-search-prior-query
+                            :args ((query-string . "strawberry"))
+                            :search-engine-arg-name query-string))))
 
 (provide 'p-search)
 
