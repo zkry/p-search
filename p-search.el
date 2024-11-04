@@ -2903,15 +2903,6 @@ Presets come from the variable `p-search-session-presets'."
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
 
 
-(p-search-engine
- '(:group ((:candidate-generator p-search-candidate-generator-filesystem
-            :args ((search-tool . :rg)
-                   (filename-regexp . ".*")
-                   (base-directory . "/home/zkry/dev/go/delve/")))
-           (:prior-template p-search-prior-query
-                            :args ((query-string . "strawberry"))
-                            :search-engine-arg-name query-string))))
-
 (provide 'p-search)
 
 ;;; p-search.el ends here
