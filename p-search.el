@@ -107,6 +107,10 @@
                                           (const :name)
                                           (const :group)))))
 
+(defcustom p-search-max-fontify-file-size
+  100000
+  "Maxiumum file size to fontify. Any sizes larger won't be fontified.")
+
 
 ;;; Consts
 
@@ -2249,7 +2253,8 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         (let* ((hints (p-search--document-hints priors)))
           (if hints
               (progn
-                (font-lock-fontify-region (point-min) (point-max))
+                (when (< (- (point-max) (point-min)) p-search-max-fontify-file-size)
+                  (font-lock-fontify-region (point-min) (point-max)))
                 (p-search--preview-from-hints hints))
             ;; if there are no hints, just get the first n lines
             (let ((start (point)))
@@ -2323,7 +2328,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
 
 (defun p-search-candidate-generator-from-project-root ()
   "Return a cons of the filesystem generator with predefined defaults."
-  (let* ((root (project-root (project-current))))
+  (let* ((root (and (project-current) (project-root (project-current)))))
     (if root
         (cons
          p-search-candidate-generator-filesystem
@@ -2336,7 +2341,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
          `((base-directory . ,(expand-file-name default-directory))
            (filename-regexp . ".*")
            (search-tool . ,p-search-default-search-tool)
-           (use-git-ignore . on))))))
+           (use-git-ignore . nil))))))
 
 (defun p-search--display-columns ()
   "Return a list of two numbers: the start of column 2 and the end of column 2."
