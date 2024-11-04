@@ -107,22 +107,6 @@
                                           (const :name)
                                           (const :group)))))
 
-(setq p-search-session-presets
-      '((:candidate-generator p-search-candidate-generator-filesystem
-                              :args ((search-tool . :rg)
-                                     (filename-regexp . ".*")
-                                     (base-directory . "/home/zkry/dev/go/")))
-        (:candidate-generator p-search-candidate-generator-filesystem
-                              :args ((search-tool . :rg)
-                                     (filename-regexp . ".*")
-                                     (base-directory . "/home/zkry/dev/go/delve/"))
-                              :name "Delve FS")
-        (:candidate-generator p-search-candidate-generator-filesystem
-                              :args ((search-tool . :rg)
-                                     (filename-regexp . ".*")
-                                     (base-directory . "/home/zkry/dev/emacs/"))
-                              :name "Emacs Files")))
-
 
 ;;; Consts
 
