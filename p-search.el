@@ -214,6 +214,7 @@ with a search operation.
 p-search engine is defined to be enabled if this variable is
 non-nil for the current session.")
 
+(defvar-local p-search-engine--search-text nil)
 (defvar-local p-search-engine--search-field nil)
 (defvar-local p-search-engine--search-button nil)
 
@@ -2552,7 +2553,7 @@ If PRESET is non-nil, set up session with PRESET."
 
 (defun widget-test ()
   (interactive)
-  (let* ((new-buffer (get-buffer-create "*widget-test*")))
+  (let* ((new-buffer (get-buffer-cretae "*widget-test*")))
     (with-current-buffer new-buffer
       (special-mode)
       (let ((inhibit-read-only t))
@@ -2568,6 +2569,28 @@ If PRESET is non-nil, set up session with PRESET."
       (widget-setup))
     (display-buffer new-buffer)))
 
+(defun p-search--engine-run-search ()
+  (let ((search-value (widget-value p-search-engine--search-field)))
+    (when (not (string-blank-p search-value))
+      (setq p-search-engine--search-text search-value)
+      (pcase-let* ((`(,prior ,arg-sym) p-search-engine-specification))
+        (let* ((template (p-search-prior-template prior))
+               (prev-args (p-search-prior-arguments prior))
+               (init-func (p-search-prior-template-initialize-function template)))
+          (setf (p-search-prior-arguments prior)
+                (cons (cons arg-sym search-value) prev-args))
+          (setf (p-search-prior-results prior)
+                (make-hash-table :test #'equal))
+          (let ((init-res (funcall init-func prior)))
+            (setf (p-search-prior-proc-or-thread prior) init-res)))))))
+
+(defun p-search--engine-more-results ()
+  (cl-incf p-search-top-n 10)
+  (let* ((point (point)))
+    (p-search--reprint)
+    (goto-char point)
+    (run-at-time 0 nil (lambda () (goto-char point)))))
+
 (defun p-search--reprint-engine ()
   "Redraw the current buffer from the session's state in engine mode."
   (when p-search-engine--search-field
@@ -2582,20 +2605,34 @@ If PRESET is non-nil, set up session with PRESET."
         (widget-create 'editable-field
                         :size 20
                         :format "Search: %v " ; Text after the field!
-                        "funny"))
+                        p-search-engine--search-text))
   (widget-insert " ")
   (setq p-search-engine--search-button
         (widget-create 'push-button
                         :notify (lambda (&rest ignore)
-                                  (p-search-engine-run-search))
+                                  (p-search--engine-run-search))
                         "Search"))
-
-  (when p-search-posterior-probs
+  (when (and p-search-posterior-probs
+             (widget-value p-search-engine--search-field)
+             (not (string-blank-p (widget-value p-search-engine--search-field))))
     (widget-insert "\n\nSearch Results:\n")
-    (let* ((top-results (p-search-top-results)))
+    (let* ((top-results (p-search-top-results))
+           (i 1))
       (pcase-dolist (`(,document ,_p) top-results)
-        (let* ((doc-title (p-search-document-property document 'title)))
-          (widget-insert doc-title "\n")))))
+        (let* ((doc-title (p-search-document-property document 'title))
+               (doc-preview (p-search-document-preview document)))
+          (widget-create 'push-button
+                         :notify (lambda (&rest ignore)
+                                   (p-search-run-document-function document 'p-search-goto-document))
+                         doc-title)
+          (widget-insert "\n" doc-preview "\n"))
+        (when (and (= (mod i 10) 0) (< i p-search-top-n))
+          (widget-insert "\n" (format "------------------------- Page %d -------------------------" (1+ (/ i 10))) "\n\n"))
+        (cl-incf i)))
+    (widget-create 'push-button
+                   :notify (lambda (&rest ignore)
+                             (p-search--engine-more-results))
+                   "More Results"))
   (use-local-map widget-keymap)
   (widget-setup)
   (goto-char (point-min)))
@@ -2604,7 +2641,9 @@ If PRESET is non-nil, set up session with PRESET."
   "Initialize a p-search engine session with PRESET configuration."
   (let* ((buffer (generate-new-buffer "p-search")))
     (with-current-buffer buffer
-      (p-search-initialize-session-variables))
+      (p-search-initialize-session-variables)
+      (setq p-search-top-n 10)
+      (setq p-search-engine--search-text ""))
     (let ((win (display-buffer buffer nil)))
       (select-window win))
     (with-current-buffer buffer
@@ -2612,6 +2651,16 @@ If PRESET is non-nil, set up session with PRESET."
       (p-search-apply-preset preset))
     (setq p-search-current-active-session-buffer buffer)
     buffer))
+
+;; example usage
+;; (p-search-engine
+;;  '(:group ((:candidate-generator p-search-candidate-generator-filesystem
+;;             :args ((search-tool . :rg)
+;;                    (filename-regexp . ".*")
+;;                    (base-directory . "/home/zkry/dev/go/delve/")))
+;;            (:prior-template p-search-prior-query
+;;                             :args ((query-string . ""))
+;;                             :search-engine-arg-name query-string))))
 
 
 ;;; Debug
