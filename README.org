@@ -17,7 +17,156 @@
   rank documents and to revise the rankings as the user searches
   through documents.
 
-  This project is still a work in progress.  When you see
-  documentation here, it means that the package is ready to be used.
-
   [[./documents/screenshot.png]]
+
+* Instalation
+
+  Until p-search is available on ELPA/MELPA, you will have to install
+  this package manually.
+
+  Using Quelpa:
+#+begin_src lisp
+  (quelpa '(p-search :repo "zkry/p-search" :fetcher github))
+#+end_src
+
+  Using Straight:
+#+begin_src lisp
+  (use-package p-search :elpaca (:host github :repo "https://github.com/zkry/p-search.git"))
+#+end_src
+
+
+  Using Elpaca:
+  #+begin_src lisp
+    (use-package p-search :elpaca (:host github :repo "https://github.com/zkry/p-search.git"))
+  #+end_src
+
+* Usage
+
+  A search session can be initiated with the =p-search= command.  The
+  command will set up the session to search for files either in the
+  projects directory (see [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]]) if a project exists or the
+  current directory. Execute =p-search= with the prefix <kbd>C-u</kbd>
+  to instantiate an empty session (TODO).
+
+** The p-search buffer
+
+   The p-search session is composed of three main sections: Candidate
+   Generators, Priors, and Search Results.
+
+   [[./documents/p-search-demo-1.png]]
+
+
+*** Candidate Generators
+
+    Candidate generators are the parts of the search session that
+    enumerate all possible search candidates.  A search candidate is
+    an entity with a set of key/value properties, ='content= and ='title=
+    being mandetory.  Other properties may exist which will allow you
+    to use additional prior functions.  In the p-search session run
+    =p-search-add-candidate-generator= (<kbd>C</kbd>)to add a new candidate generator.
+
+*** Priors
+
+    The Priors section is the part where you add search criteria to
+    your session.  Run =p-search-add-prior= to add a prior function.
+
+    First you must select the type of prior you want to add.  Then you
+    will have to configure the prior.  It will first prompt you for
+    any fields that are mandetory.
+
+    After that, a new transient menu will appear, allowing you
+    configure the prior.  Each prior function will have its own set of
+    inputs and options, but each one will let you set its *importance*
+    and whether the *complement* should be taken.
+
+
+*** Calculation
+
+    Each candidate document is given a score from each prior function
+    depending on how well the prior function matches.
+
+    So for example, suppose you have a text query search.  The query
+    will rank each document on a scale from 0 to 1.  This score is
+    then modified by the importance.  If you assign a high importance,
+    then the probabilities will be pushed to the extremes. A low
+    importance pushes the probabilities to 0.5, thus lowering its impact.
+
+    So for example, if a text search query marked a document as highly
+    relevant, 0.7, but was given a low importance, its probability may
+    be modified to 0.55, thus lowering its impact.  On the other hand,
+    if a text query matches poorly giving a score of 0.3 but its
+    importance is low, then its probability will be raised to perhaps
+    0.45.
+
+
+#+begin_src
+[CANDIDATE GENERATOR]
+  |
+  |                    [PRIOR_X]              [PRIOR_Y]
+  |
+  |\-- DOC_A ->  importance_X(Score_X_A) ✖ importance_Y(Score_Y_A)
+  |
+  |\-- DOC_B ->  importance_X(Score_X_B) ✖ importance_Y(Score_Y_B)  ...
+  |
+  \--- DOC_C ->  importance_X(Score_X_C) ✖ importance_Y(Score_Y_C)
+
+#+end_src
+
+*** Text Search
+
+    Text search is a prominent component in p-search.  While text
+    search functions the same way as other prior functions (resulting
+    in a score of 0 to 1), the mecahnisms behind it are more complex.
+
+    You can create a text query by selecting "text query" in the
+    transient menu when running =p-search-add-prior=.
+
+    You will then be prompted for your query. Depending on the query
+    you write, one or more processes will be created to perform the search.
+
+    As mentioned earlier, each search candidate document has a
+    property ='content=.  The text search is performed on this field.
+    As you can probably immagine, having to search each document on a
+    single Emacs Lisp thread is slow, so each candidate generator
+    function can have a quicker method to perform the search.  This is
+    why you see the search tool like =:grep= or =:rg= on the FILESYSTEM
+    candidate generator.  When performing a text query on documents
+    coming from this, it will rely on this tool to perform the search.
+
+    For the text query, each search result is space separated.  So if
+    you type =teacher student school= it will perform three separate
+    searches for the three terms.  Each term will generate its own
+    score for each document and they will then be combined to form a
+    final score.  You can use quotes to group words to search
+    something as a whole, thus ="teacher student school"= will perform
+    one search with the words in a sequence.
+
+    Unquoted terms will be processed into multiple variants and
+    searched in parallel.  So for example =teacherStudentSchool= will
+    search both "teacherstudentschool" (case insensitive), but also
+    "teacher_student_school", "teacher-student-school" (with a lower
+    score), and the sepearate terms "teacher", "student", and "school"
+    (given even a lower score).
+
+    You can boost a term with =^= so that =teacher student^ school= will
+    give a boost to student.  You can also specify a numeric boost, as
+    in =teacher student^2 school^3=.
+
+    You can search for terms that occur near to one another with the
+    =(term1 term2 ...)~= syntax.  Depending on the value of
+    =p-search-default-near-line-length=, the items will be required to
+    be within a certain number of lines from one another.
+
+** Observation
+   :PROPERTIES:
+   :ID:       360EC6A5-F76A-45E9-9797-F2992CE64FEC
+   :END:
+
+   p-search will only show you the first =p-search-top-n= values of the
+   search results.  If you are not seeing relevant results you may
+   want to consider adding search criteria. You can also run the
+   command =p-search-observe= to lower the probability of a particular
+   result.  Doing so will lower the probability of the item by
+   0.3. With prefix =C-u p-search-observe=, you can specify the
+   probability.  After you perform the observation the probabilities
+   will be recalculated and the results will update.
