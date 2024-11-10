@@ -13,10 +13,6 @@
   confident as to how the seach terms appear or whether they appear at
   all.
 
-  p-search provides a framework to coherently combine all this data to
-  rank documents and to revise the rankings as the user searches
-  through documents.
-
   [[./documents/screenshot.png]]
 
 * Instalation
