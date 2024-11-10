@@ -45,7 +45,7 @@
   A search session can be initiated with the =p-search= command.  The
   command will set up the session to search for files either in the
   projects directory (see [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]]) if a project exists or the
-  current directory. Execute =p-search= with the prefix <kbd>C-u</kbd>
+  current directory. Execute =p-search= with the prefix ~C-u~
   to instantiate an empty session (TODO).
 
 ** The p-search buffer
@@ -63,7 +63,7 @@
     an entity with a set of key/value properties, ='content= and ='title=
     being mandetory.  Other properties may exist which will allow you
     to use additional prior functions.  In the p-search session run
-    =p-search-add-candidate-generator= (<kbd>C</kbd>)to add a new candidate generator.
+    =p-search-add-candidate-generator= (~C~)to add a new candidate generator.
 
 *** Priors
 
