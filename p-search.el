@@ -3,7 +3,7 @@
 ;; Author: Zachary Romero
 ;; URL: https://github.com/zkry/p-search.el
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (heap "0.5"))
 ;; Keywords: tools
 ;;
 
