@@ -1973,8 +1973,8 @@ results from a p-seach session is tracked."
   :require 'p-search
   :global t
   (if p-search-peruse-mode
-      (add-hook 'window-buffer-change-function #'p-search-peruse-buffer-change-function)
-    (remove-hook 'window-buffer-change-function #'p-search-peruse-buffer-change-function)))
+      (add-hook 'window-buffer-change-functions #'p-search-peruse-buffer-change-function)
+    (remove-hook 'window-buffer-change-functions #'p-search-peruse-buffer-change-function)))
 
 (define-minor-mode p-search-peruse-tracking-mode
   "Toggle p-search-peruse-tracking-mode.

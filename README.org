@@ -61,6 +61,8 @@
     to use additional prior functions.  In the p-search session run
     =p-search-add-candidate-generator= (~C~)to add a new candidate generator.
 
+    You can delete a prior with the command =p-search-kill-entry-at-point=.
+
 *** Priors
 
     The Priors section is the part where you add search criteria to
@@ -74,6 +76,8 @@
     configure the prior.  Each prior function will have its own set of
     inputs and options, but each one will let you set its *importance*
     and whether the *complement* should be taken.
+
+    You can delete a prior with the command =p-search-kill-entry-at-point=.
 
 
 *** Calculation
@@ -166,3 +170,9 @@
    0.3. With prefix =C-u p-search-observe=, you can specify the
    probability.  After you perform the observation the probabilities
    will be recalculated and the results will update.
+
+
+*** p-search-peruse-mode
+
+    =p-search-peruse-mode= is an experimental global minor mode, that
+    when active, will track the percentage of files that you viewed.
