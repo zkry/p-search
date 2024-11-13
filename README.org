@@ -176,3 +176,4 @@
 
     =p-search-peruse-mode= is an experimental global minor mode, that
     when active, will track the percentage of files that you viewed.
+    The view percentage will be updated in the search results section.

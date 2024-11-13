@@ -2247,9 +2247,11 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         (insert document-contents)
         ;; propertize buffer according to filename
         (when (eql (car document) 'file)
-          (let ((buffer-file-name (cadr document))
-                (delay-mode-hooks t))
-            (set-auto-mode)))
+          (setq delay-mode-hooks t)
+          (unwind-protect
+              (let ((buffer-file-name (cadr document)))
+                (set-auto-mode))
+            (setq delay-mode-hooks nil)))
         (goto-char (point-min))
         (let* ((hints (p-search--document-hints priors)))
           (if hints
