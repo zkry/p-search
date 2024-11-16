@@ -769,6 +769,20 @@ INIT is the initial value given to the reduce operation."
         (p-search-documentize `(buffer ,buf)))
       (buffer-list)))))
 
+(defconst p-search-candidate-generator-test
+  (p-search-candidate-generator-create
+   :name "TEST"
+   :input-spec '()
+   :options-spec '()
+   :function
+   (lambda (_args)
+     (list (p-search-documentize `(base ("Document 1" . "ABC\nDEF")))
+           (p-search-documentize `(base ("Document 2" . "GHI\nJKL")))
+           (p-search-documentize `(base ("Document 3" . "MNO\nPQR"))))))
+  "Example candiade generator creating three documents.")
+
+
+
 (defconst p-search-candidate-generator-filesystem
   (p-search-candidate-generator-create
    :name "FILESYSTEM"
