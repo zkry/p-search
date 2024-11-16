@@ -2515,7 +2515,7 @@ values of ARGS."
                                     'face 'p-search-section-heading))
             (props . (p-search-section-id candidate-generators)))
         (when (= 0 (length p-search-active-candidate-generators))
-          (insert (propertize "Press \"c\" to add a candidate generator.\n\n"
+          (insert (propertize "Press \"C\" to add a candidate generator.\n\n"
                               'face 'shadow)))
         (dolist (generator-args p-search-active-candidate-generators)
           (p-search--insert-candidate-generator generator-args))
