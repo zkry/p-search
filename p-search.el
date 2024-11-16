@@ -596,6 +596,9 @@ A term regex is noted for marking boundary characters."
   (let* ((content (p-search-document-property doc-id 'content)))
     (length content))) ;; TODO - take into account multibyte
 
+(p-search-def-property 'base 'title #'car)
+(p-search-def-property 'base 'content #'cdr)
+
 (p-search-def-property 'buffer 'title #'buffer-name)
 (p-search-def-property 'buffer 'file-name #'buffer-file-name)
 (p-search-def-property 'buffer 'content (lambda (buf) (with-current-buffer buf (buffer-string))))
