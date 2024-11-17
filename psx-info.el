@@ -37,8 +37,8 @@ not have to open the same file repeatedly.")
 
 (defun psx-info--info-candidates ()
   "Return list of selectable info candidates."
-  (unless (and psx-info--info-to-file
-               (> (hash-table-count psx-info--info-to-file) 0))
+  (when (or (not psx-info--info-to-file)
+            (= (hash-table-count psx-info--info-to-file) 0))
     (psx-info--build-tree))
   (hash-table-keys psx-info--info-to-file))
 
@@ -70,8 +70,8 @@ not have to open the same file repeatedly.")
 
 (defun psx-info--documents-for-entry (entry)
   "Return list of p-search documents for info ENTRY."
-  (unless (and psx-info--info-to-file
-               (> (hash-table-count psx-info--info-to-file) 0))
+  (when (or (not psx-info--info-to-file)
+            (= (hash-table-count psx-info--info-to-file) 0))
     (psx-info--build-tree))
   (let* ((file-map (gethash (symbol-name entry) psx-info--info-to-file))
          (docs '()))
@@ -82,20 +82,6 @@ not have to open the same file repeatedly.")
          (setq docs (append docs (psx-info--documents-from-file filepath)))))
      file-map)
     docs))
-
-(defconst psx-info-candidate-generator
-  (p-search-candidate-generator-create
-   :name "info"
-   :input-spec '((info-node . (p-search-infix-choices
-                                :key "i"
-                                :description "Info Node"
-                                :choices psx-info--info-candidates
-                                :default-value elisp)))
-   :options-spec '()
-   :function
-   (lambda (args)
-     (let* ((node (alist-get 'info-node args)))
-       (psx-info--documents-for-entry node)))))
 
 (defun psx-info--title (info-identifier)
   "Return the title of INFO-IDENTIFIER."
@@ -144,6 +130,19 @@ not have to open the same file repeatedly.")
   "Open the info page of INFO-IDENTIFIER."
   (pcase-let ((`(,dir ,file ,node) info-identifier))
     (Info-find-node (file-name-concat dir file) node)))
+
+(defconst psx-info-candidate-generator
+  (p-search-candidate-generator-create
+   :name "FUN_INFO"
+   :input-spec '((info-node . (p-search-infix-choices
+                                :key "i"
+                                :description "Info Node"
+                                :choices psx-info--info-candidates)))
+   :options-spec '()
+   :function
+   (lambda (args)
+     (let* ((node (alist-get 'info-node args)))
+       (psx-info--documents-for-entry node)))))
 
 (p-search-def-property 'psx-info 'title #'psx-info--title)
 (p-search-def-property 'psx-info 'content #'psx-info--content)

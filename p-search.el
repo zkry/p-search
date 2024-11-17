@@ -1874,7 +1874,7 @@ This function will also start any process or thread described by TEMPLATE."
                           (reader (oref (get (car spec) 'transient--suffix) :reader))
                           (default-value
                            (or (plist-get (cdr spec) :default-value)
-                            (funcall reader (format "%s:" name) nil nil))))
+                               (and reader (funcall reader (format "%s:" name) nil nil)))))
                      (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
                  input-specs)]
              ["Options"
