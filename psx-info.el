@@ -29,7 +29,8 @@
 
 (defun psx-info--info-candidates ()
   "Return list of selectable info candidates."
-  (unless psx-info--info-to-file
+  (unless (and psx-info--info-to-file
+               (> (hash-table-count psx-info--info-to-file) 0))
     (psx-info--build-tree))
   (hash-table-keys psx-info--info-to-file))
 
@@ -55,7 +56,8 @@
 
 (defun psx-info--documents-for-entry (entry)
   "Return list of p-search documents for info ENTRY."
-  (unless psx-info--info-to-file
+  (unless (and psx-info--info-to-file
+               (> (hash-table-count psx-info--info-to-file) 0))
     (psx-info--build-tree))
   (let* ((file-map (gethash (symbol-name entry) psx-info--info-to-file))
          (docs '()))
