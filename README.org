@@ -27,7 +27,7 @@
 
   Using Straight:
 #+begin_src lisp
-  (use-package p-search :elpaca (:host github :repo "https://github.com/zkry/p-search.git"))
+  (use-package p-search :straight (:host github :repo "https://github.com/zkry/p-search.git"))
 #+end_src
 
 
@@ -66,7 +66,7 @@
 *** Priors
 
     The Priors section is the part where you add search criteria to
-    your session.  Run =p-search-add-prior= to add a prior function.
+    your session.  Run =p-search-add-prior= (~P~) to add a prior function.
 
     First you must select the type of prior you want to add.  Then you
     will have to configure the prior.  It will first prompt you for
@@ -77,7 +77,7 @@
     inputs and options, but each one will let you set its *importance*
     and whether the *complement* should be taken.
 
-    You can delete a prior with the command =p-search-kill-entry-at-point=.
+    You can delete a prior with the command =p-search-kill-entry-at-point= (~k~).
 
 
 *** Calculation
