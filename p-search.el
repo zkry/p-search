@@ -822,13 +822,11 @@ INIT is the initial value given to the reduce operation."
              (catch 'skip
                (when (string-prefix-p "./" file)
                  (setq file (substring file 2)))
-               (unless (or (equal .filename-regexp ".*")
-                           (string-match-p .filename-regexp file))
-                 (throw 'skip nil))
-               (when (and .ignore-pattern (string-match-p .ignore-pattern file))
-                 (throw 'skip nil))
-               (setq file (expand-file-name (file-name-concat default-directory file)))
-               (push (p-search-documentize `(file ,file)) documents)))
+               (when (and (not (and .ignore-pattern (string-match-p .ignore-pattern file)))
+                          (or (equal .filename-regexp ".*")
+                              (string-match-p .filename-regexp file)))
+                 (setq file (expand-file-name (file-name-concat default-directory file)))
+                 (push (p-search-documentize `(file ,file)) documents))))
            (nreverse documents)))))
    :term-frequency-function
    (cl-function
@@ -837,7 +835,8 @@ INIT is the initial value given to the reduce operation."
              (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
              (command (p-search-query--command query-term search-tool))
-             (parent-buffer (current-buffer)))
+             (parent-buffer (current-buffer))
+             (candidate-docs (p-search-candidates)))
         (let* ((buf (generate-new-buffer "*p-search rg")))
           (with-current-buffer buf
             (setq p-search-parent-session-buffer parent-buffer))
@@ -860,10 +859,12 @@ INIT is the initial value given to the reduce operation."
                        (let* ((fname (match-string 1 f))
                               (id (list 'file (file-name-concat default-directory fname)))
                               (prev-count (gethash id file-counts 0))
-                              (count (string-to-number (match-string 2 f))))
-                         (puthash (list 'file (file-name-concat default-directory fname))
-                                  (+ prev-count count)
-                                  file-counts))))
+                              (count (string-to-number (match-string 2 f)))
+                              (doc-id (list 'file (file-name-concat default-directory fname))))
+                         (when (and (not (zerop count))
+                                    (gethash doc-id candidate-docs))
+                           (puthash doc-id (+ prev-count count) file-counts)))))
+                   (defvar my-file-counts file-counts)
                    (with-current-buffer p-search-parent-session-buffer
                      (funcall callback file-counts)))))))))))))
 
