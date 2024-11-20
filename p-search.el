@@ -1650,6 +1650,8 @@ use it as the :default-value slot."
          (opts (cdr spec))
          (key (plist-get opts :key))
          (description (plist-get opts :description)))
+    (when default-value
+      (cl-remf opts :default-value))
     `(,key ,description
            ,infix
            :option-symbol ,name
@@ -1849,12 +1851,12 @@ This function will also start any process or thread described by TEMPLATE."
                          option-specs)
               ("-c" "complement"
                p-search-infix-toggle
-               :init-state nil
+               :init-state ,(alist-get 'complement args)
                :option-symbol complement)
               ("-i" "importance"
                p-search-infix-choices
                :choices ,p-search-importance-levels
-               :init-choice medium
+               :init-choice ,(alist-get 'importance args)
                :option-symbol importance)]
              ["Actions"
               ("e" "edit"
@@ -1903,7 +1905,7 @@ This function will also start any process or thread described by TEMPLATE."
                    (let* ((name (car name+spec))
                           (spec (p-search--resolve-spec (cdr name+spec)))
                           (reader (oref (get (car spec) 'transient--suffix) :reader))
-                          (default-value (alist-get (cdr spec) prev-args)))
+                          (default-value (alist-get name prev-args)))
                      (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
                  input-specs)]
              ["Options"
@@ -1912,10 +1914,10 @@ This function will also start any process or thread described by TEMPLATE."
                                   (spec (p-search--resolve-spec (cdr name+spec)))
                                   ;; we don't want to use the specs default when editing
                                   ;; we we reset it with append.
-                                  (spec (append spec
-                                                '(:default-value nil)))
-                                  (default-value (alist-get (cdr spec) prev-args)))
-                             (p-search--transient-suffix-from-spec (cons name spec) default-value)))
+                                  (default-value (alist-get name prev-args)))
+                             (unless default-value
+                               (setq spec (append spec '(:default-value nil))))
+                             (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
                          option-specs)]
              ["Actions"
               ("e" "edit"
@@ -2734,6 +2736,42 @@ If PRESET is non-nil, set up session with PRESET."
   (when-let* ((prior (get-char-property (point) 'p-search-candidate-generator)))
     (p-search-dispatch-edit-candidate-generator prior)))
 
+(defun p-search-next-item ()
+  "Move the point to the next item"
+  (interactive)
+  (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
+                                   (get-char-property (point) 'p-search-prior)
+                                   (get-char-property (point) 'p-search-result))))
+    (let ((start-thing (thing-at-point)))
+      (catch 'out
+        (while t
+          (let ((next-thing (thing-at-point)))
+            (when (or (and next-thing (not (equal start-thing next-thing)))
+                      (eobp))
+              (throw 'out nil)))
+          (forward-line 1))))))
+
+(defun p-search-prev-item ()
+  "Move the point to the next item"
+  (interactive)
+  (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
+                                    (get-char-property (point) 'p-search-prior)
+                                    (get-char-property (point) 'p-search-result))))
+    (let ((start-thing (thing-at-point)))
+      (catch 'out
+        (while t
+          (let ((next-thing (thing-at-point)))
+            (when (or (and next-thing (not (equal start-thing next-thing))) (bobp))
+              (throw 'out nil)))
+          (forward-line -1))))
+    ;; go to the top of the thing from the bottom
+    (unless (bobp)
+      (let ((start-thing (thing-at-point)))
+        (while (equal (thing-at-point) start-thing)
+          (forward-line -1))
+        (forward-line 1)))))
+
+
 (defun p-search-add-candidate-generator ()
   "Add a new candidate generator to the current session."
   (interactive)
@@ -2883,8 +2921,9 @@ Presets come from the variable `p-search-session-presets'."
     (keymap-set map "G" #'p-search-hard-refresh-buffer)
     ;; (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
-    ;; (keymap-set map "n" #'p-search-obs-not-relevant)
+    (keymap-set map "n" #'p-search-next-item)
     (keymap-set map "o" #'p-search-observe)
+    (keymap-set map "p" #'p-search-prev-item)
     ;; (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "P" #'p-search-add-prior)
     (keymap-set map "+" #'p-search-increase-preview-size)
