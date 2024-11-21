@@ -529,20 +529,19 @@ TOOL is used to look up the correct wildchard character."
           (setq pos (1+ match)))
         (concat new-string (substring string pos))))))
 
-(defun p-search-query-emacs--term-regexp (string)
+(defun p-search-query-emacs--term-regexp (term)
   "Create a term regular expression from STRING.
 A term regex is noted for marking boundary characters."
-  (if (get-text-property 0 'p-search-case-insensitive string)
-      (list (propertize (p-search--replace-wildcards string :emacs) 'p-search-case-insensitive t))
-    (list (p-search--replace-wildcards string :emacs))))
+  (p-search--rx-to-string term :emacs))
 
 (defun p-search-query--command (term cmd)
   "Create list of command args for search of TERM and command CMD."
-  (let* ((case-insensitive-p (get-text-property 0 'p-search-case-insensitive term)))
+  (let* ((term-str (p-search--rx-to-string term cmd))
+         (case-insensitive-p (get-text-property 0 'p-search-case-insensitive term-str)))
     (pcase cmd
-      (:grep `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case")) ,term "."))
-      (:rg `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive-p '("-i")) ,term))
-      (:ag `("ag" "-c" "--nocolor" ,@(and case-insensitive-p '("-i")) ,term)))))
+      (:grep `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case")) ,term-str "."))
+      (:rg `("rg" "--count-matches" "--color" "never" ,@(and case-insensitive-p '("-i")) ,term-str))
+      (:ag `("ag" "-c" "--nocolor" ,@(and case-insensitive-p '("-i")) ,term-str)))))
 
 
 
@@ -994,15 +993,14 @@ Called with user supplied ARGS for the prior."
          (query (alist-get 'query-string args)))
     (p-search-mark-query
      query
-     (lambda (query)
-       (let* ((terms (p-search-query-emacs--term-regexp query))
+     (lambda (query) ; finalize function:
+       (let* ((term (p-search-query-emacs--term-regexp query))
               (ress '()))
-         (dolist (term terms)
-           (save-excursion
-             (goto-char (point-min))
-             (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
-               (while (search-forward-regexp term nil t)
-                 (push (cons (match-beginning 0) (match-end 0)) ress)))))
+         (save-excursion
+           (goto-char (point-min))
+           (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
+             (while (search-forward-regexp term nil t)
+               (push (cons (match-beginning 0) (match-end 0)) ress))))
          (setq ress (nreverse ress))
          ress)))))
 
