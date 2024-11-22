@@ -340,10 +340,7 @@ Maps from file name to result indicator.")
   (proc-or-thread nil
    :documentation "This slot stores the process or thread that does main computation.")
   (arguments nil
-   :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
-  (default-result nil ;; TODO - is this needed?
-   :documentation "Override of the tempate's default result."))
-
+   :documentation "Arguments provided to the prior.  These are the union of inputs and options."))
 
 
 ;;; Helper Functions
@@ -829,7 +826,7 @@ INIT is the initial value given to the reduce operation."
            (nreverse documents)))))
    :term-frequency-function
    (cl-function
-    (lambda (args query-term callback &key _case-insensitive)
+    (lambda (args query-term callback)
       (let* ((default-directory (alist-get 'base-directory args))
              (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
@@ -995,12 +992,21 @@ Called with user supplied ARGS for the prior."
      query
      (lambda (query) ; finalize function:
        (let* ((term (p-search-query-emacs--term-regexp query))
+              (tfs (and p-search-query-session-tf-ht (gethash query p-search-query-session-tf-ht)))
+              (docs-containing (and tfs (hash-table-count tfs)))
+              (N (hash-table-count (p-search-candidates)))
+              (idf-score (or (and docs-containing
+                                  (log (1+ (/ (+ N (- docs-containing) 0.5)
+                                              (+ docs-containing 0.5)))))
+                             1.0))
               (ress '()))
          (save-excursion
            (goto-char (point-min))
            (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
              (while (search-forward-regexp term nil t)
-               (push (cons (match-beginning 0) (match-end 0)) ress))))
+               (push (list (cons (match-beginning 0) (match-end 0))
+                           :score idf-score)
+                     ress))))
          (setq ress (nreverse ress))
          ress)))))
 
@@ -2200,7 +2206,7 @@ the heading to the point where BODY leaves off."
     (dolist (prior priors)
       (when-let ((hint-func (p-search-prior-template-result-hint-function (p-search-prior-template prior))))
         (let ((hint-ranges (funcall hint-func prior)))
-          (setq hints (range-concat hints hint-ranges)))))
+          (setq hints (append hints hint-ranges)))))
     hints))
 
 (defun p-search--buffer-substring-line-number (start end)
@@ -2226,12 +2232,12 @@ the heading to the point where BODY leaves off."
 (defun p-search--preview-from-hints (hints)
   "Return a string from current buffer highlighting the HINTS ranges."
   (let* ((output-string ""))
-    (pcase-dolist (`(,start . ,end) hints)
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
     (catch 'out
      (let* ((added-lines '())
             (i 0))
-       (pcase-dolist (`(,start . ,_end) hints)
+       (pcase-dolist (`((,start . ,_end) . ,_metadata) hints)
          (goto-char start)
          (let* ((line-no (line-number-at-pos)))
            (when (not (member line-no added-lines))

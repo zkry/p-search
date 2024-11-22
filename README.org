@@ -162,14 +162,14 @@
    :ID:       360EC6A5-F76A-45E9-9797-F2992CE64FEC
    :END:
 
-   p-search will only show you the first =p-search-top-n= values of the
-   search results.  If you are not seeing relevant results you may
+   p-search will only show you the first =p-search-top-n= values of
+   the search results.  If you are not seeing relevant results you may
    want to consider adding search criteria. You can also run the
    command =p-search-observe= to lower the probability of a particular
    result.  Doing so will lower the probability of the item by
-   0.3. With prefix =C-u p-search-observe=, you can specify the
-   probability.  After you perform the observation the probabilities
-   will be recalculated and the results will update.
+   multiplying it by 0.3. With prefix =C-u p-search-observe=, you can
+   specify the probability.  After you perform the observation the
+   probabilities will be recalculated and the results will update.
 
 
 *** p-search-peruse-mode

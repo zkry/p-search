@@ -17,6 +17,11 @@
 
 (defvar p-search-active-candidate-generators)
 
+(defvar-local p-search-query-session-tf-ht nil
+  "Stores the raw term frequencies for the current session.
+This variable is not used in the main text query, but may be used
+for auxiliary purposes, namely prioritizing sections of the preview.")
+
 
 
 ;;; Customs:
@@ -51,8 +56,6 @@ Stores the list of tokens being parsed.")
 (defvar p-search-query-parse--idx nil
   "Variable to be used dynamically when parsing.
 Indicates which token we are currently considering.")
-
-
 
 
 ;;; Term Expansion:
@@ -122,7 +125,8 @@ Indicates which token we are currently considering.")
 ;;; Query Runner:
 
 (defun p-search-query-dispatch (term finalize-func)
-  "Run query TERM  Call FINALIZE-FUNC on obtained results."
+  "Run query TERM on all candidate generators.
+Call FINALIZE-FUNC on obtained results."
   (pcase-let*
       ((combined-tf (make-hash-table :test #'equal))
        (n (length p-search-active-candidate-generators))
@@ -135,10 +139,13 @@ Indicates which token we are currently considering.")
                             do (puthash k v combined-tf))
                    (cl-incf i)
                    (when (= i n)
+                     (unless p-search-query-session-tf-ht
+                       (setq p-search-query-session-tf-ht (make-hash-table :test #'equal)))
+                     (puthash term combined-tf p-search-query-session-tf-ht)
                      (funcall finalize-func combined-tf)))))
     (pcase-dolist (`(,generator . ,args) p-search-active-candidate-generators)
       (let* ((tf-func (p-search-candidate-generator-term-frequency-function generator)))
-        (funcall tf-func args term callback :case-insensitive t))))) ;; TODO - does this case-insensitive do anythign?
+        (funcall tf-func args term callback)))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
@@ -656,7 +663,7 @@ structure."
        (dolist (elt elts)
          (let* ((res (p-search--mark-query* elt mark-function)))
            (when res
-             (setq ress (range-concat ress res)))))
+             (setq ress (append res ress)))))
        ress))
     ((cl-type string)
      (let* ((expansion-terms (p-search-query-expand-term query)))
@@ -666,7 +673,7 @@ structure."
        (dolist (elt elts)
          (let* ((res (p-search--mark-query* elt mark-function)))
            (when res
-             (setq ress (range-concat ress res)))))
+             (setq ress (append res ress)))))
        ress))
     ;; (`(near . ,elts)
     ;;  (p-search-query-near* elts))
