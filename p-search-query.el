@@ -99,22 +99,23 @@ Indicates which token we are currently considering.")
      ((null term-parts)
       (error "nil base term"))
      ((= (length term-parts) 1)
-      `((q ,(propertize term 'p-search-case-insensitive t))))
+      (list `(subtract (boost (q (?i ,term)) 0.3)
+                       (q (seq word-start ,term word-end)))))
      (t
-      (let* ((camel (propertize (string-join term-parts "") 'p-search-case-insensitive t))
-             (snake (propertize (string-join term-parts "_") 'p-search-case-insensitive t))
-             (kebab (propertize (string-join term-parts "-")  'p-search-case-insensitive t)))
+      (let* ((camel (string-join term-parts ""))
+             (snake (string-join term-parts "_"))
+             (kebab (string-join term-parts "-")))
         (seq-filter
          #'identity
          (append (list `(q ,term)
-                       (and (not (equal term camel)) `(boost (q ,camel) 0.7))
-                       (and (not (equal term snake)) `(boost (q ,snake) 0.7))
-                       (and (not (equal term kebab)) `(boost (q ,kebab) 0.7))
+                       (and (not (equal term camel)) `(boost (q (?i ,camel)) 0.7))
+                       (and (not (equal term snake)) `(boost (q (?i ,snake)) 0.7))
+                       (and (not (equal term kebab)) `(boost (q (?i ,kebab)) 0.7))
                        ;; `(near ,@term-parts)
                        )
                  (seq-map
                   (lambda (term-part)
-                    `(boost (q ,(propertize term-part 'p-search-case-insensitive t)) 0.3))
+                    `(boost (q (?i ,term-part)) 0.3))
                   term-parts))))))))
 
 
@@ -192,6 +193,7 @@ Indicates which token we are currently considering.")
                                      (dolist (term terms)
                                        (save-excursion
                                          (goto-char (point-min))
+                                         ;; TODO p-search-
                                          (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
                                            (while (search-forward-regexp term nil t)
                                              (push (cons (match-beginning 0) (match-end 0)) ress)))))
@@ -224,6 +226,30 @@ resulting data hashmap."
   (pcase query
     (`(q ,elt) ;; use quote to make sure no further expansion is done
      (p-search-query-dispatch elt finalize-func))
+    (`(subtract ,a ,b)
+     ;; subtract is used when dispatching two queries where one is a
+     ;; subset of another.  In this case, to avoid double counting,
+     ;; the specific case's results (b) should be subtracted from the more
+     ;; general case's results (a).
+     (p-search-query-run
+      b
+      (lambda (result-b)
+        (p-search-query-run
+         a
+         (lambda (result-a)
+           (let* ((result-ht-a (p-search-query--metadata-elt result-a))
+                  (result-ht-b (p-search-query--metadata-elt result-b))
+                  (subtr-result-ht-a (make-hash-table :test #'equal :size (hash-table-size result-ht-a))))
+             (maphash
+              (lambda (key val-a)
+                (let* ((val-b (gethash key result-ht-b 0)))
+                  (puthash key (- val-a val-b) subtr-result-ht-a)))
+              result-ht-a)
+             (let ((final-result-b (p-search-query--with-metadata subtr-result-ht-a (p-search-query--metadata result-a))))
+               (funcall
+                finalize-func
+                (vector final-result-b
+                        result-b)))))))))
     (`(terms . ,elts)
      (let ((results (make-vector (length elts) nil))
            (i 0))
@@ -324,6 +350,15 @@ resulting data hashmap."
   "Return metadata value MD-KEY of ELT."
   (when (listp elt)
     (plist-get (cdr elt) md-key)))
+
+(defun p-search-query--metadata (elt)
+  "Return metadata value MD-KEY of ELT."
+  (when (listp elt)
+    (cdr elt)))
+
+(defun p-search-query--with-metadata (elt metadata)
+  "Return metadata value MD-KEY of ELT."
+  (cons elt metadata))
 
 (defun p-search-query--metadata-elt (elt)
   "Return original element of ELT."
@@ -612,6 +647,8 @@ structure."
   (pcase query
     (`(q ,elt)
      (funcall mark-function elt))
+    (`(subtract ,a ,b)
+     (p-search--mark-query* `(terms ,a ,b) mark-function))
     (`(boost . ,rest)
      (p-search--mark-query* (car rest) mark-function))
     (`(terms . ,elts)
@@ -638,7 +675,8 @@ structure."
     (`(must ,elt)
      (p-search--mark-query* elt mark-function))
     (`(must-not ,_elt)
-     (ignore))))
+     (ignore))
+    (_ (error "unhandled mark case: %s" query))))
 
 (defun p-search-mark-query (query mark-function)
   "Dispatch terms of QUERY by MARK-FUNCTION to return match ranges."
