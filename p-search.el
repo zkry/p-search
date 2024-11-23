@@ -865,7 +865,8 @@ INIT is the initial value given to the reduce operation."
                            (puthash doc-id (+ prev-count count) file-counts)))))
                    (defvar my-file-counts file-counts)
                    (with-current-buffer p-search-parent-session-buffer
-                     (funcall callback file-counts)))))))))))))
+                     (funcall callback file-counts))))
+               (kill-buffer (process-buffer proc)))))))))))
 
 ;;; Generic priors
 
