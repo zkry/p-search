@@ -2435,8 +2435,12 @@ values of ARGS."
          (heading-line-1 (concat complement-char (or importance-char " ") " "
                                 (propertize name 'face 'p-search-prior)))
          (heading-line (concat heading-line-1
-                               (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
-                               (format "%.1f" (p-search-entropy-from-prior prior))))
+                               ;; NOTE: the following code adds the entropy display
+                               ;;       I haven't found this useful at all, so I'm leaving
+                               ;;       it out for now
+                               ;; (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                               ;; (format "%.1f" (p-search-entropy-from-prior prior))
+                               ))
          (condenced (concat " (" args-string ")")))
     (p-search-add-section
         `((heading . ,heading-line)
@@ -2526,10 +2530,14 @@ values of ARGS."
              (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
                                          'face 'p-search-section-heading))
              (heading (concat heading-line-1
-                              (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
-                              (if (> (length p-search-priors) 0)
-                                  (propertize "H" 'face 'bold)
-                                " "))))
+                              ;; NOTE: the following code adds the entropy display
+                              ;;       I haven't found this useful at all, so I'm leaving
+                              ;;       it out for now
+                              ;; (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                              ;; (if (> (length p-search-priors) 0)
+                              ;;     (propertize "H" 'face 'bold)
+                              ;;   " ")
+                              )))
         (p-search-add-section `((heading . ,heading)
                                 (props . (p-search-section-id priors)))
           (unless p-search-priors
