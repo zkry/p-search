@@ -109,7 +109,26 @@
 
 (defcustom p-search-max-fontify-file-size
   100000
-  "Maxiumum file size to fontify. Any sizes larger won't be fontified.")
+  "Maxiumum file size to fontify. Any sizes larger won't be fontified."
+  :group 'p-search)
+
+(defcustom p-search-default-preview-function #'p-search-preview-from-hints-best-section
+  "Function to use to generate previews.  The function should assume
+it is running with an active buffer of the text to generate a
+preview for, correctly fontified and all. The function should
+accept one argument, `hints', which is a list of hints.  A hint
+is a list whoes first element is a cons pair (A . B) where A and
+B are the start and end of the match respectively.  The CDR of a
+hint is a plist with additional metadata, the most prominent of
+which is the `:score', a measure of how important the hint is.
+This is a floating point number ranging from zero to 20.
+
+The current prebuild preview functions are
+`p-search-preview-from-hints-best-section',
+`p-search-preview-from-hints-top-score', and
+`p-search-preview-from-hints-first-n'."
+
+  :group 'p-search)
 
 
 ;;; Consts
@@ -340,10 +359,7 @@ Maps from file name to result indicator.")
   (proc-or-thread nil
    :documentation "This slot stores the process or thread that does main computation.")
   (arguments nil
-   :documentation "Arguments provided to the prior.  These are the union of inputs and options.")
-  (default-result nil ;; TODO - is this needed?
-   :documentation "Override of the tempate's default result."))
-
+   :documentation "Arguments provided to the prior.  These are the union of inputs and options."))
 
 
 ;;; Helper Functions
@@ -829,7 +845,7 @@ INIT is the initial value given to the reduce operation."
            (nreverse documents)))))
    :term-frequency-function
    (cl-function
-    (lambda (args query-term callback &key _case-insensitive)
+    (lambda (args query-term callback)
       (let* ((default-directory (alist-get 'base-directory args))
              (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
@@ -996,12 +1012,21 @@ Called with user supplied ARGS for the prior."
      query
      (lambda (query) ; finalize function:
        (let* ((term (p-search-query-emacs--term-regexp query))
+              (tfs (and p-search-query-session-tf-ht (gethash query p-search-query-session-tf-ht)))
+              (docs-containing (and tfs (hash-table-count tfs)))
+              (N (hash-table-count (p-search-candidates)))
+              (idf-score (or (and docs-containing
+                                  (log (1+ (/ (+ N (- docs-containing) 0.5)
+                                              (+ docs-containing 0.5)))))
+                             1.0))
               (ress '()))
          (save-excursion
            (goto-char (point-min))
            (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
              (while (search-forward-regexp term nil t)
-               (push (cons (match-beginning 0) (match-end 0)) ress))))
+               (push (list (cons (match-beginning 0) (match-end 0))
+                           :score idf-score)
+                     ress))))
          (setq ress (nreverse ress))
          ress)))))
 
@@ -1541,7 +1566,6 @@ If SIZE is provided create the heap with this size."
 (defun p-search-calculate (&optional no-reprint)
   "Calculate the posterior probabilities of all search candidates.
 If NO-REPRINT is nil, don't redraw p-search buffer."
-  (message "--- p-search-calculate")
   (let* ((documents (p-search-candidates))
          (priors p-search-priors)
          (marginal-p 0.0)
@@ -2201,7 +2225,7 @@ the heading to the point where BODY leaves off."
     (dolist (prior priors)
       (when-let ((hint-func (p-search-prior-template-result-hint-function (p-search-prior-template prior))))
         (let ((hint-ranges (funcall hint-func prior)))
-          (setq hints (range-concat hints hint-ranges)))))
+          (setq hints (append hints hint-ranges)))))
     hints))
 
 (defun p-search--buffer-substring-line-number (start end)
@@ -2213,26 +2237,69 @@ the heading to the point where BODY leaves off."
     (with-temp-buffer
       (insert substring)
       (goto-char (point-min))
-      (while (not (eobp))
-        (insert (propertize
-                 (format (concat "%"
-                                 (number-to-string digit-ct)
-                                 "d ")
-                         line-no)
-                 'face 'line-number))
-        (forward-line 1)
-        (cl-incf line-no))
+      (if (eobp)
+          (insert (propertize (format (concat "%" (number-to-string digit-ct) "d ") line-no) 'face 'line-number))
+        (while (not (eobp))
+          (insert (propertize
+                   (format (concat "%"
+                                   (number-to-string digit-ct)
+                                   "d ")
+                           line-no)
+                   'face 'line-number))
+          (forward-line 1)
+          (cl-incf line-no)))
       (buffer-string))))
 
-(defun p-search--preview-from-hints (hints)
-  "Return a string from current buffer highlighting the HINTS ranges."
+(defun p-search-preview-from-hints-best-section (hints)
+  "Return the best contiguous section scored by HINTS."
+  (let* ((max-line (line-number-at-pos (point-max)))
+         (line-scores (make-vector max-line 0)))
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
+      (add-text-properties start end '(face p-search-hi-yellow)))
+    (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+      (let* ((score (plist-get metadata :score))
+             (line-no (1- (line-number-at-pos start))))
+        (cl-incf (aref line-scores line-no) score)))
+    (let* ((i 0)
+           (j 0)
+           (current-score (aref line-scores 0))
+           (best-offset 0)
+           (best-offset-score (aref line-scores 0)))
+      (catch 'done
+        (while t
+          (cl-incf j)
+          (when (= j max-line)
+            (throw 'done nil))
+          (cl-incf current-score (aref line-scores j))
+          (when (= (- j i) p-search-document-preview-size)
+            (cl-decf current-score (aref line-scores i))
+            (cl-incf i))
+          (when (> current-score best-offset-score)
+            (setq best-offset i)
+            (setq best-offset-score current-score))))
+      (goto-char (point-min))
+      (forward-line best-offset)
+      (let ((output-string ""))
+        (dotimes (_ (- j i))
+          (let* ((line-str (propertize
+                            (if p-search-show-preview-lines
+                                (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                              (buffer-substring (pos-bol) (pos-eol)))
+                            'p-search-document-line-no (line-number-at-pos (point)))))
+            (setq output-string (concat output-string line-str "\n"))
+            (forward-line 1)))
+        output-string))))
+
+(defun p-search-preview-from-hints-first-n (hints)
+  "Return a string from current buffer highlighting first HINTS ranges.
+Score is not taken into acconut for this preview method."
   (let* ((output-string ""))
-    (pcase-dolist (`(,start . ,end) hints)
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
     (catch 'out
      (let* ((added-lines '())
             (i 0))
-       (pcase-dolist (`(,start . ,_end) hints)
+       (pcase-dolist (`((,start . ,_end) . ,_metadata) hints)
          (goto-char start)
          (let* ((line-no (line-number-at-pos)))
            (when (not (member line-no added-lines))
@@ -2252,14 +2319,52 @@ the heading to the point where BODY leaves off."
       "\n")
      "\n")))
 
+(defun p-search-preview-from-hints-top-score (hints)
+  "Return a preview string of the  buffer containing the max score from HINTS."
+  (let* ((max-line (line-number-at-pos (point-max)))
+         (line-scores (make-vector max-line 0))
+         (score-heap (make-heap (lambda (a b) (> (cdr a) (cdr b)))))
+         (top-lines '()))
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
+      (add-text-properties start end '(face p-search-hi-yellow)))
+    (let* ((prev-line -1)
+           (prev-score nil))
+      (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+        (let* ((score (plist-get metadata :score))
+               (line-no (1- (line-number-at-pos start))))
+          (when (not (= line-no prev-line))
+            (when prev-score
+              (heap-add score-heap (cons prev-line prev-score)))
+            (setq prev-score 0))
+          (setq prev-line line-no)
+          (cl-incf prev-score score)))
+      (heap-add score-heap (cons prev-line prev-score)))
+    (dotimes (_ p-search-document-preview-size)
+      (let ((top (heap-delete-root score-heap)))
+        (push top top-lines)))
+    (setq top-lines (seq-sort-by #'car #'< top-lines))
+    (let ((output-string ""))
+      (pcase-dolist (`(,line-no . ,score) top-lines)
+        (goto-char (point-min))
+        (forward-line line-no)
+        (let* ((line-str (propertize
+                          (if p-search-show-preview-lines
+                              (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                            (buffer-substring (pos-bol) (pos-eol)))
+                          'p-search-document-line-no line-no)))
+          (setq output-string (concat output-string line-str "\n"))))
+      output-string)))
+
 (defun p-search-document-preview (document)
   "Return preview string of DOCUMENT.
 The number of lines returned is determined by `p-search-document-preview-size'."
   (let* ((document-contents (p-search-document-property document 'content))
-         (buffer (generate-new-buffer "*test-buffer*"))
          (priors p-search-priors)
-         (preview-size p-search-document-preview-size))
-    (with-current-buffer buffer
+         (preview-size p-search-document-preview-size)
+         (session-tfs p-search-query-session-tf-ht)
+         (candidates (p-search-candidates))
+         (final-result))
+    (with-temp-buffer
       (let* ((p-search-document-preview-size preview-size))
         ;; TODO: Add local variable to be able to refer to document
         ;;       Like how would git author provide text hints?
@@ -2271,13 +2376,17 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (let ((buffer-file-name (cadr document)))
                 (set-auto-mode))
             (setq delay-mode-hooks nil)))
+        ;; using temp buffers and local state makes things really confusing...
+        ;; the following setqs is for the code to be able to accesss certain session variables
+        (setq p-search-query-session-tf-ht session-tfs)
+        (setq p-search-candidates-cache candidates)
         (goto-char (point-min))
         (let* ((hints (p-search--document-hints priors)))
           (if hints
               (progn
                 (when (< (- (point-max) (point-min)) p-search-max-fontify-file-size)
                   (font-lock-fontify-region (point-min) (point-max)))
-                (p-search--preview-from-hints hints))
+                (funcall p-search-default-preview-function hints))
             ;; if there are no hints, just get the first n lines
             (let ((start (point)))
               (forward-line p-search-document-preview-size)
