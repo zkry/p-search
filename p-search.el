@@ -2229,7 +2229,46 @@ the heading to the point where BODY leaves off."
         (cl-incf line-no))
       (buffer-string))))
 
-(defun p-search--preview-from-hints (hints)
+(defun p-search-preview-from-hints-best-section (hints)
+  (let* ((max-line (line-number-at-pos (point-max)))
+         (line-scores (make-vector max-line 0)))
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
+      (add-text-properties start end '(face p-search-hi-yellow)))
+    (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+      (let* ((score (plist-get metadata :score))
+             (line-no (1- (line-number-at-pos start))))
+        (cl-incf (aref line-scores line-no) score)))
+    (let* ((i 0)
+           (j 0)
+           (current-score (aref line-scores 0))
+           (best-offset 0)
+           (best-offset-score (aref line-scores 0)))
+      (catch 'done
+        (while t
+          (cl-incf j)
+          (when (= j max-line)
+            (throw 'done nil))
+          (cl-incf current-score (aref line-scores j))
+          (when (= (- j i) p-search-document-preview-size)
+            (cl-decf current-score (aref line-scores i))
+            (cl-incf i))
+          (when (> current-score best-offset-score)
+            (setq best-offset i)
+            (setq best-offset-score current-score))))
+      (goto-char (point-min))
+      (forward-line best-offset)
+      (let ((output-string ""))
+        (dotimes (_ (- j i))
+          (let* ((line-str (propertize
+                            (if p-search-show-preview-lines
+                                (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                              (buffer-substring (pos-bol) (pos-eol)))
+                            'p-search-document-line-no (line-number-at-pos (point)))))
+            (setq output-string (concat output-string line-str "\n"))
+            (forward-line 1)))
+        output-string))))
+
+(defun p-search-preview-from-hints-first-n (hints)
   "Return a string from current buffer highlighting the HINTS ranges."
   (let* ((output-string ""))
     (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
@@ -2257,6 +2296,49 @@ the heading to the point where BODY leaves off."
       "\n")
      "\n")))
 
+(defun p-search-preview-from-hints-top-score (hints)
+  (let* ((max-line (line-number-at-pos (point-max)))
+         (line-scores (make-vector max-line 0))
+         (score-heap (make-heap (lambda (a b) (> (cdr a) (cdr b)))))
+         (top-lines '()))
+    (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
+      (add-text-properties start end '(face p-search-hi-yellow)))
+    ;;;
+    ;; (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+    ;;   (let* ((score (plist-get metadata :score))
+    ;;          (line-no (1- (line-number-at-pos start))))
+    ;;     (cl-incf (aref line-scores line-no) score)))
+    ;; (dotimes (i (length line-scores))
+    ;;   (heap-add score-heap (cons i (aref line-scores i))))
+    ;;;
+    (let* ((prev-line -1)
+           (prev-score nil))
+      (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+        (let* ((score (plist-get metadata :score))
+               (line-no (1- (line-number-at-pos start))))
+          (when (not (= line-no prev-line))
+            (when prev-score
+              (heap-add score-heap (cons prev-line prev-score)))
+            (setq prev-score 0))
+          (setq prev-line line-no)
+          (cl-incf prev-score score)))
+      (heap-add score-heap (cons prev-line prev-score)))
+    (dotimes (_ p-search-document-preview-size)
+      (let ((top (heap-delete-root score-heap)))
+        (push top top-lines)))
+    (setq top-lines (seq-sort-by #'car #'< top-lines))
+    (let ((output-string ""))
+      (pcase-dolist (`(,line-no . ,score) top-lines)
+        (goto-char (point-min))
+        (forward-line line-no)
+        (let* ((line-str (propertize
+                          (if p-search-show-preview-lines
+                              (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                            (buffer-substring (pos-bol) (pos-eol)))
+                          'p-search-document-line-no line-no)))
+          (setq output-string (concat output-string line-str "\n"))))
+      output-string)))
+
 (defun p-search-document-preview (document)
   "Return preview string of DOCUMENT.
 The number of lines returned is determined by `p-search-document-preview-size'."
@@ -2282,7 +2364,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (progn
                 (when (< (- (point-max) (point-min)) p-search-max-fontify-file-size)
                   (font-lock-fontify-region (point-min) (point-max)))
-                (p-search--preview-from-hints hints))
+                (p-search-preview-from-hints-top-score hints))
             ;; if there are no hints, just get the first n lines
             (let ((start (point)))
               (forward-line p-search-document-preview-size)
