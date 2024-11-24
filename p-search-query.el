@@ -513,12 +513,23 @@ given a value of zero-prob."
            ((eql (char-after (point)) ?\")
             (if (eql (char-after (1+ (point))) ?\")
                 (forward-char 2) ;; Just skip the empty quoted string
-              (let* ((start (1+ (point)))
-                     (res (search-forward-regexp "[^\"]\"" nil t)))
-                (if res
-                    (push `(QUOTED-TERM ,(buffer-substring-no-properties start (1- (point))))
-                          tokens)
-                  (user-error "Unmatched quote at position %d" start)))))
+              (let* ((start (1+ (point))))
+                (catch 'done
+                  (while t
+                    (forward-char 1)
+                    (cond
+                     ((= (char-after (point)) ?\\)
+                      (forward-char 1)
+                      (pcase (char-after (point))
+                        (?\" (delete-char -1) (delete-char 1) (insert "\""))
+                        (?n (delete-char -1) (delete-char 1) (insert "\n"))
+                        (?t (delete-char -1) (delete-char 1) (insert "\t"))))
+                     ((= (char-after (point)) ?\")
+                      (forward-char 1)
+                      (throw 'done nil)))
+                    (when (eobp)
+                      (user-error "Unmatched quote at position %d" start))))
+                (push `(QUOTED-TERM ,(buffer-substring-no-properties start (1- (point)))) tokens))))
            ((eql (char-after (point)) ?\()
             (push 'lparen tokens)
             (forward-char 1))
