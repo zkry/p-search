@@ -109,7 +109,26 @@
 
 (defcustom p-search-max-fontify-file-size
   100000
-  "Maxiumum file size to fontify. Any sizes larger won't be fontified.")
+  "Maxiumum file size to fontify. Any sizes larger won't be fontified."
+  :group 'p-search)
+
+(defcustom p-search-default-preview-function #'p-search-preview-from-hints-best-section
+  "Function to use to generate previews.  The function should assume
+it is running with an active buffer of the text to generate a
+preview for, correctly fontified and all. The function should
+accept one argument, `hints', which is a list of hints.  A hint
+is a list whoes first element is a cons pair (A . B) where A and
+B are the start and end of the match respectively.  The CDR of a
+hint is a plist with additional metadata, the most prominent of
+which is the `:score', a measure of how important the hint is.
+This is a floating point number ranging from zero to 20.
+
+The current prebuild preview functions are
+`p-search-preview-from-hints-best-section',
+`p-search-preview-from-hints-top-score', and
+`p-search-preview-from-hints-first-n'."
+
+  :group 'p-search)
 
 
 ;;; Consts
@@ -2230,6 +2249,7 @@ the heading to the point where BODY leaves off."
       (buffer-string))))
 
 (defun p-search-preview-from-hints-best-section (hints)
+  "Return the best contiguous section scored by HINTS."
   (let* ((max-line (line-number-at-pos (point-max)))
          (line-scores (make-vector max-line 0)))
     (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
@@ -2269,7 +2289,8 @@ the heading to the point where BODY leaves off."
         output-string))))
 
 (defun p-search-preview-from-hints-first-n (hints)
-  "Return a string from current buffer highlighting the HINTS ranges."
+  "Return a string from current buffer highlighting first HINTS ranges.
+Score is not taken into acconut for this preview method."
   (let* ((output-string ""))
     (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
@@ -2297,20 +2318,13 @@ the heading to the point where BODY leaves off."
      "\n")))
 
 (defun p-search-preview-from-hints-top-score (hints)
+  "Return a preview string of the  buffer containing the max score from HINTS."
   (let* ((max-line (line-number-at-pos (point-max)))
          (line-scores (make-vector max-line 0))
          (score-heap (make-heap (lambda (a b) (> (cdr a) (cdr b)))))
          (top-lines '()))
     (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
-    ;;;
-    ;; (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
-    ;;   (let* ((score (plist-get metadata :score))
-    ;;          (line-no (1- (line-number-at-pos start))))
-    ;;     (cl-incf (aref line-scores line-no) score)))
-    ;; (dotimes (i (length line-scores))
-    ;;   (heap-add score-heap (cons i (aref line-scores i))))
-    ;;;
     (let* ((prev-line -1)
            (prev-score nil))
       (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
@@ -2370,7 +2384,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (progn
                 (when (< (- (point-max) (point-min)) p-search-max-fontify-file-size)
                   (font-lock-fontify-region (point-min) (point-max)))
-                (p-search-preview-from-hints-top-score hints))
+                (funcall p-search-default-preview-function hints))
             ;; if there are no hints, just get the first n lines
             (let ((start (point)))
               (forward-line p-search-document-preview-size)
