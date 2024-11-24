@@ -2689,24 +2689,6 @@ If PRESET is non-nil, set up session with PRESET."
 
 ;;; Display Engine
 
-(defun widget-test ()
-  (interactive)
-  (let* ((new-buffer (get-buffer-cretae "*widget-test*")))
-    (with-current-buffer new-buffer
-      (special-mode)
-      (let ((inhibit-read-only t))
-        (erase-buffer))
-      (remove-overlays)
-      (widget-insert "Here is some documentation.\n\n")
-      (widget-create 'editable-field
-                     :size 13
-                     :format "Name: %v " ; Text after the field!
-                     "My Name")
-      (widget-insert " ")
-      (use-local-map widget-keymap)
-      (widget-setup))
-    (display-buffer new-buffer)))
-
 (defun p-search--engine-run-search ()
   (let ((search-value (widget-value p-search-engine--search-field)))
     (when (not (string-blank-p search-value))
