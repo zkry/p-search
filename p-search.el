@@ -2343,10 +2343,12 @@ the heading to the point where BODY leaves off."
   "Return preview string of DOCUMENT.
 The number of lines returned is determined by `p-search-document-preview-size'."
   (let* ((document-contents (p-search-document-property document 'content))
-         (buffer (generate-new-buffer "*test-buffer*"))
          (priors p-search-priors)
-         (preview-size p-search-document-preview-size))
-    (with-current-buffer buffer
+         (preview-size p-search-document-preview-size)
+         (session-tfs p-search-query-session-tf-ht)
+         (candidates (p-search-candidates))
+         (final-result))
+    (with-temp-buffer
       (let* ((p-search-document-preview-size preview-size))
         ;; TODO: Add local variable to be able to refer to document
         ;;       Like how would git author provide text hints?
@@ -2358,6 +2360,10 @@ The number of lines returned is determined by `p-search-document-preview-size'."
               (let ((buffer-file-name (cadr document)))
                 (set-auto-mode))
             (setq delay-mode-hooks nil)))
+        ;; using temp buffers and local state makes things really confusing...
+        ;; the following setqs is for the code to be able to accesss certain session variables
+        (setq p-search-query-session-tf-ht session-tfs)
+        (setq p-search-candidates-cache candidates)
         (goto-char (point-min))
         (let* ((hints (p-search--document-hints priors)))
           (if hints
