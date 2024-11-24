@@ -1565,7 +1565,6 @@ If SIZE is provided create the heap with this size."
 (defun p-search-calculate (&optional no-reprint)
   "Calculate the posterior probabilities of all search candidates.
 If NO-REPRINT is nil, don't redraw p-search buffer."
-  (message "--- p-search-calculate")
   (let* ((documents (p-search-candidates))
          (priors p-search-priors)
          (marginal-p 0.0)
@@ -2237,15 +2236,17 @@ the heading to the point where BODY leaves off."
     (with-temp-buffer
       (insert substring)
       (goto-char (point-min))
-      (while (not (eobp))
-        (insert (propertize
-                 (format (concat "%"
-                                 (number-to-string digit-ct)
-                                 "d ")
-                         line-no)
-                 'face 'line-number))
-        (forward-line 1)
-        (cl-incf line-no))
+      (if (eobp)
+          (insert (propertize (format (concat "%" (number-to-string digit-ct) "d ") line-no) 'face 'line-number))
+        (while (not (eobp))
+          (insert (propertize
+                   (format (concat "%"
+                                   (number-to-string digit-ct)
+                                   "d ")
+                           line-no)
+                   'face 'line-number))
+          (forward-line 1)
+          (cl-incf line-no)))
       (buffer-string))))
 
 (defun p-search-preview-from-hints-best-section (hints)
