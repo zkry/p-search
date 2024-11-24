@@ -2264,7 +2264,8 @@ the heading to the point where BODY leaves off."
            (j 0)
            (current-score (aref line-scores 0))
            (best-offset 0)
-           (best-offset-score (aref line-scores 0)))
+           (best-offset-score (aref line-scores 0))
+           (prev-mid-boost 0))
       (catch 'done
         (while t
           (cl-incf j)
@@ -2274,6 +2275,14 @@ the heading to the point where BODY leaves off."
           (when (= (- j i) p-search-document-preview-size)
             (cl-decf current-score (aref line-scores i))
             (cl-incf i))
+          ;; mid-boost so the /best/ resultis something that's centered
+          (let ((mid (/ (+ i j) 2)))
+            (when (and (/= i mid)
+                       (/= j mid))
+              (let ((mid-boost (* (aref line-scores mid) 0.1)))
+                (cl-decf current-score prev-mid-boost)
+                (cl-incf current-score mid-boost)
+                (setq prev-mid-boost mid-boost))))
           (when (> current-score best-offset-score)
             (setq best-offset i)
             (setq best-offset-score current-score))))
@@ -2527,6 +2536,7 @@ values of ARGS."
 (defun p-search--insert-prior (prior)
   "Insert PRIOR into current buffer."
   (let* ((template (p-search-prior-template prior))
+         (results (p-search-prior-results prior))
          (args (p-search-prior-arguments prior))
          (name (p-search-prior-template-name template))
          (in-spec (p-search-prior-template-input-spec template))
@@ -2544,6 +2554,9 @@ values of ARGS."
          (heading-line-1 (concat complement-char (or importance-char " ") " "
                                 (propertize name 'face 'p-search-prior)))
          (heading-line (concat heading-line-1
+                               (if (and results (not (zerop (hash-table-count results))))
+                                   ""
+                                 (propertize " loading" 'face 'shadow))
                                ;; NOTE: the following code adds the entropy display
                                ;;       I haven't found this useful at all, so I'm leaving
                                ;;       it out for now
