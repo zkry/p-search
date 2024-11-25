@@ -78,7 +78,7 @@ not have to open the same file repeatedly.")
     (maphash
      (lambda (extension filepath)
        (unless (and (> (hash-table-count file-map) 1)
-                    (equal extension info))
+                    (equal extension "info"))
          (setq docs (append docs (psx-info--documents-from-file filepath)))))
      file-map)
     docs))
