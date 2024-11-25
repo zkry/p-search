@@ -133,7 +133,7 @@ not have to open the same file repeatedly.")
 
 (defconst psx-info-candidate-generator
   (p-search-candidate-generator-create
-   :name "FUN_INFO"
+   :name "INFO"
    :input-spec '((info-node . (p-search-infix-choices
                                 :key "i"
                                 :description "Info Node"
