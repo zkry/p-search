@@ -2379,11 +2379,11 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         (insert document-contents)
         ;; propertize buffer according to filename
         (when (eql (car document) 'file)
-          (setq delay-mode-hooks t)
+          (setq-local delay-mode-hooks t)
           (unwind-protect
               (let ((buffer-file-name (cadr document)))
                 (set-auto-mode))
-            (setq delay-mode-hooks nil)))
+            (setq-local delay-mode-hooks nil)))
         ;; using temp buffers and local state makes things really confusing...
         ;; the following setqs is for the code to be able to accesss certain session variables
         (setq p-search-query-session-tf-ht session-tfs)
