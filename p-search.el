@@ -840,7 +840,8 @@ INIT is the initial value given to the reduce operation."
                           (or (equal .filename-regexp ".*")
                               (string-match-p .filename-regexp file)))
                  (setq file (expand-file-name (file-name-concat default-directory file)))
-                 (push (p-search-documentize `(file ,file)) documents))))
+                 (when (file-attributes file) ;; ensure only files on file-system get added
+                   (push (p-search-documentize `(file ,file)) documents)))))
            (nreverse documents)))))
    :term-frequency-function
    (cl-function
