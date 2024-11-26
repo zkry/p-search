@@ -752,7 +752,7 @@ INIT is the initial value given to the reduce operation."
 
 (cl-defun p-search-term-frequency-from-content (_args query-term callback &key case-insensitive)
   "Default candidate generator's TF function, counting from doc's content property."
-  (let* ((term-regexps (p-search-query-emacs--term-regexp query-term))
+  (let* ((term-regexp (p-search-query-emacs--term-regexp query-term))
          (results-ht (make-hash-table :test #'equal))
          (docs (p-search-candidates)))
     (maphash
@@ -761,10 +761,9 @@ INIT is the initial value given to the reduce operation."
          (with-temp-buffer
            (insert content)
            (let* ((ct 0))
-             (dolist (regex term-regexps)
-               (goto-char (point-min))
-               (while (search-forward-regexp regex nil t)
-                 (cl-incf ct)))
+             (goto-char (point-min))
+             (while (search-forward-regexp term-regexp nil t)
+               (cl-incf ct))
              (puthash doc-id ct results-ht)))))
      docs)
     (funcall callback results-ht)))
