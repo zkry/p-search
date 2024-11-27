@@ -95,9 +95,14 @@ not have to open the same file repeatedly.")
   (concat (nth 1 info-identifier) ": " (nth 2 info-identifier)))
 
 (defun psx-info--insert-file-contents (file)
-  (if (and (string-suffix-p ".gz" file) (not auto-compression-mode))
-      (call-process "gzip" nil t nil "-c" "-d" file)
-    (insert-file-contents file)))
+  (cond
+   ((and (string-suffix-p ".gz" file) (not auto-compression-mode))
+    (call-process "gzip" nil t nil "-c" "-d" file))
+   ((and (not (file-attributes file))
+         (file-attributes (concat file ".gz")))
+    (psx-info--insert-file-contents (concat file ".gz")))
+   (t
+    (insert-file-contents file))))
 
 (defun psx-info--node-contents (node-name file)
   "Return the contents of NODE-NAME in info FILE."
