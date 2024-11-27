@@ -13,26 +13,32 @@
 
 (require 'p-search)
 
-(defvar psx-info-node-content (make-hash-table :test #'equal)
+(defconst psx-info--info-to-file (make-hash-table :test #'equal)
+  "Hash table of base to (hash table of extension to full file path).")
+
+(defconst psx-info-content (make-hash-table :test #'equal)
   "Hash table of info-identifier to string contents.
 This is used to speed up the reading of info files in order to
 not have to open the same file repeatedly.")
-
-(defvar psx-info--info-to-file (make-hash-table :test #'equal)
-  "Hash table of base to (hash table of extension to full file path).")
 
 (defun psx-info--build-tree ()
   "Generate and return cache of info files."
   (dolist (dir Info-directory-list)
     (dolist (file (directory-files-recursively dir ".*\\.info"))
-      (let* ((base (file-name-base file))
-             (extension (file-name-extension file))
-             (file-map (gethash base psx-info--info-to-file)))
-        (unless file-map
-          (let ((ht (make-hash-table :test #'equal)))
-            (puthash base ht psx-info--info-to-file)
-            (setq file-map ht)))
-        (puthash extension file file-map))))
+      (let* ((is-gz))
+        (when (string-suffix-p ".gz" file)
+          (setq file (string-trim-right file "\\.gz"))
+          (setq is-gz t))
+        (let* ((base (file-name-base file))
+               (extension (file-name-extension file))
+               (file-map (gethash base psx-info--info-to-file)))
+          (unless file-map
+            (let ((ht (make-hash-table :test #'equal)))
+              (puthash base ht psx-info--info-to-file)
+              (setq file-map ht)))
+          (if is-gz
+              (puthash extension (concat file ".gz") file-map)
+            (puthash extension file file-map))))))
   psx-info--info-to-file)
 
 (defun psx-info--info-candidates ()
@@ -42,13 +48,11 @@ not have to open the same file repeatedly.")
     (psx-info--build-tree))
   (hash-table-keys psx-info--info-to-file))
 
-(defvar psx-info-content (make-hash-table :test #'equal))
-
 (defun psx-info--documents-from-file (filepath)
   "Return info documents for FILEPATH."
   (let ((documents '()))
     (with-temp-buffer
-      (insert-file-contents filepath)
+      (psx-info--insert-file-contents filepath)
       (goto-char (point-min))
       (search-forward "")
       (forward-line 1)
@@ -90,10 +94,15 @@ not have to open the same file repeatedly.")
   "Return the title of INFO-IDENTIFIER."
   (concat (nth 1 info-identifier) ": " (nth 2 info-identifier)))
 
+(defun psx-info--insert-file-contents (file)
+  (if (and (string-suffix-p ".gz" file) (not auto-compression-mode))
+      (call-process "gzip" nil t nil "-c" "-d" file)
+    (insert-file-contents file)))
+
 (defun psx-info--node-contents (node-name file)
   "Return the contents of NODE-NAME in info FILE."
   (with-temp-buffer
-    (insert-file-contents file)
+    (psx-info--insert-file-contents file)
     (search-forward (concat ",  Node: " node-name))
     (forward-line 2)
     (let* ((contents-start (point)))
@@ -108,7 +117,7 @@ not have to open the same file repeatedly.")
     (pcase-let ((`(,dir ,file ,node-name) info-identifier))
     (let ((info-file (file-name-concat dir file)))
       (with-temp-buffer
-        (insert-file-contents info-file)
+        (psx-info--insert-file-contents info-file)
         (if (search-forward "\nIndirect:" nil t)
             ;; We're dealing with a directory file, we need to read
             ;; the tag table to determine the location of the node
@@ -135,7 +144,7 @@ not have to open the same file repeatedly.")
 (defun psx-info--goto (info-identifier)
   "Open the info page of INFO-IDENTIFIER."
   (pcase-let ((`(,dir ,file ,node) info-identifier))
-    (Info-find-node (file-name-concat dir file) node)))
+    (Info-find-node file node)))
 
 (defconst psx-info-candidate-generator
   (p-search-candidate-generator-create
@@ -150,11 +159,15 @@ not have to open the same file repeatedly.")
      (let* ((node (alist-get 'info-node args)))
        (psx-info--documents-for-entry node)))))
 
+(psx-info--documents-from-file )
+
 (p-search-def-property 'psx-info 'title #'psx-info--title)
 (p-search-def-property 'psx-info 'content #'psx-info--content)
 
 (add-to-list 'p-search-candidate-generators psx-info-candidate-generator)
 
 (p-search-def-function 'psx-info 'p-search-goto-document #'psx-info--goto)
+
+(psx-info--documents-for-entry 'gnupg)
 
 (provide 'psx-info)
