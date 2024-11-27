@@ -13,10 +13,10 @@
 
 (require 'p-search)
 
-(defconst psx-info--info-to-file (make-hash-table :test #'equal)
+(defvar psx-info--info-to-file (make-hash-table :test #'equal)
   "Hash table of base to (hash table of extension to full file path).")
 
-(defconst psx-info-content (make-hash-table :test #'equal)
+(defvar psx-info-content (make-hash-table :test #'equal)
   "Hash table of info-identifier to string contents.
 This is used to speed up the reading of info files in order to
 not have to open the same file repeatedly.")
