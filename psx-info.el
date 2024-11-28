@@ -24,21 +24,23 @@ not have to open the same file repeatedly.")
 (defun psx-info--build-tree ()
   "Generate and return cache of info files."
   (dolist (dir Info-directory-list)
-    (dolist (file (directory-files-recursively dir ".*\\.info"))
-      (let* ((is-gz))
-        (when (string-suffix-p ".gz" file)
-          (setq file (string-trim-right file "\\.gz"))
-          (setq is-gz t))
-        (let* ((base (file-name-base file))
-               (extension (file-name-extension file))
-               (file-map (gethash base psx-info--info-to-file)))
-          (unless file-map
-            (let ((ht (make-hash-table :test #'equal)))
-              (puthash base ht psx-info--info-to-file)
-              (setq file-map ht)))
-          (if is-gz
-              (puthash extension (concat file ".gz") file-map)
-            (puthash extension file file-map))))))
+    (condition-case err
+      (dolist (file (directory-files-recursively dir ".*\\.info"))
+        (let* ((is-gz))
+          (when (string-suffix-p ".gz" file)
+            (setq file (string-trim-right file "\\.gz"))
+            (setq is-gz t))
+          (let* ((base (file-name-base file))
+                 (extension (file-name-extension file))
+                 (file-map (gethash base psx-info--info-to-file)))
+            (unless file-map
+              (let ((ht (make-hash-table :test #'equal)))
+                (puthash base ht psx-info--info-to-file)
+                (setq file-map ht)))
+            (if is-gz
+                (puthash extension (concat file ".gz") file-map)
+              (puthash extension file file-map)))))
+      (error (message "Error occurred when retrieving info files from directory %s" dir))))
   psx-info--info-to-file)
 
 (defun psx-info--info-candidates ()
