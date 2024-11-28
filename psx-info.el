@@ -164,7 +164,11 @@ not have to open the same file repeatedly.")
    :function
    (lambda (args)
      (let* ((node (alist-get 'info-node args)))
-       (psx-info--documents-for-entry node)))))
+       (psx-info--documents-for-entry node)))
+   :lighter-function
+   (lambda (args)
+     (let* ((node (alist-get 'info-node args)))
+       (format "info:%s" (symbol-name node))))))
 
 (p-search-def-property 'psx-info 'title #'psx-info--title)
 (p-search-def-property 'psx-info 'content #'psx-info--content)
@@ -172,7 +176,5 @@ not have to open the same file repeatedly.")
 (add-to-list 'p-search-candidate-generators psx-info-candidate-generator)
 
 (p-search-def-function 'psx-info 'p-search-goto-document #'psx-info--goto)
-
-(psx-info--documents-for-entry 'gnupg)
 
 (provide 'psx-info)
