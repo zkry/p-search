@@ -2847,8 +2847,10 @@ If PRESET is non-nil, set up session with PRESET."
   (when-let* ((prior (get-char-property (point) 'p-search-candidate-generator)))
     (p-search-dispatch-edit-candidate-generator prior)))
 
-(defun p-search-next-item ()
-  "Move the point to the next item"
+(defun p-search-next-item (&optional no-scroll)
+  "Move the point to the next item.
+When NO-SCROLL is non-nil, don't scroll the window to show the
+item's contents."
   (interactive)
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                    (get-char-property (point) 'p-search-prior)
@@ -2860,7 +2862,13 @@ If PRESET is non-nil, set up session with PRESET."
             (when (or (and next-thing (not (equal start-thing next-thing)))
                       (eobp))
               (throw 'out nil)))
-          (forward-line 1))))))
+          (forward-line 1))))
+    ;; ensure that next item is in scroll view
+    (unless no-scroll
+      (let* ((window-bottom-line (line-number-at-pos (window-end)))
+             (next-item-line (save-excursion (p-search-next-item t) (line-number-at-pos))))
+        (when (> next-item-line window-bottom-line)
+          (scroll-up (1+ (- next-item-line window-bottom-line))))))))
 
 (defun p-search-prev-item ()
   "Move the point to the next item"
