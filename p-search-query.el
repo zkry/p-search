@@ -102,24 +102,28 @@ Indicates which token we are currently considering.")
      ((null term-parts)
       (error "nil base term"))
      ((= (length term-parts) 1)
-      (list `(subtract (boost (q (?i ,term)) 0.3)
-                       (q (seq word-start ,term word-end)))))
+      (if p-search-query-run--no-expansion
+          (list `(q (?i ,term)))
+        (list `(subtract (boost (q (?i ,term)) 0.3)
+                         (q (seq word-start ,term word-end))))))
      (t
-      (let* ((camel (string-join term-parts ""))
-             (snake (string-join term-parts "_"))
-             (kebab (string-join term-parts "-")))
-        (seq-filter
-         #'identity
-         (append (list `(q ,term)
-                       (and (not (equal term camel)) `(boost (q (?i ,camel)) 0.7))
-                       (and (not (equal term snake)) `(boost (q (?i ,snake)) 0.7))
-                       (and (not (equal term kebab)) `(boost (q (?i ,kebab)) 0.7))
-                       ;; `(near ,@term-parts)
-                       )
-                 (seq-map
-                  (lambda (term-part)
-                    `(boost (q (?i ,term-part)) 0.3))
-                  term-parts))))))))
+      (if p-search-query-run--no-expansion
+          (list `(q (?i ,term)))
+        (let* ((camel (string-join term-parts ""))
+               (snake (string-join term-parts "_"))
+               (kebab (string-join term-parts "-")))
+          (seq-filter
+           #'identity
+           (append (list `(q (?i ,term))
+                         (and (not (equal term camel)) `(boost (q (?i ,camel)) 0.7))
+                         (and (not (equal term snake)) `(boost (q (?i ,snake)) 0.7))
+                         (and (not (equal term kebab)) `(boost (q (?i ,kebab)) 0.7))
+                         ;; `(near ,@term-parts)
+                         )
+                   (seq-map
+                    (lambda (term-part)
+                      `(boost (q (?i ,term-part)) 0.3))
+                    term-parts)))))))))
 
 
 ;;; Query Runner:
@@ -195,15 +199,13 @@ Call FINALIZE-FUNC on obtained results."
                  (let* ((ranges (p-search--mark-query*
                                  elt
                                  (lambda (query) ;; TODO This function is used somewhere else, maybe extract it
-                                   (let* ((terms (p-search-query-emacs--term-regexp query))
+                                   (let* ((term (p-search-query-emacs--term-regexp query))
                                           (ress '()))
-                                     (dolist (term terms)
-                                       (save-excursion
-                                         (goto-char (point-min))
-                                         ;; TODO p-search-
-                                         (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
-                                           (while (search-forward-regexp term nil t)
-                                             (push (cons (match-beginning 0) (match-end 0)) ress)))))
+                                     (save-excursion
+                                       (goto-char (point-min))
+                                       (let* ((case-fold-search (get-text-property 0 'p-search-case-insensitive term)))
+                                         (while (search-forward-regexp term nil t)
+                                           (push (cons (match-beginning 0) (match-end 0)) ress))))
                                      (setq ress (nreverse ress))
                                      ress)))))
                    (pcase-dolist (`(,start . ,end) ranges)
@@ -225,6 +227,12 @@ Call FINALIZE-FUNC on obtained results."
                      (setq pos next-pos))))))))
        intersection-documents)
       result-ht)))
+
+(defvar p-search-query-run--no-expansion nil
+  "When non-nil, implicit term expansion should not occur.
+This dynamic variable is for the `p-search-query-run' to know
+when it has entered contexts that can't or shouldn't handle term
+expansion.")
 
 (defun p-search-query-run (query finalize-func)
   "Dispatch processes according to QUERY syntax tree.
@@ -284,15 +292,17 @@ resulting data hashmap."
               (let* ((and-res (p-search-query-and results)))
                 (funcall finalize-func and-res))))))))
     (`(near . ,elts)
-     (let ((results (make-vector (length elts) nil))
+     (let ((p-search-query-run--no-expansion t)
+           (results (make-vector (length elts) nil))
            (i 0))
        (dolist (elt elts)
          (p-search-query-run
-          elt
+          elt ;; TODO - make this no-expand!
           (lambda (result)
             (aset results i result)
             (cl-incf i)
             (when (= i (length elts))
+              (setq results (seq-into (seq-map (lambda (x) (aref x 0)) results) 'vector))
               (let* ((near-res (p-search-query-near elts results)))
                 (funcall finalize-func near-res))))))))
     (`(not ,elt)
@@ -331,10 +341,21 @@ resulting data hashmap."
           (let* ((result (if (vectorp result)
                              (aref result 0)
                            result)))
-            (funcall
-             finalize-func
-             (p-search-query--metadata-add
-              result :boost boost-amt)))))))))
+            (if (vectorp result)
+                (funcall
+                 finalize-func
+                 (seq-into
+                  (seq-map
+                   (lambda (res)
+                     (let* ((old-boost (or (p-search-query--metadata-get res :boost) 1))
+                            (new-boost (* old-boost boost-amt)))
+                       (p-search-query--metadata-add res :boost new-boost)))
+                   result)
+                  'vector))
+              (funcall
+               finalize-func
+               (p-search-query--metadata-add
+                result :boost boost-amt))))))))))
 
 
 ;;; Metadata Objects:
@@ -350,7 +371,7 @@ resulting data hashmap."
   (if (listp elt)
       (let* ((md (cdr elt))
              (new-md (plist-put md md-key md-val)))
-        (cons elt new-md))
+        (cons (p-search-query--metadata-elt elt) new-md))
     (list elt md-key md-val)))
 
 (defun p-search-query--metadata-get (elt md-key)
@@ -695,8 +716,9 @@ structure."
            (when res
              (setq ress (append res ress)))))
        ress))
-    ;; (`(near . ,elts)
-    ;;  (p-search-query-near* elts))
+    (`(near . ,elts)
+     (let ((p-search-query-run--no-expansion t))
+       (p-search--mark-query* (cons 'terms elts) mark-function)))
     (`(not ,_elt)
      (ignore))
     (`(must ,elt)

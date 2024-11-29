@@ -10,6 +10,7 @@
 ;;; Variables:
 
 (defvar p-search-transient-default-inputs nil) ;; TODO: This can probably be removed
+(defvar p-search-enable-instructions)
 
 ;;; Transient Definitions:
 
@@ -61,9 +62,13 @@ INIT and HIST the initial value and input history respectively."
                (message "invalid byte size input")
                (sit-for 1)))))))))
 
+
+;;; Base Option Class
+
 (defclass p-search--option (transient-variable)
   ((option-symbol :initarg :option-symbol :initform nil)
-   (default-value :initarg :default-value :initform nil)))
+   (default-value :initarg :default-value :initform nil)
+   (instruction-string :initarg :instruction-string :initform "INITFORM")))
 
 (cl-defmethod transient-infix-value ((obj p-search--option))
   "Return value of OBJ, being a cons pair of its symbol and value."
@@ -77,9 +82,16 @@ INIT and HIST the initial value and input history respectively."
 The initial value will either be: the value of the options symbol
 in `p-search-transient-default-inputs' or the value in the transient
 objects `default-value' slot."
+  (message "p-search--option transient-init-value")
   (let* ((option-symbol (oref obj option-symbol))
          (default-value (and (slot-boundp obj 'default-value) (oref obj default-value)))
-         (init-value (or (alist-get option-symbol p-search-transient-default-inputs) default-value)))
+         (init-value (or (alist-get option-symbol p-search-transient-default-inputs) default-value))
+         (instruction-string (and (slot-boundp obj 'instruction-string)
+                                  (oref obj instruction-string))))
+    (oset obj prompt
+          (if (and instruction-string p-search-enable-instructions)
+              (format "%s\n%s: " instruction-string (symbol-name (oref obj option-symbol)))
+            (format "%s: " (symbol-name (oref obj option-symbol)))))
     (when init-value
       (oset obj value init-value))))
 
@@ -98,6 +110,9 @@ objects `default-value' slot."
 
 
 ;;; TODO - make directory only accept single parameter
+
+
+;;; Directory
 
 (defclass p-search--directory (p-search--option)
   ((reader :initform (lambda (prompt init _hist)
@@ -143,7 +158,6 @@ objects `default-value' slot."
 ;; (transient-define-infix p-search-infix-file ()
 ;;   :class p-search--file)
 
-
 (defclass p-search--regexp (p-search--option)
   ((reader :initform #'read-regexp)
    (prompt :initform "regexp: ")))
@@ -152,15 +166,15 @@ objects `default-value' slot."
   :class p-search--regexp)
 
 
+
+;;; String
+
 (defclass p-search--string (p-search--option)
   ((reader :initform #'read-string)
    (multi-value :initarg :multi-value :initform nil)))
 
 (cl-defmethod transient-init-value ((obj p-search--string))
-  (cl-call-next-method)
-  (if-let* ((multi-value-p (oref obj multi-value)))
-      (oset obj prompt (format "%s (comma separated): " (symbol-name (oref obj option-symbol))))
-    (oset obj prompt (format "%s: " (symbol-name (oref obj option-symbol))))))
+  (cl-call-next-method))
 
 (cl-defmethod transient-format-value ((obj p-search--string))
   (if-let* ((val (and (slot-boundp obj 'value) (oref obj value))))
@@ -191,6 +205,8 @@ objects `default-value' slot."
 (transient-define-infix p-search-infix-string ()
   :class p-search--string)
 
+
+;;; Number
 
 (defclass p-search--number (p-search--option)
   ((reader :initform #'read-number)
@@ -216,19 +232,20 @@ objects `default-value' slot."
 (transient-define-infix p-search-infix-memory ()
   :class p-search--memory)
 
+
+;;; Choices
+
 (defclass p-search--choices (p-search--option)
   ((choices :initarg :choices)
    (init-choice :initarg :init-choice)))
 
 (cl-defmethod transient-init-value ((obj p-search--choices))
   (cl-call-next-method)
-  (oset obj prompt (format "%s: " (symbol-name (oref obj option-symbol))))
   (when-let (init-value (and (slot-boundp obj 'init-choice) (oref obj init-choice)))
     (oset obj value init-value))) ;; TODO - do I need init-choice
 
 (cl-defmethod transient-infix-read ((obj p-search--choices))
-  (let* ((choices (oref obj choices))
-         (_prompt (oref obj prompt)))
+  (let* ((choices (oref obj choices)))
     (intern (completing-read
              (oref obj prompt)
              (if (functionp choices) (funcall choices)
@@ -239,12 +256,14 @@ objects `default-value' slot."
   :class p-search--choices)
 
 
+
+;;; Toggle
+
 (defclass p-search--toggle (p-search--option)
   ((init-state :initarg :init-state)))
 
 (cl-defmethod transient-init-value ((obj p-search--toggle))
   (cl-call-next-method)
-  (oset obj prompt (format "%s: " (symbol-name (oref obj option-symbol))))
   (when-let (init-value (and (slot-boundp obj 'init-state) (oref obj init-state)))
     (oset obj value init-value)))
 

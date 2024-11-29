@@ -112,6 +112,13 @@
   "Maxiumum file size to fontify. Any sizes larger won't be fontified."
   :group 'p-search)
 
+(defcustom p-search-enable-instructions
+  t
+  "If set to non-nil, the instruction-string of inputs and options will be displayed.
+One may want to set this to nil if they are familliar with all
+the inputs and options they use."
+  :group 'p-search)
+
 (defcustom p-search-default-preview-function #'p-search-preview-from-hints-best-section
   "Function to use to generate previews.  The function should assume
 it is running with an active buffer of the text to generate a
@@ -1044,17 +1051,52 @@ Called with user supplied ARGS for the prior."
          ress)))))
 
 (defconst p-search-prior-query
-  (p-search-prior-template-create
-   :group ""
-   :name "text query"
-   :required-properties '()
-   :input-spec '((query-string . (p-search-infix-string
-                                  :key "q"
-                                  :description "Query string")))
-   :options-spec '()
-   :initialize-function #'p-search--prior-query-initialize-function
-   :result-hint-function #'p-search--text-search-hint
-   :transient-key-string "qu"))
+  (let ((instruction-string
+         (propertize
+          (if (> (window-width) 130)
+              (string-join
+               (list "Text-query syntax"
+                     ""
+                     "  Each search term's existence increases score.              Compound words searched as whole and broken (case insensitive):"
+                     "  Search terms separated by whitespace:                        fooBarBaz   => (\"foobarbaz\", \"foo\", \"bar\", \"baz\")"
+                     "    foo bar baz => (\"foo\", \"bar\", \"baz\")"
+                     "                                                             Other special syntax:"
+                     "  Use quotes for exact string match:                           (foo bar baz)~  term nearness"
+                     "    \"int main ()\" => (\"int main()\")                            foo^ bar^3      term boost"
+                     "")
+               "\n")
+            (string-join
+             (list "Text-query syntax"
+                   ""
+                   "  Each search term's existence increases score."
+                   "  Search terms separated by whitespace:"
+                   "    foo bar baz => (\"foo\", \"bar\", \"baz\")"
+                   ""
+                   "  Compound words searched as whole and broken (case insensitive):"
+                   "    fooBarBaz   => (\"foobarbaz\", \"foo\", \"bar\", \"baz\")"
+                   ""
+                   "  Use quotes for exact string match:"
+                   "    \"int main ()\" => (\"int main()\")"
+                   ""
+                   "  Other special syntax:"
+                   "    (foo bar baz)~  term nearness"
+                   "    foo^ bar^3      term boost"
+                   ""
+                   )
+             "\n"))
+          'face 'shadow)))
+    (p-search-prior-template-create
+     :group ""
+     :name "text query"
+     :required-properties '()
+     :input-spec `((query-string . (p-search-infix-string
+                                    :key "q"
+                                    :description "Query string"
+                                    :instruction-string ,instruction-string)))
+     :options-spec '()
+     :initialize-function #'p-search--prior-query-initialize-function
+     :result-hint-function #'p-search--text-search-hint
+     :transient-key-string "qu")))
 
 ;;; Git Priors
 
@@ -1819,9 +1861,12 @@ This function will also start any process or thread described by TEMPLATE."
 (defun p-search-read-default-spec-value (name+spec)
   (let* ((name (car name+spec))
          (spec (p-search--resolve-spec (cdr name+spec)))
-         (default-value (plist-get (cdr spec) :default-value)))
+         (default-value (plist-get (cdr spec) :default-value))
+         (instruction-string (plist-get (cdr spec) :instruction-string)))
     (or default-value
-        (let* ((prompt (format "%s:" name))
+        (let* ((prompt (if (and instruction-string p-search-enable-instructions)
+                           (format "%s\n%s: " instruction-string name)
+                         (format "%s: " name))) ;; Input prompt
                (reader (oref (get (car spec) 'transient--suffix) :reader)))
           (if reader
               (funcall reader prompt nil nil)
@@ -1998,8 +2043,6 @@ This function will also start any process or thread described by TEMPLATE."
                                                (p-search-prior-template-name template)
                                                `(lambda ()
                                                   (interactive)
-                                                  (message "dispatching %s"
-                                                           ,(p-search-prior-template-name template))
                                                   (p-search-dispatch-add-prior
                                                    ,template)))))
                                      templates))
