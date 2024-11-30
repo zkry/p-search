@@ -88,16 +88,12 @@
   :group 'p-search
   :type 'integer)
 
-(defcustom p-search-initial-generator-function #'p-search-candidate-generator-from-project-root
-  "Function to call to get initial candidate generator."
-  :group 'p-search
-  :type 'function)
-
 (defcustom p-search-show-preview-lines t
   "If non-nil, display line numbers in preview."
   :group 'p-search
   :type 'boolean)
 
+;; TODO - Reconsider if the concept of preset mentioned here makes sense or is the best.
 (defcustom p-search-session-presets '()
   "List of presets to easily apply to a p-search session."
   :group 'p-search
@@ -136,6 +132,34 @@ The current prebuild preview functions are
 `p-search-preview-from-hints-first-n'."
 
   :group 'p-search)
+
+(defcustom p-search-default-command-behavior t
+  "Variable the specifies the default behavior of the `p-search' command.
+
+This variable can take one of several types of of values:
+
+- nil, meaning to start the session empty.
+
+- t, meaning to run the default p-seach behavior.
+
+- a cons pair with a CAR value of type
+  p-search-candidate-generator-p, and a CDR being an alist for
+  the candidate genrators args.  If this is provided, then the
+  session will start with this candidate generator configured.
+
+- a preset plist, which is a plist which has the keys
+  :candidate-generator and :args, :prior-template and :args, or
+  :group, being a list of preset
+  plists. (e.g.
+    (:group (:candidate-generator ps-filesystem-cg :args ((base-directory . \"/etc/\") ...))
+            (:prior-template ps-query-pt :args ((query-string . \"foo\")))))
+
+- a function, which will be called to obtain the session setup.
+  This function should return either a cons pair or preset plist
+  as mentioned above."
+  :group 'p-search)
+
+
 
 
 ;;; Consts
@@ -1258,14 +1282,21 @@ performing a search."
              (dolist (fn fns)
                (funcall fn)))))
      (prior-template
-      (let* ((prior (p-search--instantiate-prior (symbol-value prior-template) args)))
+      (let* ((prior (p-search--instantiate-prior (if (symbolp  prior-template)
+                                                     (symbol-value prior-template)
+                                                   prior-template)
+                                                 args)))
         (p-search--validate-prior prior args)
         (setq p-search-priors (append p-search-priors (list prior)))
         (when engine-arg-name
           (setq p-search-engine-specification
                 (list prior engine-arg-name)))))
      (candidate-generator
-      (p-search--add-candidate-generator (symbol-value candidate-generator) args)))
+      (p-search--add-candidate-generator
+       (if (symbolp candidate-generator) ;; TODO - ID check, id should be var's symbol
+           (symbol-value candidate-generator)
+         candidate-generator)
+       args)))
     (unless no-calc
       (p-search-restart-calculation))))
 
@@ -2482,10 +2513,10 @@ The number of lines returned is determined by `p-search-document-preview-size'."
           (when-let* ((lighter-func (p-search-candidate-generator-lighter-function gen))
                       (lighter-str (funcall lighter-func args)))
             (if (> (length p-search-active-candidate-generators) 1)
-                (rename-buffer (format "*p-search<%s...>*" lighter-str))
-              (rename-buffer (format "*p-search<%s>*" lighter-str)))
+                (rename-buffer (format "*p-search<%s...>*" lighter-str) t)
+              (rename-buffer (format "*p-search<%s>*" lighter-str) t))
             (throw 'done nil))))
-    (rename-buffer (format "*p-search<>*"))))
+    (rename-buffer (format "*p-search<>*") t)))
 
 (defun p-search--add-candidate-generator (generator args)
   "Append GENERATOR with ARGS to the current p-search session."
@@ -2531,9 +2562,22 @@ The number of lines returned is determined by `p-search-document-preview-size'."
 
 (defun p-search--setup-candidate-generators ()
   "Setup initial candidate generators for session."
-  (when p-search-initial-generator-function
-    (pcase-let* ((`(,gen . ,args) (funcall p-search-initial-generator-function)))
-      (p-search--add-candidate-generator gen args))))
+  (cond
+   ((null p-search-default-command-behavior)
+    ;; Do nothing.
+    )
+   ((eql p-search-default-command-behavior t)
+    (pcase-let* ((`(,gen . ,args) (p-search-candidate-generator-from-project-root)))
+      (p-search--add-candidate-generator gen args)))
+   ((functionp p-search-default-command-behavior)
+    (pcase-let* ((`(,gen . ,args) (funcall p-search-default-command-behavior)))
+      (p-search--add-candidate-generator gen args)))
+   ((and (consp p-search-default-command-behavior)
+         (p-search-candidate-generator-p (car p-search-default-command-behavior)))
+    (pcase-let* ((`(,gen . ,args) p-search-default-command-behavior))
+      (p-search--add-candidate-generator gen args)))
+   ((plistp p-search-default-command-behavior)
+    (p-search-apply-preset p-search-default-command-behavior))))
 
 (defun p-search-candidate-generator-from-project-root ()
   "Return a cons of the filesystem generator with predefined defaults."
@@ -2760,7 +2804,8 @@ If PRESET is non-nil, set up session with PRESET."
     (let ((win (display-buffer buffer nil)))
       (select-window win))
     (with-current-buffer buffer
-      (p-search--setup-candidate-generators)
+      (unless preset
+        (p-search--setup-candidate-generators))
       (if preset
           (p-search-apply-preset preset)
         (p-search--reprint)
@@ -3142,10 +3187,20 @@ Presets come from the variable `p-search-session-presets'."
   (add-hook 'post-command-hook #'p-search-post-command-hook t t)
   (setq truncate-lines t))
 
-(defun p-search ()
-  "Start a p-search session."
- (interactive)
- (p-search-setup-buffer))
+(defun p-search (prefix)
+  "Start a p-search session.
+
+If the command is called with a prefix argument C-u, the session
+is started empty.  The default behavior of this command is
+controlled by the custom variable
+`p-search-default-command-behavior'."
+  (interactive "p")
+  (cond
+   ((= 4 prefix)
+    (let ((p-search-default-command-behavior nil))
+      (p-search-setup-buffer)))
+   (t (p-search-setup-buffer))))
+
 
 
 ;;; Spec Helpers
