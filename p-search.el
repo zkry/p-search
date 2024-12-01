@@ -3240,6 +3240,16 @@ Presets come from the variable `p-search-session-presets'."
   (setq p-search-peruse-data nil)
   (p-search--reprint))
 
+(defun p-search-show-session-preset ()
+  "Write the preset data of the current session to a separate buffer and display it."
+  (interactive)
+  (let* ((preset (p-search--preset-from-current-session))
+         (preset-str (prin1-to-string preset))
+         (buf (generate-new-buffer (concat (buffer-name (current-buffer)) " Preset"))))
+    (with-current-buffer buf
+      (insert preset-str))
+    (display-buffer buf)))
+
 (defun p-search-quit ()
   "Quit the current session, asking for confirmation."
   (interactive)

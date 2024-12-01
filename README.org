@@ -183,7 +183,7 @@
    p-search contains a number of mechanims to speed up your searching
    process.  On the one hand, you can programatically create a command
    and call various p-search functions to instantiate a session to
-   your liking (will be documented in manual).  On the other, simply
+   your liking.  On the other, simply
    bookmarking the session using the command =bookmark-set= (usually
    bound =C-x r m=) will let you save the session, candidate
    generators and priors, to quickly access in the future.
@@ -197,3 +197,8 @@
    #+begin_src lisp
 ((p-search-mode . ((p-search-default-command-behavior . (:candidate-generator p-search-candidate-generator-filesystem :args ((base-directory . "~/dev/go/delve/cmd")))))))
    #+end_src
+
+   You can run the command =p-search-show-session-preset= to see the
+   current session represented as a Lisp object.  By passing this data
+   structure to the function =p-search-setup-buffer=, you can
+   programatically create the p-search session that you want.
