@@ -177,3 +177,23 @@
     =p-search-peruse-mode= is an experimental global minor mode, that
     when active, will track the percentage of files that you viewed.
     The view percentage will be updated in the search results section.
+
+** Saving Sessions
+
+   p-search contains a number of mechanims to speed up your searching
+   process.  On the one hand, you can programatically create a command
+   and call various p-search functions to instantiate a session to
+   your liking (will be documented in manual).  On the other, simply
+   bookmarking the session using the command =bookmark-set= (usually
+   bound =C-x r m=) will let you save the session, candidate
+   generators and priors, to quickly access in the future.
+
+   Another way to configure the behavior of p-search is by setting the
+   variable =p-search-default-command-behavior=.  By setitng it's
+   value globally you can configure how the command =p-search=
+   behaves.  You can also set the variable via a ".dir-locals.el"
+   file, like as follows, to have directory-local settings:
+
+   #+begin_src lisp
+((p-search-mode . ((p-search-default-command-behavior . (:candidate-generator p-search-candidate-generator-filesystem :args ((base-directory . "~/dev/go/delve/cmd")))))))
+   #+end_src
