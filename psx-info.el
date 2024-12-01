@@ -155,6 +155,7 @@ not have to open the same file repeatedly.")
 
 (defconst psx-info-candidate-generator
   (p-search-candidate-generator-create
+   :id 'psx-info-candidate-generator
    :name "INFO"
    :input-spec '((info-node . (p-search-infix-choices
                                 :key "i"
