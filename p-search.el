@@ -1286,6 +1286,9 @@ exist in ARGS, throw an error."
             (error "missing argument for candidate generator `%s': %s"
                    (symbol-name (p-search-candidate-generator-id candidate-generator))
                    (symbol-name arg-name))))))
+    (dolist (arg args)
+      (when (functionp (cdr arg))
+        (setcdr arg (funcall (cdr arg)))))
     (append args defaults)))
 
 (defun p-search-apply-preset (preset-elt &optional no-calc)
