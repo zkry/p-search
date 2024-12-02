@@ -3028,7 +3028,8 @@ If PRESET is non-nil, set up session with PRESET."
     ;; TODO: maybe consider storing hidden sections
     (bookmark-prop-set bookmark 'handler #'p-search--handle-bookmark)
     (bookmark-prop-set bookmark 'p-search-preset session-preset)
-    (bookmark-prop-set bookmark 'defaults (list (p-search--default-bookmark-name)))))
+    (bookmark-prop-set bookmark 'defaults (list (p-search--default-bookmark-name)))
+    bookmark))
 
 
 ;;; Commands
