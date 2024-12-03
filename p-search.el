@@ -3244,15 +3244,28 @@ Presets come from the variable `p-search-session-presets'."
   (setq p-search-peruse-data nil)
   (p-search--reprint))
 
-(defun p-search-show-session-preset ()
-  "Write the preset data of the current session to a separate buffer and display it."
-  (interactive)
+(defun p-search-show-session-preset (prefix)
+  "Write the preset data of the current session to a separate buffer and display it.
+
+If called with prefix C-u, add the preset to the kill ring.  If
+called with prefix C-u C-u, the command will prompt to select a
+register to which the preset value will be saved."
+  (interactive "p")
   (let* ((preset (p-search--preset-from-current-session))
          (preset-str (prin1-to-string preset))
          (buf (generate-new-buffer (concat (buffer-name (current-buffer)) " Preset"))))
-    (with-current-buffer buf
-      (insert preset-str))
-    (display-buffer buf)))
+    (cond
+     ((= prefix 4)
+      (kill-new preset-str)
+      (message "Preset string added to kill ring."))
+     ((= prefix 16)
+      (let ((register (register-read-with-preview "Register to save preset: ")))
+        (set-register register preset-str)
+        (message "Preset saved to register.")))
+     (t
+      (with-current-buffer buf
+        (insert preset-str))
+      (display-buffer buf)))))
 
 (defun p-search-quit ()
   "Quit the current session, asking for confirmation."
