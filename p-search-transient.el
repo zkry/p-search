@@ -68,7 +68,8 @@ INIT and HIST the initial value and input history respectively."
 (defclass p-search--option (transient-variable)
   ((option-symbol :initarg :option-symbol :initform nil)
    (default-value :initarg :default-value :initform nil)
-   (instruction-string :initarg :instruction-string :initform "INITFORM")))
+   (instruction-string :initarg :instruction-string :initform "INITFORM")
+   (description :initarg :description :initform nil)))
 
 (cl-defmethod transient-infix-value ((obj p-search--option))
   "Return value of OBJ, being a cons pair of its symbol and value."
@@ -87,11 +88,13 @@ objects `default-value' slot."
          (default-value (and (slot-boundp obj 'default-value) (oref obj default-value)))
          (init-value (or (alist-get option-symbol p-search-transient-default-inputs) default-value))
          (instruction-string (and (slot-boundp obj 'instruction-string)
-                                  (oref obj instruction-string))))
+                                  (oref obj instruction-string)))
+         (description (and (slot-boundp obj 'description)
+                           (oref obj description))))
     (oset obj prompt
           (if (and instruction-string p-search-enable-instructions)
-              (format "%s\n%s: " instruction-string (symbol-name (oref obj option-symbol)))
-            (format "%s: " (symbol-name (oref obj option-symbol)))))
+              (format "%s\n%s: " instruction-string (or description (symbol-name (oref obj option-symbol))))
+            (format "%s: " (or description (symbol-name (oref obj option-symbol))))))
     (when init-value
       (oset obj value init-value))))
 

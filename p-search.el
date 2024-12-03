@@ -859,7 +859,7 @@ INIT is the initial value given to the reduce operation."
                                      :default-value ".*"))
                  (search-tool . (p-search-infix-choices
                                  :key "t"
-                                 :description "search tool"
+                                 :description "Search Tool"
                                  :choices (:grep :rg :ag)
                                  :default-value ,(or p-search-default-search-tool :grep))))
    :options-spec '((ignore-pattern . (p-search-infix-regexp
@@ -1131,7 +1131,7 @@ Called with user supplied ARGS for the prior."
      :required-properties '()
      :input-spec `((query-string . (p-search-infix-string
                                     :key "q"
-                                    :description "Query string"
+                                    :description "Query String"
                                     :instruction-string ,instruction-string)))
      :options-spec '()
      :initialize-function #'p-search--prior-query-initialize-function
@@ -1958,14 +1958,16 @@ This function will also start any process or thread described by TEMPLATE."
               append (list key (if (functionp value) (funcall value) value))))))
 
 (defun p-search-read-default-spec-value (name+spec)
+  ;; TODO - resolve this code with the one in p-search-transient
   (let* ((name (car name+spec))
          (spec (p-search--resolve-spec (cdr name+spec)))
          (default-value (plist-get (cdr spec) :default-value))
-         (instruction-string (plist-get (cdr spec) :instruction-string)))
+         (instruction-string (plist-get (cdr spec) :instruction-string))
+         (description (plist-get (cdr spec) :description)))
     (or default-value
         (let* ((prompt (if (and instruction-string p-search-enable-instructions)
-                           (format "%s\n%s: " instruction-string name)
-                         (format "%s: " name))) ;; Input prompt
+                           (format "%s\n%s: " instruction-string (or description name))
+                         (format "%s: " (or description name)))) ;; Input prompt
                (reader (oref (get (car spec) 'transient--suffix) :reader)))
           (if reader
               (funcall reader prompt nil nil)
