@@ -133,7 +133,7 @@
     candidate generator.  When performing a text query on documents
     coming from this, it will rely on this tool to perform the search.
 
-    For the text query, each search result is space separated.  So if
+    For the text query, each search term is space separated.  So if
     you type =teacher student school= it will perform three separate
     searches for the three terms.  Each term will generate its own
     score for each document and they will then be combined to form a
