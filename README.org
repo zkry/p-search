@@ -202,3 +202,14 @@
    current session represented as a Lisp object.  By passing this data
    structure to the function =p-search-setup-buffer=, you can
    programatically create the p-search session that you want.
+
+** Extensions
+
+   p-search was designed to be extensible, both in what you can search
+   on and how the search is performed.  Add `(require 'psx-info')` to
+   load a p-search extension whilch lets you search on info files.
+
+   [[./documents/psx-info-demo.gif]]
+
+   This package adds a new candidate generator for info files.  The
+   above example shows a search with two different info files.
