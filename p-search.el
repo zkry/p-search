@@ -1012,6 +1012,50 @@ INIT is the initial value given to the reduce operation."
 
 ;;; File system priors
 
+(defconst p-search-prior-mtime-recency
+  (let ((k-params '((:days . 0.00001)
+                    (:weeks . 0.0000025)
+                    (:months . 0.0000005)
+                    (:years . 0.00000004)))
+        (instruction-string
+         "The scale of time where you expecct the most differentiation to happen.
+E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
+     For \"This year vs last year vs three years ago\" choose :years."))
+    (p-search-prior-template-create
+     :id 'p-search-prior-mtime-recency
+     :group "filesystem"
+     :name "modified-time"
+     :required-properties '(file-name)
+     ;; Probabilities are to be assigned from an exponential distribution.
+     ;; The selected time scale allows us to know how to configure the
+     ;; exponential distribution.
+     ;;          43200 seconds in a day     ; k = 0.00001
+     ;;         302400 seconds in a week    ; k = 0.0000025
+     ;; about   864000 seconds in a month   ; k = 0.0000005
+     ;;       15768000 seconds in a year    ; k = 0.00000004
+     :input-spec `((time-scale . (p-search-infix-choices
+                                  :key "t"
+                                  :description "Time Scale"
+                                  :instruction-string ,instruction-string
+                                  :choices ,(mapcar #'car k-params)
+                                  :default-value :months)))
+     :initialize-function
+     (lambda (prior)
+       (let* ((now-float-time (float-time))
+              (args (p-search-prior-arguments prior))
+              (time-scale (alist-get 'time-scale args))
+              (k-param (alist-get time-scale k-params))
+              (documents (p-search-candidates-with-properties '(file-name))))
+         (maphash
+          (lambda (_ document)
+            (let*  ((file-name (p-search-document-property document 'file-name))
+                    (mtime (nth 5 (file-attributes file-name))))
+              (when mtime
+                (let* ((seconds-passed (- now-float-time (float-time mtime)))
+                       (p (+ 0.3 (* 0.4 (exp (* (- k-param) seconds-passed))))))
+                  (p-search-set-score prior document p)))))
+          documents))))))
+
 (defconst p-search-prior-subdirectory
   (p-search-prior-template-create
    :id 'p-search-prior-subdirectory
@@ -1040,10 +1084,6 @@ INIT is the initial value given to the reduce operation."
                 (throw 'out nil)))))
         documents)))
    :transient-key-string "sd"))
-
-(defconst p-search-prior-modification-date nil)
-
-(defconst p-search-prior-file-size nil)
 
 ;;; Search priors
 
@@ -1827,8 +1867,19 @@ use it as the :default-value slot."
          (opts (cdr spec))
          (key (plist-get opts :key))
          (description (plist-get opts :description)))
-    (when default-value
-      (cl-remf opts :default-value))
+    (when default-value ;; remove default value from opts
+      (setq opts
+            (named-let remove-default-value
+                ((list '())
+                 (opts opts))
+              (cond
+               ((not opts) list)
+               ((eql (car opts) :default-value)
+                (remove-default-value list (cddr opts)))
+               (t
+                (remove-default-value (cons (car opts)
+                                            (cons (cadr opts) list))
+                                      (cddr opts)))))))
     `(,key ,description
            ,infix
            :option-symbol ,name
@@ -1987,7 +2038,7 @@ This function will also start any process or thread described by TEMPLATE."
                  (lambda (name+spec)
                    (let* ((default-value (p-search-read-default-spec-value name+spec)))
                      (p-search--transient-suffix-from-spec name+spec t default-value)))
-                         input-specs)]
+                 input-specs)]
              ["Options"
               ,@(seq-map (lambda (name+spec)
                            (let* ((name (car name+spec))
@@ -3400,10 +3451,10 @@ controlled by the custom variable
 (add-to-list 'p-search-prior-templates p-search-prior-major-mode)
 (add-to-list 'p-search-prior-templates p-search-prior-title)
 (add-to-list 'p-search-prior-templates p-search-prior-subdirectory)
+(add-to-list 'p-search-prior-templates p-search-prior-mtime-recency)
 (add-to-list 'p-search-prior-templates p-search-prior-query)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
-
 
 (provide 'p-search)
 
