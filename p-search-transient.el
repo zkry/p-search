@@ -68,7 +68,7 @@ INIT and HIST the initial value and input history respectively."
 (defclass p-search--option (transient-variable)
   ((option-symbol :initarg :option-symbol :initform nil)
    (default-value :initarg :default-value :initform nil)
-   (instruction-string :initarg :instruction-string :initform "INITFORM")
+   (instruction-string :initarg :instruction-string :initform nil)
    (description :initarg :description :initform nil)))
 
 (cl-defmethod transient-infix-value ((obj p-search--option))
