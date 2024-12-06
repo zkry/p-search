@@ -3180,8 +3180,20 @@ item's contents."
       (goto-char (point-min))
       (forward-line (1- line-no)))))
 
+(defun p-search-view-document ()
+  "Find the document at current point, displaying it in read-only mode."
+  (interactive)
+  (let* ((document (get-char-property (point) 'p-search-result))
+         (line-no (get-char-property (point) 'p-search-document-line-no))
+         (current-window (selected-window)))
+    (unless document
+      (user-error "No document found under point"))
+    (p-search-run-document-function document 'p-search-goto-document)
+    (unless buffer-read-only
+      (read-only-mode))))
+
 (defun p-search-display-document ()
-  "Find the file at the current point, displaying it in the other window."
+  "Find the document at the current point, displaying it in the other window."
   (interactive)
   (let* ((document (get-char-property (point) 'p-search-result))
          (line-no (get-char-property (point) 'p-search-document-line-no))
@@ -3294,6 +3306,7 @@ register to which the preset value will be saved."
     (keymap-set map "-" #'p-search-decrease-preview-size)
     (keymap-set map "<tab>" #'p-search-toggle-section)
     (keymap-set map "<return>" #'p-search-find-document)
+    (keymap-set map "v" #'p-search-view-document)
     (keymap-set map "C-o" #'p-search-display-document)
     (keymap-set map "q" #'p-search-quit)
     ;; (keymap-set map "C-o" #'p-search-display-file)
