@@ -1867,8 +1867,19 @@ use it as the :default-value slot."
          (opts (cdr spec))
          (key (plist-get opts :key))
          (description (plist-get opts :description)))
-    (when default-value
-      (cl-remf opts :default-value))
+    (when default-value ;; remove default value from opts
+      (setq opts
+            (named-let remove-default-value
+                ((list '())
+                 (opts opts))
+              (cond
+               ((not opts) list)
+               ((eql (car opts) :default-value)
+                (remove-default-value list (cddr opts)))
+               (t
+                (remove-default-value (cons (car opts)
+                                            (cons (cadr opts) list))
+                                      (cddr opts)))))))
     `(,key ,description
            ,infix
            :option-symbol ,name
@@ -2027,7 +2038,7 @@ This function will also start any process or thread described by TEMPLATE."
                  (lambda (name+spec)
                    (let* ((default-value (p-search-read-default-spec-value name+spec)))
                      (p-search--transient-suffix-from-spec name+spec t default-value)))
-                         input-specs)]
+                 input-specs)]
              ["Options"
               ,@(seq-map (lambda (name+spec)
                            (let* ((name (car name+spec))
@@ -3444,8 +3455,6 @@ controlled by the custom variable
 (add-to-list 'p-search-prior-templates p-search-prior-query)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
-
-(setq p-search-prior-templates nil)
 
 (provide 'p-search)
 
