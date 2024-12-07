@@ -1371,7 +1371,7 @@ performing a search."
                                 (symbol-value prior-template)
                               prior-template)))
         (setq args (p-search--verify-and-set-defaults prior-template args))
-        (let* ((prior (p-search--instantiate-prior args)))
+        (let* ((prior (p-search--instantiate-prior prior-template args)))
           (p-search--validate-prior prior args)
           (setq p-search-priors (append p-search-priors (list prior)))
           (when engine-arg-name
