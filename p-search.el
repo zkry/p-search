@@ -1010,14 +1010,21 @@ INIT is the initial value given to the reduce operation."
         documents)))
    :transient-key-string "mm"))
 
+;;; Time Helpers
+(defconst p-search--time-scales
+  '((:days . 0.00001)
+    (:weeks . 0.0000025)
+    (:months . 0.0000005)
+    (:years . 0.00000004))
+  "Alist of time-scale with corresponding exponential equation k parameter.")
+
+(defun p-search--exponential (a b k x)
+  (+ a (* (- b a) (exp (* (- k) x)))))
+
 ;;; File system priors
 
 (defconst p-search-prior-mtime-recency
-  (let ((k-params '((:days . 0.00001)
-                    (:weeks . 0.0000025)
-                    (:months . 0.0000005)
-                    (:years . 0.00000004)))
-        (instruction-string
+  (let ((instruction-string
          "The scale of time where you expecct the most differentiation to happen.
 E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
      For \"This year vs last year vs three years ago\" choose :years.")
@@ -1045,7 +1052,7 @@ are peanalized by how far away it is."))
                                   :key "t"
                                   :description "Time Scale"
                                   :instruction-string ,instruction-string
-                                  :choices ,(mapcar #'car k-params)
+                                  :choices ,(mapcar #'car p-search--time-scales)
                                   :default-value :months))
                    )
      :initialize-function
@@ -1053,14 +1060,14 @@ are peanalized by how far away it is."))
        (let* ((args (p-search-prior-arguments prior))
               (target-date (alist-get 'target-date args))
               (target-floattime
-               (thread-first (if (<= (length target-date) 10)
+               (thread-first (if (<= (length target-date) 11)
                                  (concat target-date " 12:00")
                                target-date)
                              parse-time-string
                              encode-time
                              float-time))
               (time-scale (alist-get 'time-scale args))
-              (k-param (alist-get time-scale k-params))
+              (k-param (alist-get time-scale p-search--time-scales))
               (documents (p-search-candidates-with-properties '(file-name))))
          (maphash
           (lambda (_ document)
@@ -1068,7 +1075,7 @@ are peanalized by how far away it is."))
                     (mtime (nth 5 (file-attributes file-name))))
               (when mtime
                 (let* ((seconds-passed (abs (- target-floattime (float-time mtime))))
-                       (p (+ 0.3 (* 0.4 (exp (* (- k-param) seconds-passed))))))
+                       (p (p-search--exponential 0.3 0.7 k-param seconds-passed)))
                   (p-search-set-score prior document p)))))
           documents))))))
 
@@ -1247,7 +1254,7 @@ Called with user supplied ARGS for the prior."
   (p-search-prior-template-create
    :id 'p-search-prior-git-author
    :group "git"
-   :name "Git Author"
+   :name "author"
    :required-properties '(git-root)
    :input-spec '((git-author . (p-search-infix-choices
                                 :key "a"
@@ -1289,15 +1296,98 @@ Called with user supplied ARGS for the prior."
   (p-search-prior-template-create
    :id 'p-search-prior-git-commit-frequency
    :required-properties '(git-root)
-   :name "git commit frequency"
+   :name "commit frequency"
    :group "git"
    :input-spec
    '((n-commits . (p-search-infix-number
                    :key "n"
-                   :description "Consider last N commits."
+                   :description "Last N Commits to Consider"
                    :default-value 20)))
    :initialize-function #'p-search--prior-git-commit-frequency-initialize-function
    :transient-key-string "cf"))
+
+(defconst p-search-prior-git-commit-time
+  (p-search-prior-template-create
+   :id 'p-search-prior-git-commit-time
+   :required-properties '(git-root)
+   :name "time of commit"
+   :group "git"
+   :input-spec
+   `((time-scale . (p-search-infix-choices
+                    :key "t"
+                    :description "Time Scale"
+                    :instruction-string
+                    "The scale of time where you expecct the most differentiation to happen.
+E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
+     For \"This year vs last year vs three years ago\" choose :years."
+                    :choices ,(mapcar #'car p-search--time-scales)
+                    :default-value :months))
+     (target-date . (p-search-infix-date
+                     :key "d"
+                     :description "Target Date"
+                     :default-value ,(format-time-string "%Y-%m-%d %H:%m"))))
+   :initialize-function
+   (lambda (prior)
+     (let* ((args (p-search-prior-arguments prior))
+            (target-date (alist-get 'target-date args))
+            (target-floattime (thread-first (if (<= (length target-date) 11)
+                                                (concat target-date " 12:00")
+                                              target-date)
+                                            parse-time-string
+                                            encode-time
+                                            float-time))
+            (time-scale (alist-get 'time-scale args))
+            (k-param (alist-get (alist-get 'time-scale args) p-search--time-scales))
+            (session-buf (current-buffer))
+            (base-directories (p-search-unique-properties 'git-root)))
+       (dolist (default-directory base-directories)
+         (let ((buf (generate-new-buffer "*p-search-git-time*")))
+           (make-process
+            :name "p-search-git-commit-time"
+            :buffer buf
+            :command `("sh" "-c" "git --no-pager log --name-only --format=\">>>%cd<<<\" --date=iso ")
+            :sentinel
+            (lambda (proc event)
+              (when (or (member event '("finished\n" "deleted\n"))
+                        (string-prefix-p "exited abnormally with code" event)
+                        (string-prefix-p "failed with code" event))
+                (message "[DEBUG] DONE")
+                (let* ((root-dir (with-current-buffer (process-buffer proc) default-directory))
+                       (lowest-deviation-secs (make-hash-table :test #'equal)))
+                  ;; Iterate through the output of the ran git
+                  ;; command, taking note of each commit and each
+                  ;; file, and recording the closest deviation in
+                  ;; seconds that a file's commit is.
+                  (message "[DEBUG] Getting  values")
+                  (with-current-buffer (process-buffer proc)
+                    (goto-char (point-min))
+                    (while (search-forward-regexp ">\\([^<]+\\)<<<$" nil t)
+                      (let* ((floattime (thread-first (match-string 1)
+                                                      parse-time-string
+                                                      encode-time
+                                                      float-time))
+                             (deviation-secs (abs (- target-floattime floattime))))
+                        (message "[DEBUG] Time with %f" floattime)
+                        (forward-line 2)
+                        (while (and (not (looking-at ">>>")) (not (eobp)))
+                          (let ((doc-id (list 'file (file-name-concat root-dir (buffer-substring-no-properties (pos-bol) (pos-eol))))))
+                            (message "  [DEBUG] %s" doc-id)
+                            (let ((doc-prev-deviation (gethash doc-id lowest-deviation-secs)))
+                              (when (or (not doc-prev-deviation)
+                                        (< deviation-secs doc-prev-deviation))
+                                (puthash doc-id deviation-secs lowest-deviation-secs)))
+                            (forward-line 1))))))
+                  (with-current-buffer session-buf
+                    (maphash
+                     (lambda (doc-id secs)
+                       (let ((p (p-search--exponential 0.3 0.7 k-param secs)))
+                         (message "Adding Ddocument Score: %s %f" doc-id p)
+                         (p-search-set-score prior doc-id p)))
+                     lowest-deviation-secs))
+                  (kill-buffer buf)
+                  (p-search-set-score prior :default p-search-score-no)
+                  ;; TODO - only do one calculation after all processes finish
+                  (p-search-calculate)))))))))))
 
 
 ;;; Data Priors and Candidate Generators
@@ -3472,6 +3562,7 @@ controlled by the custom variable
 (add-to-list 'p-search-prior-templates p-search-prior-query)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
+(add-to-list 'p-search-prior-templates p-search-prior-git-commit-time)
 
 (provide 'p-search)
 
