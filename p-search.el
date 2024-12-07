@@ -1272,6 +1272,7 @@ Called with user supplied ARGS for the prior."
 (defconst p-search-prior-git-commit-frequency
   (p-search-prior-template-create
    :id 'p-search-prior-git-commit-frequency
+   :required-properties '(git-root)
    :name "git commit frequency"
    :group "git"
    :input-spec
