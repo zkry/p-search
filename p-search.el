@@ -1040,7 +1040,7 @@ are peanalized by how far away it is."))
                                    :key "d"
                                    :description "Target Date"
                                    :instruction-string ,instruction-string-target-date
-                                   :default-value ,(format-time-string "%Y-%m-%d 12:00")))
+                                   :default-value ,(format-time-string "%Y-%m-%d %H:%m")))
                    (time-scale . (p-search-infix-choices
                                   :key "t"
                                   :description "Time Scale"
