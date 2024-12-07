@@ -239,9 +239,6 @@ objects `default-value' slot."
 
 (transient-define-infix p-search-infix-date ()
   :class p-search--date)
-(org-read-date)
-(float-time (encode-time (parse-time-string (concat "2024-10-10" " 12:00:00"))))
-
 
 
 ;;; Choices
