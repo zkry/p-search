@@ -14,12 +14,8 @@
 
 ;;; Transient Definitions:
 
-(defun p-search-read-date-dist (_prompt _init hist)
-  "Read combination of date and stddev.
-HIST is the input history of sigma."
-  (let* ((date (org-read-date))
-         (sigma (read-number "standard deviation (days): " nil hist)))
-    (cons date sigma)))
+(defun p-search-transient-read-date (prompt init _hist)
+  (org-read-date nil nil nil prompt nil init))
 
 (defun p-search-read-directories (_prompt _init hist)
   "Read multiple directories.
@@ -234,6 +230,18 @@ objects `default-value' slot."
 
 (transient-define-infix p-search-infix-memory ()
   :class p-search--memory)
+
+
+;;; Time
+
+(defclass p-search--date (p-search--option)
+  ((reader :initform #'p-search-transient-read-date)))
+
+(transient-define-infix p-search-infix-date ()
+  :class p-search--date)
+(org-read-date)
+(float-time (encode-time (parse-time-string (concat "2024-10-10" " 12:00:00"))))
+
 
 
 ;;; Choices

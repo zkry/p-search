@@ -1020,7 +1020,10 @@ INIT is the initial value given to the reduce operation."
         (instruction-string
          "The scale of time where you expecct the most differentiation to happen.
 E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
-     For \"This year vs last year vs three years ago\" choose :years."))
+     For \"This year vs last year vs three years ago\" choose :years.")
+        (instruction-string-target-date
+         "The time for which the highest score is given.  Any item, before or after,
+are peanalized by how far away it is."))
     (p-search-prior-template-create
      :id 'p-search-prior-mtime-recency
      :group "filesystem"
@@ -1033,16 +1036,29 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
      ;;         302400 seconds in a week    ; k = 0.0000025
      ;; about   864000 seconds in a month   ; k = 0.0000005
      ;;       15768000 seconds in a year    ; k = 0.00000004
-     :input-spec `((time-scale . (p-search-infix-choices
+     :input-spec `((target-date . (p-search-infix-date
+                                   :key "d"
+                                   :description "Target Date"
+                                   :instruction-string ,instruction-string-target-date
+                                   :default-value ,(format-time-string "%Y-%m-%d 12:00")))
+                   (time-scale . (p-search-infix-choices
                                   :key "t"
                                   :description "Time Scale"
                                   :instruction-string ,instruction-string
                                   :choices ,(mapcar #'car k-params)
-                                  :default-value :months)))
+                                  :default-value :months))
+                   )
      :initialize-function
      (lambda (prior)
-       (let* ((now-float-time (float-time))
-              (args (p-search-prior-arguments prior))
+       (let* ((args (p-search-prior-arguments prior))
+              (target-date (alist-get 'target-date args))
+              (target-floattime
+               (thread-first (if (<= (length target-date) 10)
+                                 (concat target-date " 12:00")
+                               target-date)
+                             parse-time-string
+                             encode-time
+                             float-time))
               (time-scale (alist-get 'time-scale args))
               (k-param (alist-get time-scale k-params))
               (documents (p-search-candidates-with-properties '(file-name))))
@@ -1051,7 +1067,7 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
             (let*  ((file-name (p-search-document-property document 'file-name))
                     (mtime (nth 5 (file-attributes file-name))))
               (when mtime
-                (let* ((seconds-passed (- now-float-time (float-time mtime)))
+                (let* ((seconds-passed (abs (- target-floattime (float-time mtime))))
                        (p (+ 0.3 (* 0.4 (exp (* (- k-param) seconds-passed))))))
                   (p-search-set-score prior document p)))))
           documents))))))
