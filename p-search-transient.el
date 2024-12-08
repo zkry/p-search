@@ -79,7 +79,6 @@ INIT and HIST the initial value and input history respectively."
 The initial value will either be: the value of the options symbol
 in `p-search-transient-default-inputs' or the value in the transient
 objects `default-value' slot."
-  (message "p-search--option transient-init-value")
   (let* ((option-symbol (oref obj option-symbol))
          (default-value (and (slot-boundp obj 'default-value) (oref obj default-value)))
          (init-value (or (alist-get option-symbol p-search-transient-default-inputs) default-value))
