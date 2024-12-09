@@ -204,6 +204,14 @@ Key is of type (list type-symbol property-symbol).")
 (defvar p-search-current-active-session-buffer nil
   "Buffer of most recent viewed p-search session.")
 
+(defvar p-search--relevant-prior-templates-cache (make-hash-table :test #'equal)
+  "Variable containing a chache of computed relevant prior templates.
+
+Available prior templates are computed by iterating through the
+candidates and seeing which properties are available and which
+prior templates they match to.  If the list of candidate
+generators don't change then this shouldn't be recomputed.")
+
 
 ;;; Session Vars
 
@@ -1996,13 +2004,19 @@ use it as the :default-value slot."
 
 (defun p-search-relevant-prior-templates ()
   "Return a list of prior templates which can apply to search candidates."
-  (let* ((res '()))
-    (dolist (template p-search-prior-templates)
-      (let* ((reqs (p-search-prior-template-required-properties template)))
-        (when (p-search-candidate-with-properties-exists-p reqs)
-          (push template res))))
-    (setq res (nreverse res))
-    res))
+  (if-let ((res (gethash p-search-active-candidate-generators
+                         p-search--relevant-prior-templates-cache)))
+      res
+    (let* ((res '()))
+      (dolist (template p-search-prior-templates)
+        (let* ((reqs (p-search-prior-template-required-properties template)))
+          (when (p-search-candidate-with-properties-exists-p reqs)
+            (push template res))))
+      (setq res (nreverse res))
+      (puthash p-search-active-candidate-generators
+               res
+               p-search--relevant-prior-templates-cache)
+      res)))
 
 (defun p-search-transient-dispatcher () "Placeholder for transient dispatch.")
 
