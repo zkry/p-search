@@ -2008,6 +2008,7 @@ use it as the :default-value slot."
                          p-search--relevant-prior-templates-cache)))
       res
     (let* ((res '()))
+      (message "Calculating applicable priors based on candidate generators...")
       (dolist (template p-search-prior-templates)
         (let* ((reqs (p-search-prior-template-required-properties template)))
           (when (p-search-candidate-with-properties-exists-p reqs)
