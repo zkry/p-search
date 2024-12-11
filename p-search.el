@@ -2230,9 +2230,7 @@ This function will also start any process or thread described by TEMPLATE."
                    (let* ((name (car name+spec))
                           (spec (p-search--resolve-spec (cdr name+spec)))
                           (reader (oref (get (car spec) 'transient--suffix) :reader))
-                          (default-value
-                           (or (plist-get (cdr spec) :default-value)
-                               (and reader (funcall reader (format "%s:" name) nil nil)))))
+                          (default-value (p-search-read-default-spec-value name+spec)))
                      (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
                  input-specs)]
              ["Options"
@@ -3284,7 +3282,6 @@ item's contents."
         (while (equal (thing-at-point) start-thing)
           (forward-line -1))
         (forward-line 1)))))
-
 
 (defun p-search-add-candidate-generator ()
   "Add a new candidate generator to the current session."
