@@ -239,8 +239,13 @@ expansion.")
 All processes are concluded by calling FINALIZE-FUNC with
 resulting data hashmap."
   (pcase query
+    ;; remember: p-search-query-dispatch takes a (rx ...) macro form.  Thus
+    ;;   (rx ".*")            becomes "\.\*" (i.e. quoted) and
+    ;;   (rx (regexp ".*"))   becomes ".*"
     (`(q ,elt) ;; use quote to make sure no further expansion is done
      (p-search-query-dispatch elt finalize-func))
+    (`(regexp ,elt)
+     (p-search-query-dispatch `(regexp ,elt) finalize-func))
     (`(subtract ,a ,b)
      ;; subtract is used when dispatching two queries where one is a
      ;; subset of another.  In this case, to avoid double counting,
@@ -509,7 +514,7 @@ given a value of zero-prob."
 ;;; Query Parser:
 
 (defun p-search-query-tokenize (query-str)
-  "Break QUERY-STR into consituent tokens."
+  "Break QUERY-STR into constituent tokens."
   (let* ((tokens '()))
     (with-temp-buffer
       (insert query-str)
@@ -530,6 +535,9 @@ given a value of zero-prob."
             (forward-char 1))
            ((member (char-after (point)) '(?~ ?@ ?! ?^ ?/ ?:))
             (push (intern (char-to-string (char-after (point)))) tokens)
+            (forward-char 1))
+           ((eql (char-after (point)) ?#)
+            (push 'hash tokens)
             (forward-char 1))
            ((eql (char-after (point)) ?\")
             (if (eql (char-after (1+ (point))) ?\")
@@ -625,6 +633,12 @@ variables `p-search-query-parse--tokens' and
      (p-search-query-parse--next-token)
      (let* ((statement (p-search-query-parse--statement)))
        `(must-not ,statement)))
+    ('hash
+     (p-search-query-parse--next-token)
+     (let* ((statement (p-search-query-parse--statement)))
+       (unless (and (consp statement) (eql (car statement) 'q))
+         (error "invalid use of hashtag in query (usage example: #\"^reg[eE]xp?$\")"))
+       `(regexp ,(p-search-query-parse--postfix (cadr statement)))))
     ('lparen
      (p-search-query-parse--next-token)
      (let* ((terms '()))
@@ -695,6 +709,8 @@ structure."
   (pcase query
     (`(q ,elt)
      (funcall mark-function elt))
+    (`(regexp ,elt)
+     (funcall mark-function `(regexp ,elt)))
     (`(subtract ,a ,b)
      (p-search--mark-query* `(terms ,a ,b) mark-function))
     (`(boost . ,rest)

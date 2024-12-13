@@ -538,6 +538,8 @@ should be the symbol of one of the supported tools."
                       ('not-word-boundary
                        (p-search--rx-special-string cmd 'not-word-boundary))
                       ((pred (lambda (_) (eql cmd :emacs)))
+                       ;; If we're running this function for the command :emacs
+                       ;; we can just rely on Emacs handling of the rx macro.
                        (rx-to-string rx-expr))
                       (`(seq . ,rest)
                        (let* ((sub-parts (seq-map (lambda (rx-expr)
@@ -552,6 +554,10 @@ should be the symbol of one of the supported tools."
                           (p-search--rx-special-string cmd 'lparen)
                           (string-join sub-parts (p-search--rx-special-string cmd 'or))
                           (p-search--rx-special-string cmd 'rparen))))
+                      (`(regexp ,regex)
+                       ;; TODO: In order for the matching to work properly, there needs
+                       ;; to be a regex converter from emacs to that of the command.
+                       regex)
                       ((pred stringp)
                        (pcase cmd
                          (:grep (p-search--grep-escape rx-expr))
@@ -1173,6 +1179,9 @@ Called with user supplied ARGS for the prior."
                      "                                                             Other special syntax:"
                      "  Use quotes for exact string match:                           (foo bar baz)~  term nearness"
                      "    \"int main ()\" => (\"int main()\")                            foo^ bar^3      term boost"
+                     ""
+                     "  Use #\"...\" for regular expressions:"
+                     "    #\"^b[aA]r b.z$\""
                      "")
                "\n")
             (string-join
