@@ -158,6 +158,13 @@ Call FINALIZE-FUNC on obtained results."
                                      (p-search-put-document-term-frequency resolved term combined-tf))))))
                    (cl-incf i)
                    (when (= i n)
+                     (let* ((field-tf (p-search-count-field-tf term)))
+                       (maphash
+                        (lambda (doc-id field-ct)
+                          (when (not (zerop field-ct))
+                            (let ((prev-ct (gethash doc-id combined-tf)))
+                              (puthash doc-id (+ field-ct prev-ct) combined-tf))))
+                        field-tf))
                      (unless p-search-query-session-tf-ht
                        (setq p-search-query-session-tf-ht (make-hash-table :test #'equal)))
                      (puthash term combined-tf p-search-query-session-tf-ht)

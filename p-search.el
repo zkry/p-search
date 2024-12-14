@@ -232,6 +232,9 @@ generators don't change then this shouldn't be recomputed.")
 (defvar-local p-search-mappings nil
   "List of global mappings in current session.")
 
+(defvar-local p-search-candidate-ids-mapping nil
+  "Mapping of previous document ID to mapped IDs. ")
+
 (defvar-local p-search-posterior-probs nil
   "Heap of calculated posterior probabilities.
 Elements are of the type (DOC-ID PROB).")
@@ -722,8 +725,8 @@ return a list of the IDs that DOC-ID maps to."
     (cond
      ;; The document is directly resolved as itself.
      ((gethash doc-id candidates) t)
-     ((gethash doc-id p-search-mappings)
-      (gethash doc-id p-search-mappings))
+     ((gethash doc-id p-search-candidate-ids-mapping)
+      (gethash doc-id p-search-candidate-ids-mapping))
      (t nil))))
 
 (defun p-search--document-map-p (document mapping)
@@ -743,13 +746,15 @@ return a list of the IDs that DOC-ID maps to."
             (dolist (doc documents)
               (cond
                (p-search-mappings
-                (let ((doc-queue (list doc)))
+                (let ((original-doc-id (p-search-document-property doc 'id))
+                      (doc-queue (list doc)))
                   (pcase-dolist (`(,mapping . ,args) p-search-mappings)
                     (let ((new-doc-queue '()))
                       (dolist (d doc-queue)
                         (when (p-search--document-map-p d mapping)
                           (setq new-doc-queue (append new-doc-queue (funcall (p-search-candidate-mapping-function mapping) args doc)))))
                       (setq doc-queue new-doc-queue)))
+                  (puthash original-doc-id doc-queue p-search-candidate-ids-mapping)
                   (dolist (doc doc-queue)
                     (let ((doc-id (alist-get 'id doc)))
                       (when (not (gethash doc-id candidates-set))
@@ -863,19 +868,24 @@ INIT is the initial value given to the reduce operation."
   (when (not no-recalc)
     (p-search-restart-calculation)))
 
+(defun p-search--count-term-regexp-in-string (term-regexp string)
+  "Return the number of occurences of TERM-REGEXP in STRING."
+  (with-temp-buffer
+    (insert string)
+    (let* ((ct 0))
+      (goto-char (point-min))
+      (while (search-forward-regexp term-regexp nil t)
+        (cl-incf ct))
+      ct)))
+
 (defun p-search-put-document-term-frequency (doc-ids term results-ht)
   "Update term-frequency count of TERM for DOC-IDS in hashtable RESULTS-HT."
   (let* ((term-regexp (p-search-query-emacs--term-regexp term)))
     (seq-do
      (lambda (doc-id)
-       (let ((content (p-search-document-property doc-id 'content)))
-         (with-temp-buffer
-           (insert content)
-           (let* ((ct 0))
-             (goto-char (point-min))
-             (while (search-forward-regexp term-regexp nil t)
-               (cl-incf ct))
-             (puthash doc-id ct results-ht)))))
+       (let* ((content (p-search-document-property doc-id 'content))
+              (ct (p-search--count-term-regexp-in-string term-regexp content)))
+         (puthash doc-id ct results-ht)))
      doc-ids)))
 
 (cl-defun p-search-term-frequency-from-content (gen+args query-term callback)
@@ -884,6 +894,52 @@ INIT is the initial value given to the reduce operation."
          (doc-ids (gethash gen+args p-search-candidates-by-generator)))
     (p-search-put-document-term-frequency doc-ids query-term results-ht)
     (funcall callback results-ht)))
+
+(defun p-search-count-field-tf (term)
+  "Calculate and return hashtable of doc-id to count for TERM."
+  (let* ((term-regexp (p-search-query-emacs--term-regexp term))
+         (field->doc-id->count (make-hash-table :test #'equal))
+         (field+doc-id->size (make-hash-table :test #'equal)))
+    (maphash
+     (lambda (doc-id doc)
+       (pcase-dolist (`(,field-id . ,field-val) (p-search-document-property doc 'fields))
+         (unless (gethash field-id field->doc-id->count)
+           (let ((ht (make-hash-table :test #'equal)))
+             (puthash field-id ht field->doc-id->count)
+             (puthash :total-size 0 ht)))
+         (let* ((doc-id->count (gethash field-id field->doc-id->count)))
+           ;; TODO: Treate all stringp field-vals as eligible for
+           ;; term-frequency count.  In the future this should be
+           ;; configurable.
+           (when (stringp field-val)
+             (let ((len (length field-val)))
+               (puthash (cons field-id doc-id) len field+doc-id->size)
+               (puthash :total-size (+ (gethash :total-size doc-id->count) len)
+                        doc-id->count))
+             (let* ((ct (p-search--count-term-regexp-in-string term-regexp field-val)))
+               (puthash doc-id ct doc-id->count))))))
+     (p-search-candidates))
+    (let* ((ret-ht (make-hash-table :test #'equal))
+           (b 0.75))
+      (maphash
+       (lambda (field-id doc-id->count)
+         (let ((avg-size (/ (float (gethash :total-size doc-id->count))
+                            (1- (hash-table-count doc-id->count)))))
+           (remhash :total-size doc-id->count)
+           (maphash
+            (lambda (doc-id count)
+              (let ((size (gethash (cons field-id doc-id) field+doc-id->size)))
+                (let* ((tf (/ (float count)
+                              (+ (- 1 b)
+                                 (* b (/ (float size) avg-size)))))
+                       (tf (* tf 1)) ;; TODO: Field-level multiplier
+                       (discounted-tf (- tf count)))
+                  (puthash doc-id discounted-tf ret-ht))))
+            doc-id->count)))
+       field->doc-id->count)
+      ret-ht)))
+
+;; todo - b parameter should be 0.75 at first
 
 
 ;;; Predefined Priors and Candidate Generators
@@ -1183,6 +1239,8 @@ are peanalized by how far away it is."))
    :transient-key-string "sd"))
 
 ;;; Search priors
+
+
 
 (defun p-search--prior-query-initialize-function (prior)
   "Initialization function for the text query priro.
@@ -2865,6 +2923,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
   "Instantiate the session-specific local variables."
   ;; (setq p-search-observations (make-hash-table :test 'equal))
   (setq p-search-observations (make-hash-table :test #'equal))
+  (setq p-search-candidate-ids-mapping (make-hash-table :test #'equal))
   (setq p-search-candidates-cache nil)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-active-candidate-generators nil)
