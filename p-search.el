@@ -229,6 +229,9 @@ generators don't change then this shouldn't be recomputed.")
 (defvar-local p-search-priors nil
   "List of active prior components for search.")
 
+(defvar-local p-search-mappings nil
+  "List of global mappings in current session.")
+
 (defvar-local p-search-posterior-probs nil
   "Heap of calculated posterior probabilities.
 Elements are of the type (DOC-ID PROB).")
@@ -254,6 +257,7 @@ Elements are of the type (DOC-ID PROB).")
 (defvar-local p-search-git-roots nil
   "List of known git roots used as cache.")
 
+;;; "Peruse" (tracking viewing) is an experimental feature, subject to change.
 (defvar-local p-search-peruse-data nil
   "Record of peruse data for current session.
 Data is alist of form (DOC-ID -> ((:max-range . X) (:ranges . RANGE-OBJ))).")
@@ -261,6 +265,8 @@ Data is alist of form (DOC-ID -> ((:max-range . X) (:ranges . RANGE-OBJ))).")
 (defvar-local p-search-session nil
   "Variable to store the assocciated session of a peruse buffer.")
 
+
+;; "Engine" (search-engine-like UI) is an experimental feature, subject to change.
 (defvar-local p-search-engine-specification nil
   "List to specify p-search engine specific data.  Contents are as follows:
 (PRIOR SEARCH-BAR-ARG-SYM)
@@ -271,7 +277,6 @@ with a search operation.
 
 p-search engine is defined to be enabled if this variable is
 non-nil for the current session.")
-
 (defvar-local p-search-engine--search-text nil)
 (defvar-local p-search-engine--search-field nil)
 (defvar-local p-search-engine--search-button nil)
@@ -347,9 +352,9 @@ non-nil for the current session.")
   (name nil
    :documentation "Name of the generator, to be shown on search page.")
   (input-spec nil
-   :documentation "Specification of inputs required for the function to function.")
+   :documentation "Specification of inputs required for the function to work properly.")
   (options-spec nil
-   :documentation "Specification of optional inputs required for the function to function.")
+   :documentation "Specification of optional inputs.")
   (function nil
    :documentation "Function to generate list of candidates.
 Takes one argument, the combined input/option arguments as an alist.")
@@ -369,6 +374,23 @@ generator's arguments and returns a string to be used in the sessions buffer nam
    :documentation "ID of the candidate generator.  Used to implicitly refer to
 candidate generators.  This should be the symbol whoes value is
 the candidate generator.  This requirement may relax in future implementations."))
+
+(cl-defstruct (p-search-candidate-mapping
+               (:copier nil)
+               (:constructor p-search-candidate-mapping))
+  "Structure representing a mapping from one set of candidate documents to another."
+  (name nil
+        :documentation "Display name of the mapping to be shown on search page.")
+  (required-property-list nil
+    :documentation "List of property sympols required for mapping.
+Any generator providing documents having all these properties can use this mapping.")
+  (input-spec nil
+   :documentation "Specification of inputs required for the mapper to work properly.")
+  (options-spec nil :documentation "Specification of optional inputs.")
+  (function nil :documentation "Function to generate new candidate from existing candidate.
+This function should take two arguments: the combined
+input/option values alist and the document data to be mapped.
+The function should return a list of document mappings."))
 
 (cl-defstruct (p-search-prior-template
                (:copier nil)
@@ -409,7 +431,8 @@ Maps from file name to result indicator.")
   (proc-or-thread nil
    :documentation "This slot stores the process or thread that does main computation.")
   (arguments nil
-   :documentation "Arguments provided to the prior.  These are the union of inputs and options."))
+             :documentation "Arguments provided to the prior.  These are the union of inputs and options."))
+
 
 
 ;;; Helper Functions
@@ -690,19 +713,53 @@ A term regex is noted for marking boundary characters."
 
 ;;; Prior API
 
+(defun p-search-resolve-document-id (doc-id)
+  "Return the resolved document IDs of DOC-ID.
+If DOC-ID is not in the current session, return nil.  If DOC-ID
+resolves to itself, return t.  If DOC-ID is mapped to other IDs,
+return a list of the IDs that DOC-ID maps to."
+  (let ((candidates (p-search-candidates)))
+    (cond
+     ;; The document is directly resolved as itself.
+     ((gethash doc-id candidates) t)
+     ((gethash doc-id p-search-mappings)
+      (gethash doc-id p-search-mappings))
+     (t nil))))
+
+(defun p-search--document-map-p (document mapping)
+  "Return non-nil if DOCUMENT satisfies requirements of MAPPING."
+  (seq-every-p
+   (lambda (key) (alist-get key document))
+   (p-search-candidate-mapping-required-property-list mapping)))
+
 (defun p-search-candidates ()
   "Return the search candidates as map from id to document."
   (or p-search-candidates-cache
       (let ((candidates-set (make-hash-table :test 'equal))
             (generator-to-doc (make-hash-table :test 'equal)))
         (pcase-dolist (`(,gen . ,args) p-search-active-candidate-generators)
-          (let* ((documents (funcall (p-search-candidate-generator-function gen) args)))
+          (let* ((gen-key  (cons gen args))
+                 (documents (funcall (p-search-candidate-generator-function gen) args)))
             (dolist (doc documents)
-              (let* ((id (alist-get 'id doc)))
-                (when (not (gethash id candidates-set))
-                  (let ((key (cons gen args)))
-                    (puthash key (cons id (gethash key generator-to-doc)) generator-to-doc))
-                  (puthash id doc candidates-set))))))
+              (cond
+               (p-search-mappings
+                (let ((doc-queue (list doc)))
+                  (pcase-dolist (`(,mapping . ,args) p-search-mappings)
+                    (let ((new-doc-queue '()))
+                      (dolist (d doc-queue)
+                        (when (p-search--document-map-p d mapping)
+                          (setq new-doc-queue (append new-doc-queue (funcall (p-search-candidate-mapping-function mapping) args doc)))))
+                      (setq doc-queue new-doc-queue)))
+                  (dolist (doc doc-queue)
+                    (let ((doc-id (alist-get 'id doc)))
+                      (when (not (gethash doc-id candidates-set))
+                        (puthash gen-key (cons doc-id (gethash gen-key generator-to-doc)) generator-to-doc)
+                        (puthash doc-id doc candidates-set))))))
+               (t
+                (let ((doc-id (alist-get 'id doc)))
+                  (when (not (gethash doc-id candidates-set))
+                    (puthash gen-key (cons doc-id (gethash gen-key generator-to-doc)) generator-to-doc)
+                    (puthash doc-id doc candidates-set))))))))
         (setq p-search-candidates-cache candidates-set)
         (setq p-search-candidates-by-generator generator-to-doc)
         candidates-set)))
@@ -806,13 +863,11 @@ INIT is the initial value given to the reduce operation."
   (when (not no-recalc)
     (p-search-restart-calculation)))
 
-(cl-defun p-search-term-frequency-from-content (_args query-term callback &key case-insensitive)
-  "Default candidate generator's TF function, counting from doc's content property."
-  (let* ((term-regexp (p-search-query-emacs--term-regexp query-term))
-         (results-ht (make-hash-table :test #'equal))
-         (docs (p-search-candidates)))
-    (maphash
-     (lambda (doc-id _)
+(defun p-search-put-document-term-frequency (doc-ids term results-ht)
+  "Update term-frequency count of TERM for DOC-IDS in hashtable RESULTS-HT."
+  (let* ((term-regexp (p-search-query-emacs--term-regexp term)))
+    (seq-do
+     (lambda (doc-id)
        (let ((content (p-search-document-property doc-id 'content)))
          (with-temp-buffer
            (insert content)
@@ -821,7 +876,13 @@ INIT is the initial value given to the reduce operation."
              (while (search-forward-regexp term-regexp nil t)
                (cl-incf ct))
              (puthash doc-id ct results-ht)))))
-     docs)
+     doc-ids)))
+
+(cl-defun p-search-term-frequency-from-content (gen+args query-term callback)
+  "Default candidate generator's TF function, counting from doc's content property."
+  (let* ((results-ht (make-hash-table :test #'equal))
+         (doc-ids (gethash gen+args p-search-candidates-by-generator)))
+    (p-search-put-document-term-frequency doc-ids query-term results-ht)
     (funcall callback results-ht)))
 
 
@@ -908,13 +969,13 @@ INIT is the initial value given to the reduce operation."
            (nreverse documents)))))
    :term-frequency-function
    (cl-function
-    (lambda (args query-term callback)
-      (let* ((default-directory (alist-get 'base-directory args))
+    (lambda (gen+args query-term callback)
+      (let* ((args (cdr gen+args))
+             (default-directory (alist-get 'base-directory args))
              (search-tool (alist-get 'search-tool args))
              (file-counts (make-hash-table :test #'equal))
              (command (p-search-query--command query-term search-tool))
-             (parent-buffer (current-buffer))
-             (candidate-docs (p-search-candidates)))
+             (parent-buffer (current-buffer)))
         (let* ((buf (generate-new-buffer "*p-search rg")))
           (with-current-buffer buf
             (setq p-search-parent-session-buffer parent-buffer))
@@ -939,8 +1000,7 @@ INIT is the initial value given to the reduce operation."
                               (prev-count (gethash id file-counts 0))
                               (count (string-to-number (match-string 2 f)))
                               (doc-id (list 'file (file-name-concat default-directory fname))))
-                         (when (and (not (zerop count))
-                                    (gethash doc-id candidate-docs))
+                         (when (and (not (zerop count)))
                            (puthash doc-id (+ prev-count count) file-counts)))))
                    (defvar my-file-counts file-counts)
                    (with-current-buffer p-search-parent-session-buffer

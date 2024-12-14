@@ -14,6 +14,8 @@
 (declare-function 'p-search-document-property "p-search.el")
 (declare-function 'p-search-candidate-generator-term-frequency-function "p-search.el")
 (declare-function 'p-search-document-property "p-search.el")
+(declare-function 'p-search-resolve-document-id "p-search.el")
+(declare-function 'p-search-put-document-term-frequency "p-search.el")
 
 (defvar p-search-active-candidate-generators)
 
@@ -136,20 +138,33 @@ Call FINALIZE-FUNC on obtained results."
        (n (length p-search-active-candidate-generators))
        (i 0)
        (callback (lambda (doc-to-tf)
+                   ;; The documents in DOC-TO-TF may not be actual
+                   ;; candidates, or may be mapped to another document.
+
                    ;; Since candidate-generators should be mutually
                    ;; exclusive, puthash is overwriting value, not adding.
                    (cl-loop for k being the hash-keys of doc-to-tf
                             using (hash-values v)
-                            do (puthash k v combined-tf))
+                            do (let ((resolved (p-search-resolve-document-id k)))
+                                 (cond
+                                  ((eql t resolved)
+                                   (puthash k v combined-tf))
+                                  ((and resolved (listp resolved))
+                                   (if (= (length resolved) 1)
+                                       ;; NOTE: This assumes that in a
+                                       ;; 1-to-1 mapping, the term
+                                       ;; counts are the same.
+                                       (puthash (car resolved) v combined-tf)
+                                     (p-search-put-document-term-frequency resolved term combined-tf))))))
                    (cl-incf i)
                    (when (= i n)
                      (unless p-search-query-session-tf-ht
                        (setq p-search-query-session-tf-ht (make-hash-table :test #'equal)))
                      (puthash term combined-tf p-search-query-session-tf-ht)
                      (funcall finalize-func combined-tf)))))
-    (pcase-dolist (`(,generator . ,args) p-search-active-candidate-generators)
-      (let* ((tf-func (p-search-candidate-generator-term-frequency-function generator)))
-        (funcall tf-func args term callback)))))
+    (dolist (gen+args p-search-active-candidate-generators)
+      (let* ((tf-func (p-search-candidate-generator-term-frequency-function (car gen+args))))
+        (funcall tf-func gen+args term callback)))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
