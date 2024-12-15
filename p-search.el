@@ -188,6 +188,10 @@ be any Lisp object.")
   "Hashmap containing properties of documents.
 Key is of type (list type-symbol property-symbol).")
 
+(defconst p-search-known-fields (make-hash-table :test #'equal)
+  "Hashmap containing known field properties.
+Key is of the type (cons type-symbol properties-p-list)")
+
 (defconst p-search-candidate-generators '()
   "List of candidate-generator objects known to the p-search system.")
 
@@ -655,6 +659,32 @@ A term regex is noted for marking boundary characters."
 ;; extendible, being the bridge between entities (be it on the
 ;; filesystem or in Emacs) and IR documents.
 
+(defun p-search-def-field (symbol type &rest properties)
+  "Define a searchable generic field SYMBOL of search type TYPE.
+
+TYPE may be one of the following symbols:
+
+- `text' :: This indicates that the field is to be used as part
+    of the generic text search.  The property when given to a
+    document should be either a string or a list of strings,
+    indicating multiple instances of the field.  Available
+    properties are as follows: `:weight' a number indicating how
+    many times more important is this field compared to the text
+    body.
+
+- `category' :: This indicates that the field is belonging to a
+    discrete category.  This field will not be search in text
+    queries.  The category values will be collected and the user
+    can select between them.  The property when given to a
+    document should be a string, symbol, list of strings, or list
+    of symbols."
+  (puthash symbol (cons type properties) p-search-known-fields))
+
+(defun p-search-get-field (symbol)
+  "Return the field definition of SYMBOL.
+The definition is returned in the form of (cons type properties-p-list)."
+  (gethash symbol p-search-known-fields))
+
 (defun p-search-def-function (type property-symbol value)
   "Define function property PROPERTY-SYMBOL on TYPE."
   (puthash
@@ -789,6 +819,19 @@ return a list of the IDs that DOC-ID maps to."
         (when default
           (funcall default id))))))
 
+(defun p-search-document-extend (document new-id new-fields new-props)
+  "Add NEW-ID, FIELDS, and NEW-PROPS to DOCUMENT, returning DOCUMENT."
+  (let ((document document))
+    (when new-props
+      (setq document (append new-props document)))
+    (when new-fields
+      (let* ((old-fields (p-search-document-property document 'fields))
+             (new-fields (append fields old-fields)))
+        (setq document (cons (cons 'fields new-fields) document))))
+    (when new-id
+      (setq document (cons (cons 'id new-id) document)))
+    document))
+
 (defun p-search-unique-properties (property)
   (let* ((candidates (p-search-candidates))
          (values '()))
@@ -900,18 +943,23 @@ INIT is the initial value given to the reduce operation."
   (let* ((term-regexp (p-search-query-emacs--term-regexp term))
          (field->doc-id->count (make-hash-table :test #'equal))
          (field+doc-id->size (make-hash-table :test #'equal)))
+    ;; Iterate through each candidate, then iterate through each field
+    ;; of the candidate, and seach on each text field, counting the
+    ;; term occurrances and summing up sizes.  The sizes and counts
+    ;; will be used as part of the BM25F algorithm.
     (maphash
      (lambda (doc-id doc)
+       ;; For each field of the document...
        (pcase-dolist (`(,field-id . ,field-val) (p-search-document-property doc 'fields))
+         ;; Ensure the nested hash tables are initialized properly.
          (unless (gethash field-id field->doc-id->count)
            (let ((ht (make-hash-table :test #'equal)))
              (puthash field-id ht field->doc-id->count)
              (puthash :total-size 0 ht)))
+
          (let* ((doc-id->count (gethash field-id field->doc-id->count)))
-           ;; TODO: Treate all stringp field-vals as eligible for
-           ;; term-frequency count.  In the future this should be
-           ;; configurable.
-           (when (stringp field-val)
+           (when-let* ((field-def (p-search-get-field field-id))
+                       (text-p (eql (car field-def) 'text)))
              (let ((len (length field-val)))
                (puthash (cons field-id doc-id) len field+doc-id->size)
                (puthash :total-size (+ (gethash :total-size doc-id->count) len)
@@ -923,8 +971,10 @@ INIT is the initial value given to the reduce operation."
            (b 0.75))
       (maphash
        (lambda (field-id doc-id->count)
-         (let ((avg-size (/ (float (gethash :total-size doc-id->count))
-                            (1- (hash-table-count doc-id->count)))))
+         (pcase-let* ((field-def (p-search-get-field field-id))
+                      (weight (or (plist-get (cdr field-def) :weight) 1))
+                      (avg-size (/ (float (gethash :total-size doc-id->count))
+                                   (1- (hash-table-count doc-id->count)))))
            (remhash :total-size doc-id->count)
            (maphash
             (lambda (doc-id count)
@@ -932,14 +982,12 @@ INIT is the initial value given to the reduce operation."
                 (let* ((tf (/ (float count)
                               (+ (- 1 b)
                                  (* b (/ (float size) avg-size)))))
-                       (tf (* tf 1)) ;; TODO: Field-level multiplier
+                       (tf (* tf weight))
                        (discounted-tf (- tf count)))
                   (puthash doc-id discounted-tf ret-ht))))
             doc-id->count)))
        field->doc-id->count)
       ret-ht)))
-
-;; todo - b parameter should be 0.75 at first
 
 
 ;;; Predefined Priors and Candidate Generators
