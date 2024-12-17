@@ -696,11 +696,14 @@ The definition is returned in the form of (cons type properties-p-list)."
 
 (defun p-search-run-document-function (document-id prop)
   "Return the static property PROP of document DOCUMENT-ID."
-  (let* ((fn (gethash
-              (list (car document-id) prop)
-              p-search-documentizer-function-properties)))
-    (when fn
-      (funcall fn (cadr document-id)))))
+  (when (symbolp (car document-id))
+    (let* ((fn (gethash
+                (list (car document-id) prop)
+                p-search-documentizer-function-properties)))
+      (cond
+       (fn (funcall fn (cadr document-id)))
+       ((consp (cadr document-id))
+        (p-search-run-document-function (cadr document-id) prop))))))
 
 (defun p-search-def-property (type property-symbol function)
   "Define property PROPERTY-SYMBOL on TYPE by calling FUNCTION."
@@ -3133,7 +3136,8 @@ values of ARGS."
            (args-string (p-search--args-to-string in-spec opt-spec args))
            (heading-line (concat (propertize mapping-name 'face 'p-search-prior))))
       (p-search-add-section `((heading . ,heading-line)
-                              (props . (p-search-mapping ,(cons mapping args)))
+                              (props . (p-search-mapping ,(cons mapping args)
+                                        condenced-text ,(concat "(" args-string ")")))
                               (key . ,(cons mapping args)))
         (pcase-dolist (`(,input-key . _) in-spec)
           (when-let (val (alist-get input-key args))
