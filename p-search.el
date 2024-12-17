@@ -819,14 +819,14 @@ return a list of the IDs that DOC-ID maps to."
         (when default
           (funcall default id))))))
 
-(defun p-search-document-extend (document new-id new-fields new-props)
+(defun p-search-document-extend (document &optional new-id new-fields new-props)
   "Add NEW-ID, FIELDS, and NEW-PROPS to DOCUMENT, returning DOCUMENT."
   (let ((document document))
     (when new-props
       (setq document (append new-props document)))
     (when new-fields
       (let* ((old-fields (p-search-document-property document 'fields))
-             (new-fields (append fields old-fields)))
+             (new-fields (append new-fields old-fields)))
         (setq document (cons (cons 'fields new-fields) document))))
     (when new-id
       (setq document (cons (cons 'id new-id) document)))
@@ -904,11 +904,18 @@ INIT is the initial value given to the reduce operation."
   (setq p-search-priors (cl-remove prior p-search-priors :test #'equal))
   (p-search-calculate))
 
+(defun p-search--remove-mapping (mapping+args &optional no-recalc)
+  "Remove MAPPING+ARGS from the current session, recalculating posteriors."
+  (setq p-search-mappings
+        (cl-remove mapping+args p-search-mappings :test #'equal))
+  (unless no-recalc
+    (p-search-restart-calculation)))
+
 (defun p-search--remove-candidate-generator (generator+args &optional no-recalc)
   "Remove GENERATOR+ARGS from the current session, recalculating posteriors."
   (setq p-search-active-candidate-generators
         (cl-remove generator+args p-search-active-candidate-generators :test #'equal))
-  (when (not no-recalc)
+  (unless no-recalc
     (p-search-restart-calculation)))
 
 (defun p-search--count-term-regexp-in-string (term-regexp string)
@@ -1287,8 +1294,6 @@ are peanalized by how far away it is."))
    :transient-key-string "sd"))
 
 ;;; Search priors
-
-
 
 (defun p-search--prior-query-initialize-function (prior)
   "Initialization function for the text query priro.
@@ -3038,7 +3043,7 @@ values of ARGS."
      ", ")))
 
 (defun p-search--insert-candidate-generator (generator+args)
-  "Insert candidate GENERATOR+ARGS cons GENERATOR-ARGS into current buffer."
+  "Insert GENERATOR+ARGS into current buffer."
   (pcase-let* ((`(,generator . ,args) generator+args))
     (let* ((gen-name (p-search-candidate-generator-name generator))
            (in-spec (p-search-candidate-generator-input-spec generator))
@@ -3052,6 +3057,28 @@ values of ARGS."
                               (props . (p-search-candidate-generator ,(cons generator args)
                                         condenced-text ,(concat " (" args-string ")")))
                               (key . ,(cons generator args)))
+        (pcase-dolist (`(,input-key . _) in-spec)
+          (when-let (val (alist-get input-key args))
+            (insert (format "%s: %s\n"
+                            input-key
+                            (propertize (format "%s" val) 'face 'p-search-value)))))
+        (pcase-dolist (`(,opt-key . _) (append opt-spec '((complement . nil) (importance . nil))))
+          (when-let (val (alist-get opt-key args))
+            (insert (format "%s: %s\n"
+                            opt-key
+                            (propertize (format "%s" val) 'face 'p-search-value)))))))))
+
+(defun p-search--insert-mapping (mapping+args)
+  "Insert mapping MAPPING+ARGS into the current buffer."
+  (pcase-let* ((`(,mapping . ,args) mapping+args))
+    (let* ((mapping-name (p-search-candidate-mapping-name mapping))
+           (in-spec (p-search-candidate-mapping-input-spec mapping))
+           (opt-spec (p-search-candidate-mapping-options-spec mapping))
+           (args-string (p-search--args-to-string in-spec opt-spec args))
+           (heading-line (concat (propertize mapping-name 'face 'p-search-prior))))
+      (p-search-add-section `((heading . ,heading-line)
+                              (props . (p-search-mapping ,(cons mapping args)))
+                              (key . ,(cons mapping args)))
         (pcase-dolist (`(,input-key . _) in-spec)
           (when-let (val (alist-get input-key args))
             (insert (format "%s: %s\n"
@@ -3173,11 +3200,22 @@ values of ARGS."
                                     'face 'p-search-section-heading))
             (props . (p-search-section-id candidate-generators)))
         (when (= 0 (length p-search-active-candidate-generators))
-          (insert (propertize "Press \"C\" to add a candidate generator.\n\n"
+          (insert (propertize "Press \"C\" to add a candidate generator.\n"
                               'face 'shadow)))
         (dolist (generator-args p-search-active-candidate-generators)
           (p-search--insert-candidate-generator generator-args))
         (insert "\n"))
+      (unless (= 0 (length p-search-active-candidate-generators))
+        (p-search-add-section
+            `((heading . ,(propertize (format "Mappings (%d)" (length p-search-mappings))
+                                      'face 'p-search-section-heading))
+              (props . (p-search-section-id mappings)))
+          (when (= 0 (length p-search-mappings))
+            (insert (propertize "Press \"M\" to add a candidate mapping.\n" 'face 'shadow)))
+          (dolist (mapping p-search-mappings)
+            (p-search--insert-mapping mapping))
+          (insert "\n")))
+
       (let* ((page-dims (p-search--display-columns))
              (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
                                          'face 'p-search-section-heading))
@@ -3404,8 +3442,11 @@ If PRESET is non-nil, set up session with PRESET."
   (interactive)
   (when-let* ((prior (get-char-property (point) 'p-search-prior)))
     (p-search--remove-prior prior))
-  (when-let* ((prior (get-char-property (point) 'p-search-candidate-generator)))
-    (p-search--remove-candidate-generator prior)
+  (when-let* ((mapping (get-char-property (point) 'p-search-mapping)))
+    (p-search--remove-mapping mapping)
+    (p-search--update-buffer-name-from-candidate-generators))
+  (when-let* ((candidate-generator (get-char-property (point) 'p-search-candidate-generator)))
+    (p-search--remove-candidate-generator candidate-generator)
     (p-search--update-buffer-name-from-candidate-generators)))
 
 (defun p-search-edit-dwim ()
@@ -3422,8 +3463,9 @@ When NO-SCROLL is non-nil, don't scroll the window to show the
 item's contents."
   (interactive)
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
-                                   (get-char-property (point) 'p-search-prior)
-                                   (get-char-property (point) 'p-search-result))))
+                                    (get-char-property (point) 'p-search-prior)
+                                    (get-char-property (point) 'p-search-result)
+                                    (get-char-property (point) 'p-search-mapping))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
@@ -3444,7 +3486,8 @@ item's contents."
   (interactive)
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                     (get-char-property (point) 'p-search-prior)
-                                    (get-char-property (point) 'p-search-result))))
+                                    (get-char-property (point) 'p-search-result)
+                                    (get-char-property (point) 'p-search-mapping))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
