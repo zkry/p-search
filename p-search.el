@@ -223,7 +223,7 @@ generators don't change then this shouldn't be recomputed.")
 
 ;; The vars in this section are used on a per-search-session basis.
 
-(defvar-local p-search-candidates-cache nil
+(defvar-local p-search-final-candidates-cache nil
   "Cache of generated candidates.")
 
 (defvar-local p-search-candidates-by-generator nil
@@ -769,7 +769,7 @@ return a list of the IDs that DOC-ID maps to."
 
 (defun p-search-candidates ()
   "Return the search candidates as map from id to document."
-  (or p-search-candidates-cache
+  (or p-search-final-candidates-cache
       (let ((candidates-set (make-hash-table :test 'equal))
             (generator-to-doc (make-hash-table :test 'equal)))
         (pcase-dolist (`(,gen . ,args) p-search-active-candidate-generators)
@@ -797,7 +797,7 @@ return a list of the IDs that DOC-ID maps to."
                   (when (not (gethash doc-id candidates-set))
                     (puthash gen-key (cons doc-id (gethash gen-key generator-to-doc)) generator-to-doc)
                     (puthash doc-id doc candidates-set))))))))
-        (setq p-search-candidates-cache candidates-set)
+        (setq p-search-final-candidates-cache candidates-set)
         (setq p-search-candidates-by-generator generator-to-doc)
         candidates-set)))
 
@@ -2080,7 +2080,7 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
 (defun p-search-restart-calculation ()
   "Re-generate all candidates, and re-run all priors."
   (setq p-search-candidates-by-generator nil)
-  (setq p-search-candidates-cache nil)
+  (setq p-search-final-candidates-cache nil)
   (dolist (prior p-search-priors)
     (setf (p-search-prior-results prior) (make-hash-table :test #'equal))
     (let ((proc-thread (p-search-prior-proc-or-thread prior)))
@@ -2934,7 +2934,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         ;; using temp buffers and local state makes things really confusing...
         ;; the following setqs is for the code to be able to accesss certain session variables
         (setq p-search-query-session-tf-ht session-tfs)
-        (setq p-search-candidates-cache candidates)
+        (setq p-search-final-candidates-cache candidates)
         (goto-char (point-min))
         (let* ((hints (p-search--document-hints priors)))
           (if hints
@@ -2993,7 +2993,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
       (error "Unable to create candidate generator %s, missing arg %s"
              (p-search-candidate-generator-name generator)
              key)))
-  (setq p-search-candidates-cache nil)
+  (setq p-search-final-candidates-cache nil)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-active-candidate-generators
         (append p-search-active-candidate-generators
@@ -3006,7 +3006,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
     (unless (alist-get key args)
       (error "Unable to create mapping %s, missing arg %s"
              (p-search-candidate-mapping-name mapping) key)))
-  (setq p-search-candidates-cache nil)
+  (setq p-search-final-candidates-cache nil)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-mappings (append p-search-mappings (list (cons mapping args))))
   (p-search--update-buffer-name-from-candidate-generators))
@@ -3018,7 +3018,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
       (error "Unable to create candidate generator %s, missing arg %s"
              (p-search-candidate-generator-name (car old-generator+args))
              key)))
-  (setq p-search-candidates-cache nil)
+  (setq p-search-final-candidates-cache nil)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-active-candidate-generators
         (seq-map
@@ -3033,7 +3033,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
   ;; (setq p-search-observations (make-hash-table :test 'equal))
   (setq p-search-observations (make-hash-table :test #'equal))
   (setq p-search-candidate-ids-mapping (make-hash-table :test #'equal))
-  (setq p-search-candidates-cache nil)
+  (setq p-search-final-candidates-cache nil)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-active-candidate-generators nil)
   (setq p-search-priors nil))
@@ -3578,10 +3578,15 @@ item's contents."
   (interactive)
   (unless (derived-mode-p 'p-search-mode)
     (error "No current p-search session found"))
-  (let* ((selections (seq-map
+  (let* ((available-mappings (seq-filter
+                              (lambda (mapping)
+                                (p-search-candidate-with-properties-exists-p
+                                 (p-search-candidate-mapping-required-property-list mapping)))
+                              p-search-candidate-mappings))
+         (selections (seq-map
                       (lambda (m)
                         (cons (p-search-candidate-mapping-name m) m))
-                      p-search-candidate-mappings))
+                      available-mappings))
          ;; TODO - Filter "available" mappings
          (selection (completing-read "Mapping: " selections nil t))
          (selected-mapping (alist-get selection selections nil nil #'equal)))
