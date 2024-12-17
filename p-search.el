@@ -195,6 +195,8 @@ Key is of the type (cons type-symbol properties-p-list)")
 (defconst p-search-candidate-generators '()
   "List of candidate-generator objects known to the p-search system.")
 
+(defconst p-search-candidate-mappings '())
+
 (defconst p-search-default-candidate-generators '()
   "List of candidate generators to be applied on startup of p-search session.")
 
@@ -2290,9 +2292,15 @@ This function will also start any process or thread described by TEMPLATE."
       (p-search--reprint))))
 
 (defun p-search-transient-candidate-generator-create (generator)
-  ""
   (let* ((args (transient-args 'p-search-transient-dispatcher)))
     (p-search--add-candidate-generator generator args)
+    (p-search-restart-calculation)))
+
+(defun p-search-transient-mapping-create (mapping)
+  (let* ((args (transient-args 'p-search-transient-dispatcher)))
+    (p-search--add-mapping mapping args)
+    ;; TODO: Make this fast by not requiring a recalculation of previous
+    ;; candidates.
     (p-search-restart-calculation)))
 
 (defun p-search-transient-candidate-generator-edit (generator+args)
@@ -2424,6 +2432,35 @@ This function will also start any process or thread described by TEMPLATE."
                (lambda ()
                  (interactive)
                  (p-search-transient-candidate-generator-create ,candidate-generator)))]))))
+
+(defun p-search-dispatch-add-mapping (mapping)
+  "Dispatch transient menu for creating CANDIDATE-GENERATOR."
+  (let* ((input-specs (p-search-candidate-mapping-input-spec mapping))
+         (option-specs (p-search-candidate-mapping-options-spec mapping)))
+    (if (and (not input-specs) (not option-specs))
+        ;; NOTE: If mappings ever get default args, this case will have to be removed.
+        (p-search-transient-mapping-create mapping)
+      (apply #'p-search-dispatch-transient
+             `(["Input"
+                ,@(seq-map
+                   (lambda (name+spec)
+                     (let* ((name (car name+spec))
+                            (spec (p-search--resolve-spec (cdr name+spec)))
+                            (reader (oref (get (car spec) 'transient--suffix) :reader))
+                            (default-value (p-search-read-default-spec-value name+spec)))
+                       (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
+                   input-specs)]
+               ["Options"
+                ,@(seq-map (lambda (name+spec)
+                             (let* ((name (car name+spec))
+                                    (spec (p-search--resolve-spec (cdr name+spec))))
+                               (p-search--transient-suffix-from-spec (cons name spec) nil)))
+                           option-specs)]
+               ["Actions"
+                ("c" "create"
+                 (lambda ()
+                   (interactive)
+                   (p-search-transient-mapping-create ,mapping)))])))))
 
 (defun p-search-dispatch-edit-candidate-generator (generator+args)
   "Dispatch transient menu for editing GENERATOR+ARGS."
@@ -2880,6 +2917,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
          (preview-size p-search-document-preview-size)
          (session-tfs p-search-query-session-tf-ht)
          (candidates (p-search-candidates))
+         (file-name (p-search-document-property document 'file-name))
          (final-result))
     (with-temp-buffer
       (let* ((p-search-document-preview-size preview-size))
@@ -2887,10 +2925,10 @@ The number of lines returned is determined by `p-search-document-preview-size'."
         ;;       Like how would git author provide text hints?
         (insert document-contents)
         ;; propertize buffer according to filename
-        (when (eql (car document) 'file)
+        (when file-name
           (setq-local delay-mode-hooks t)
           (unwind-protect
-              (let ((buffer-file-name (cadr document)))
+              (let ((buffer-file-name file-name))
                 (set-auto-mode))
             (setq-local delay-mode-hooks nil)))
         ;; using temp buffers and local state makes things really confusing...
@@ -2928,16 +2966,23 @@ The number of lines returned is determined by `p-search-document-preview-size'."
                     (concat res "\n")))))))))))
 
 (defun p-search--update-buffer-name-from-candidate-generators ()
-  (if p-search-active-candidate-generators
+  "Rename the current buffer to reflect the entities in the session."
+  (let ((buff-str ""))
+    (when p-search-active-candidate-generators
       (catch 'done
         (pcase-dolist (`(,gen . ,args) p-search-active-candidate-generators)
           (when-let* ((lighter-func (p-search-candidate-generator-lighter-function gen))
                       (lighter-str (funcall lighter-func args)))
             (if (> (length p-search-active-candidate-generators) 1)
-                (rename-buffer (format "*p-search<%s...>*" lighter-str) t)
-              (rename-buffer (format "*p-search<%s>*" lighter-str) t))
+                (setq buff-str (concat lighter-str "..."))
+              (setq buff-str (concat lighter-str)))
             (throw 'done nil))))
-    (rename-buffer (format "*p-search<>*") t)))
+      (when p-search-mappings
+        (let ((first-mapping-name (p-search-candidate-mapping-name (caar p-search-mappings))))
+          (setq buff-str (concat buff-str ":" first-mapping-name)))
+        (when (> (length p-search-mappings) 1)
+          (setq buff-str (concat buff-str "...")))))
+    (rename-buffer (format "*p-search<%s>*" buff-str) t)))
 
 (defun p-search--add-candidate-generator (generator args)
   "Append GENERATOR with ARGS to the current p-search session."
@@ -2953,6 +2998,17 @@ The number of lines returned is determined by `p-search-document-preview-size'."
   (setq p-search-active-candidate-generators
         (append p-search-active-candidate-generators
                 (list (cons generator args))))
+  (p-search--update-buffer-name-from-candidate-generators))
+
+(defun p-search--add-mapping (mapping args)
+  "Append MAPPING with ARGS to the current p-search session mappings."
+  (pcase-dolist (`(,key . _) (p-search-candidate-mapping-input-spec mapping))
+    (unless (alist-get key args)
+      (error "Unable to create mapping %s, missing arg %s"
+             (p-search-candidate-mapping-name mapping) key)))
+  (setq p-search-candidates-cache nil)
+  (setq p-search-candidates-by-generator nil)
+  (setq p-search-mappings (append p-search-mappings (list (cons mapping args))))
   (p-search--update-buffer-name-from-candidate-generators))
 
 (defun p-search--replace-candidate-generator (old-generator+args new-args)
@@ -3517,6 +3573,20 @@ item's contents."
          (selected-generator (alist-get selection selections nil nil #'equal)))
     (p-search-dispatch-add-candidate-generator selected-generator)))
 
+(defun p-search-add-mapping ()
+  "Add a new mapping to the current session."
+  (interactive)
+  (unless (derived-mode-p 'p-search-mode)
+    (error "No current p-search session found"))
+  (let* ((selections (seq-map
+                      (lambda (m)
+                        (cons (p-search-candidate-mapping-name m) m))
+                      p-search-candidate-mappings))
+         ;; TODO - Filter "available" mappings
+         (selection (completing-read "Mapping: " selections nil t))
+         (selected-mapping (alist-get selection selections nil nil #'equal)))
+    (p-search-dispatch-add-mapping selected-mapping)))
+
 (defun p-search-add-dwim ()
   "Add a new thing depending on where point is."
   (interactive)
@@ -3686,6 +3756,7 @@ register to which the preset value will be saved."
     (keymap-set map "G" #'p-search-hard-refresh-buffer)
     ;; (keymap-set map "i" #'p-search-importance)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
+    (keymap-set map "M" #'p-search-add-mapping)
     (keymap-set map "n" #'p-search-next-item)
     (keymap-set map "o" #'p-search-observe)
     (keymap-set map "p" #'p-search-prev-item)
