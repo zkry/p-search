@@ -764,6 +764,21 @@ return a list of the IDs that DOC-ID maps to."
       (gethash doc-id p-search-candidate-ids-mapping))
      (t nil))))
 
+(defun p-search--doc-count-of-mapping (mapping+args)
+  ""
+  (if (not p-search-candidates-by-generator)
+      0
+    (let ((ct 0))
+      (dolist (cg+args p-search-active-candidate-generators)
+        (let ((subseq '()))
+          (catch 'found
+            (dolist (m+a p-search-mappings)
+              (setq subseq (append subseq (list mapping+args)))
+              (when (equal m+a mapping+args)
+                (throw 'found nil))))
+          (cl-incf ct (length (gethash subseq (gethash cg+args p-search-candidates-by-generator))))))
+      ct)))
+
 (defun p-search--document-map-p (document mapping)
   "Return non-nil if DOCUMENT satisfies requirements of MAPPING."
   (seq-every-p
@@ -773,35 +788,44 @@ return a list of the IDs that DOC-ID maps to."
 (defun p-search-candidates ()
   "Return the search candidates as map from id to document."
   (or p-search-final-candidates-cache
-      (let ((candidates-set (make-hash-table :test 'equal))
-            (generator-to-doc (make-hash-table :test 'equal)))
+      (let ((candidates-set (make-hash-table :test #'equal))
+            (generator->mappings->docs (make-hash-table :test 'equal)))
         (pcase-dolist (`(,gen . ,args) p-search-active-candidate-generators)
-          (let* ((gen-key  (cons gen args))
+          (let* ((mappings->docs (make-hash-table :test #'equal))
+                 (gen-key  (cons gen args))
                  (documents (funcall (p-search-candidate-generator-function gen) args)))
+            (puthash gen-key documents mappings->docs)
             (dolist (doc documents)
               (cond
                (p-search-mappings
-                (let ((original-doc-id (p-search-document-property doc 'id))
+                (let ((mapping-key '())
+                      (original-doc-id (p-search-document-property doc 'id))
                       (doc-queue (list doc)))
                   (pcase-dolist (`(,mapping . ,args) p-search-mappings)
+                    (setq mapping-key (append mapping-key (list (cons mapping args))))
                     (let ((new-doc-queue '()))
                       (dolist (d doc-queue)
                         (when (p-search--document-map-p d mapping)
                           (setq new-doc-queue (append new-doc-queue (funcall (p-search-candidate-mapping-function mapping) args doc)))))
+                      (puthash mapping-key (append new-doc-queue (gethash mapping-key mappings->docs)) mappings->docs)
                       (setq doc-queue new-doc-queue)))
                   (puthash original-doc-id doc-queue p-search-candidate-ids-mapping)
                   (dolist (doc doc-queue)
                     (let ((doc-id (alist-get 'id doc)))
                       (when (not (gethash doc-id candidates-set))
-                        (puthash gen-key (cons doc-id (gethash gen-key generator-to-doc)) generator-to-doc)
+                        (puthash :result-documents (cons doc-id (gethash :result-documents mappings->docs)) mappings->docs)
                         (puthash doc-id doc candidates-set))))))
                (t
                 (let ((doc-id (alist-get 'id doc)))
                   (when (not (gethash doc-id candidates-set))
-                    (puthash gen-key (cons doc-id (gethash gen-key generator-to-doc)) generator-to-doc)
-                    (puthash doc-id doc candidates-set))))))))
+                    (let ((next (cons doc-id (gethash gen-key generator-to-doc))))
+                      (puthash gen-key (append (alist-get gen-key mappings->docs) next)
+                               mappings->docs)
+                      (puthash :final-results next mappings->docs))
+                    (puthash doc-id doc candidates-set))))))
+            (puthash (cons gen args) mappings->docs generator->mappings->docs)))
         (setq p-search-final-candidates-cache candidates-set)
-        (setq p-search-candidates-by-generator generator-to-doc)
+        (setq p-search-candidates-by-generator generator->mappings->docs)
         candidates-set)))
 
 (defun p-search-document-property (document property)
@@ -946,7 +970,7 @@ INIT is the initial value given to the reduce operation."
 (cl-defun p-search-term-frequency-from-content (gen+args query-term callback)
   "Default candidate generator's TF function, counting from doc's content property."
   (let* ((results-ht (make-hash-table :test #'equal))
-         (doc-ids (gethash gen+args p-search-candidates-by-generator)))
+         (doc-ids (gethash :result-documents (gethash gen+args p-search-candidates-by-generator))))
     (p-search-put-document-term-frequency doc-ids query-term results-ht)
     (funcall callback results-ht)))
 
@@ -3108,7 +3132,7 @@ values of ARGS."
            (in-spec (p-search-candidate-generator-input-spec generator))
            (opt-spec (p-search-candidate-generator-options-spec generator))
            (args-string (p-search--args-to-string in-spec opt-spec args))
-           (docs (when p-search-candidates-by-generator (gethash (cons generator args) p-search-candidates-by-generator)))
+           (docs (when p-search-candidates-by-generator (gethash generator+args (gethash generator+args p-search-candidates-by-generator))))
            (heading-line (concat (propertize gen-name
                                              'face 'p-search-prior)
                                  (format " (%d)" (length docs)))))
@@ -3128,13 +3152,18 @@ values of ARGS."
                             (propertize (format "%s" val) 'face 'p-search-value)))))))))
 
 (defun p-search--insert-mapping (mapping+args)
-  "Insert mapping MAPPING+ARGS into the current buffer."
+  "Insert mapping MAPPING+ARGS into the current buffer.
+
+MAPPINGS-SUBSEQ is the list of mappings up until the current
+mapping as this data is needed to retrieve the document count."
   (pcase-let* ((`(,mapping . ,args) mapping+args))
     (let* ((mapping-name (p-search-candidate-mapping-name mapping))
            (in-spec (p-search-candidate-mapping-input-spec mapping))
            (opt-spec (p-search-candidate-mapping-options-spec mapping))
            (args-string (p-search--args-to-string in-spec opt-spec args))
-           (heading-line (concat (propertize mapping-name 'face 'p-search-prior))))
+           (docs-count (p-search--doc-count-of-mapping mapping+args))
+           (heading-line (concat (propertize mapping-name 'face 'p-search-prior)
+                                 (format " (%d)" docs-count))))
       (p-search-add-section `((heading . ,heading-line)
                               (props . (p-search-mapping ,(cons mapping args)
                                         condenced-text ,(concat "(" args-string ")")))
