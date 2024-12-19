@@ -818,15 +818,28 @@ return a list of the IDs that DOC-ID maps to."
                (t
                 (let ((doc-id (alist-get 'id doc)))
                   (when (not (gethash doc-id candidates-set))
-                    (let ((next (cons doc-id (gethash gen-key generator-to-doc))))
-                      (puthash gen-key (append (alist-get gen-key mappings->docs) next)
-                               mappings->docs)
-                      (puthash :final-results next mappings->docs))
+                    (puthash gen-key (cons doc-id (gethash gen-key mappings->docs))
+                             mappings->docs)
+                    (puthash :result-documents (cons doc-id (gethash :result-documents mappings->docs)) mappings->docs)
                     (puthash doc-id doc candidates-set))))))
             (puthash (cons gen args) mappings->docs generator->mappings->docs)))
         (setq p-search-final-candidates-cache candidates-set)
         (setq p-search-candidates-by-generator generator->mappings->docs)
         candidates-set)))
+
+(defun p-search--available-fields (type)
+  "Return a list of available fields of TYPE.
+TYPE should be a field type sympol, such as `text' or `category'."
+  (let ((candidates (p-search-candidates))
+        (fields))
+    (maphash
+     (lambda (_ doc)
+       (pcase-dolist (`(,field-id . _) (p-search-document-property doc 'fields))
+         (when (eql (car (p-search-get-field field-id)) type)
+           (unless (memql field-id fields)
+             (push field-id fields)))))
+     candidates)
+    fields))
 
 (defun p-search-document-property (document property)
   "Return PROPERTY of DOCUMENT."
@@ -974,7 +987,7 @@ INIT is the initial value given to the reduce operation."
     (p-search-put-document-term-frequency doc-ids query-term results-ht)
     (funcall callback results-ht)))
 
-(defun p-search-count-field-tf (term)
+(defun p-search-count-field-tf (term &optional fields)
   "Calculate and return hashtable of doc-id to count for TERM."
   (let* ((term-regexp (p-search-query-emacs--term-regexp term))
          (field->doc-id->count (make-hash-table :test #'equal))
@@ -987,21 +1000,23 @@ INIT is the initial value given to the reduce operation."
      (lambda (doc-id doc)
        ;; For each field of the document...
        (pcase-dolist (`(,field-id . ,field-val) (p-search-document-property doc 'fields))
-         ;; Ensure the nested hash tables are initialized properly.
-         (unless (gethash field-id field->doc-id->count)
-           (let ((ht (make-hash-table :test #'equal)))
-             (puthash field-id ht field->doc-id->count)
-             (puthash :total-size 0 ht)))
+         (when (or (not fields)
+                   (memql field-id fields))
+           ;; Ensure the nested hash tables are initialized properly.
+           (unless (gethash field-id field->doc-id->count)
+             (let ((ht (make-hash-table :test #'equal)))
+               (puthash field-id ht field->doc-id->count)
+               (puthash :total-size 0 ht)))
 
-         (let* ((doc-id->count (gethash field-id field->doc-id->count)))
-           (when-let* ((field-def (p-search-get-field field-id))
-                       (text-p (eql (car field-def) 'text)))
-             (let ((len (length field-val)))
-               (puthash (cons field-id doc-id) len field+doc-id->size)
-               (puthash :total-size (+ (gethash :total-size doc-id->count) len)
-                        doc-id->count))
-             (let* ((ct (p-search--count-term-regexp-in-string term-regexp field-val)))
-               (puthash doc-id ct doc-id->count))))))
+           (let* ((doc-id->count (gethash field-id field->doc-id->count)))
+             (when-let* ((field-def (p-search-get-field field-id))
+                         (text-p (eql (car field-def) 'text)))
+               (let ((len (length field-val)))
+                 (puthash (cons field-id doc-id) len field+doc-id->size)
+                 (puthash :total-size (+ (gethash :total-size doc-id->count) len)
+                          doc-id->count))
+               (let* ((ct (p-search--count-term-regexp-in-string term-regexp field-val)))
+                 (puthash doc-id ct doc-id->count)))))))
      (p-search-candidates))
     (let* ((ret-ht (make-hash-table :test #'equal))
            (b 0.75))
@@ -1018,9 +1033,12 @@ INIT is the initial value given to the reduce operation."
                 (let* ((tf (/ (float count)
                               (+ (- 1 b)
                                  (* b (/ (float size) avg-size)))))
-                       (tf (* tf weight))
-                       (discounted-tf (- tf count)))
-                  (puthash doc-id discounted-tf ret-ht))))
+                       (tf (* tf weight)))
+                  ;; if searching content and fields, make sure to discount
+                  ;; field match count to not double count.
+                  (when (not fields)
+                    (cl-decf tf count))
+                  (puthash doc-id tf ret-ht))))
             doc-id->count)))
        field->doc-id->count)
       ret-ht)))
@@ -1184,8 +1202,8 @@ INIT is the initial value given to the reduce operation."
    :name "suffix of title"
    :required-properties '(title)
    :input-spec '((suffix . (p-search-infix-string
-                           :key "s"
-                           :description "suffix")))
+                            :key "s"
+                            :description "suffix")))
    :initialize-function
    (lambda (prior)
      (let* ((args (p-search-prior-arguments prior))
@@ -1328,6 +1346,7 @@ are peanalized by how far away it is."))
   "Initialization function for the text query priro.
 Called with user supplied ARGS for the prior."
   (let* ((args (p-search-prior-arguments prior))
+         (fields (alist-get 'fields args))
          (query-string (alist-get 'query-string args)))
     (p-search-query
      query-string
@@ -1338,7 +1357,8 @@ Called with user supplied ARGS for the prior."
         probs)
        (p-search-calculate))
      (hash-table-count (p-search-candidates))
-     (p-search-reduce-document-property 'size 0 #'+))))
+     (p-search-reduce-document-property 'size 0 #'+)
+     (and fields (list fields)))))
 
 (defun p-search--text-search-hint (prior)
   "Mark places where the query args of PRIOR matches text in BUFFER."
@@ -1413,7 +1433,11 @@ Called with user supplied ARGS for the prior."
                                     :key "q"
                                     :description "Query String"
                                     :instruction-string ,instruction-string)))
-     :options-spec '()
+     :options-spec '((fields . (p-search-infix-choices
+                                :key "-f"
+                                :description "Fields"
+                                :choices (lambda ()
+                                           (p-search--available-fields 'text)))))
      :initialize-function #'p-search--prior-query-initialize-function
      :result-hint-function #'p-search--text-search-hint
      :transient-key-string "qu")))
@@ -1568,14 +1592,12 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
               (when (or (member event '("finished\n" "deleted\n"))
                         (string-prefix-p "exited abnormally with code" event)
                         (string-prefix-p "failed with code" event))
-                (message "[DEBUG] DONE")
                 (let* ((root-dir (with-current-buffer (process-buffer proc) default-directory))
                        (lowest-deviation-secs (make-hash-table :test #'equal)))
                   ;; Iterate through the output of the ran git
                   ;; command, taking note of each commit and each
                   ;; file, and recording the closest deviation in
                   ;; seconds that a file's commit is.
-                  (message "[DEBUG] Getting  values")
                   (with-current-buffer (process-buffer proc)
                     (goto-char (point-min))
                     (while (search-forward-regexp ">\\([^<]+\\)<<<$" nil t)
@@ -1584,11 +1606,9 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
                                                       encode-time
                                                       float-time))
                              (deviation-secs (abs (- target-floattime floattime))))
-                        (message "[DEBUG] Time with %f" floattime)
                         (forward-line 2)
                         (while (and (not (looking-at ">>>")) (not (eobp)))
                           (let ((doc-id (list 'file (file-name-concat root-dir (buffer-substring-no-properties (pos-bol) (pos-eol))))))
-                            (message "  [DEBUG] %s" doc-id)
                             (let ((doc-prev-deviation (gethash doc-id lowest-deviation-secs)))
                               (when (or (not doc-prev-deviation)
                                         (< deviation-secs doc-prev-deviation))
@@ -2528,44 +2548,45 @@ This function will also start any process or thread described by TEMPLATE."
          (all-group-names (seq-map (lambda (tmpl)
                                      (p-search-prior-template-group tmpl))
                                    prior-templates))
-         (grouped-priors (seq-map
-                          (lambda (group+templates)
-                            (let* ((templates (cdr group+templates))
-                                   (template-names (seq-map (lambda (template)
-                                                              (concat
-                                                               (or (p-search-prior-template-transient-key-string template) "")
-                                                               (p-search-prior-template-name template)))
-                                                            templates))
-                                   (group-name (car group+templates)))
-                              ;; example of the format we're trying to put the data in:
-                              ;; [["Buffer"
-                              ;;   ("b n" "buffer name"
-                              ;;    (lambda () (interactive) (myfunc)))]]
-                              (vector
-                               (seq-into
-                                `(,(if (string-blank-p group-name) "general" group-name)
-                                  ,@(seq-map
-                                     (lambda (template)
-                                       (let ((group-prefix (p-search--unique-prefix
-                                                            group-name
-                                                            all-group-names)))
-                                         (list (concat group-prefix
-                                                       (if (string-blank-p group-prefix) "" " ")
-                                                       (p-search--unique-prefix
-                                                        (concat
-                                                         (or (p-search-prior-template-transient-key-string template) "")
-                                                         (p-search-prior-template-name template))
-                                                        template-names))
-                                               (p-search-prior-template-name template)
-                                               `(lambda ()
-                                                  (interactive)
-                                                  (p-search-dispatch-add-prior
-                                                   ,template)))))
-                                     templates))
-                                'vector))))
-                          (seq-group-by
-                           #'p-search-prior-template-group
-                           prior-templates))))
+         (grouped-priors
+          (seq-map
+           (lambda (group+templates)
+             (let* ((templates (cdr group+templates))
+                    (template-names (seq-map (lambda (template)
+                                               (concat
+                                                (or (p-search-prior-template-transient-key-string template) "")
+                                                (p-search-prior-template-name template)))
+                                             templates))
+                    (group-name (car group+templates)))
+               ;; example of the format we're trying to put the data in:
+               ;; [["Buffer"
+               ;;   ("b n" "buffer name"
+               ;;    (lambda () (interactive) (myfunc)))]]
+               (vector
+                (seq-into
+                 `(,(if (string-blank-p group-name) "general" group-name)
+                   ,@(seq-map
+                      (lambda (template)
+                        (let ((group-prefix (p-search--unique-prefix
+                                             group-name
+                                             all-group-names)))
+                          (list (concat group-prefix
+                                        (if (string-blank-p group-prefix) "" " ")
+                                        (p-search--unique-prefix
+                                         (concat
+                                          (or (p-search-prior-template-transient-key-string template) "")
+                                          (p-search-prior-template-name template))
+                                         template-names))
+                                (p-search-prior-template-name template)
+                                `(lambda ()
+                                   (interactive)
+                                   (p-search-dispatch-add-prior
+                                    ,template)))))
+                      templates))
+                 'vector))))
+           (seq-group-by
+            #'p-search-prior-template-group
+            prior-templates))))
     (apply #'p-search-dispatch-transient grouped-priors)))
 
 
@@ -2606,7 +2627,6 @@ for the current active p-search session."
 (defun p-search-peruse-add-range (doc-id range max)
   "Add RANGE in peruse tracker for DOC-ID.
 Assumes curent-buffer is a p-search session."
-  (message "For doc %s, adding range %s" doc-id range)
   (let* ((entry (assoc doc-id p-search-peruse-data #'equal))
          (prev-range (alist-get :range (cdr entry)))
          (new-range (range-concat prev-range range)))
@@ -3895,6 +3915,7 @@ controlled by the custom variable
 
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-buffers)
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-filesystem)
+(setq p-search-prior-templates nil)
 (add-to-list 'p-search-prior-templates p-search-prior-major-mode)
 (add-to-list 'p-search-prior-templates p-search-prior-title)
 (add-to-list 'p-search-prior-templates p-search-prior-subdirectory)

@@ -59,6 +59,9 @@ Stores the list of tokens being parsed.")
   "Variable to be used dynamically when parsing.
 Indicates which token we are currently considering.")
 
+(defvar p-search-query-fields nil
+  "Dynamic variable to store the list of specific fields to search on.")
+
 
 ;;; Term Expansion:
 
@@ -158,20 +161,22 @@ Call FINALIZE-FUNC on obtained results."
                                      (p-search-put-document-term-frequency resolved term combined-tf))))))
                    (cl-incf i)
                    (when (= i n)
-                     (let* ((field-tf (p-search-count-field-tf term)))
+                     (let* ((field-tf (p-search-count-field-tf term p-search-query-fields)))
                        (maphash
                         (lambda (doc-id field-ct)
                           (when (not (zerop field-ct))
-                            (let ((prev-ct (gethash doc-id combined-tf)))
+                            (let ((prev-ct (gethash doc-id combined-tf 0)))
                               (puthash doc-id (+ field-ct prev-ct) combined-tf))))
                         field-tf))
                      (unless p-search-query-session-tf-ht
                        (setq p-search-query-session-tf-ht (make-hash-table :test #'equal)))
                      (puthash term combined-tf p-search-query-session-tf-ht)
                      (funcall finalize-func combined-tf)))))
-    (dolist (gen+args p-search-active-candidate-generators)
-      (let* ((tf-func (p-search-candidate-generator-term-frequency-function (car gen+args))))
-        (funcall tf-func gen+args term callback)))))
+    (if p-search-query-fields
+        (funcall callback (make-hash-table :test #'equal))
+      (dolist (gen+args p-search-active-candidate-generators)
+        (let* ((tf-func (p-search-candidate-generator-term-frequency-function (car gen+args))))
+          (funcall tf-func gen+args term callback))))))
 
 (defun p-search-query-and (results)
   "Return intersection of RESULTS, a vector of hash-tables."
@@ -773,7 +778,7 @@ structure."
 
 ;;; API Functions
 
-(defun p-search-query (query-string p-callback N total-size)
+(defun p-search-query (query-string p-callback N total-size &optional fields)
   "Dispatch query from QUERY-STRING.
 
 This function should be called with N being the total number of
@@ -781,8 +786,11 @@ documents and TOTAL-SIZE being the sum of all documents' size.
 
 When all processes finish and results are combined, P-CALLBACK is
 called with one argument, the hashmap of documents to
-probabilities."
-  (let* ((ast (p-search-query-parse query-string))
+probabilities.
+
+If FIELDS is provided, only perform term-frequency search on provided fields."
+  (let* ((p-search-query-fields fields)
+         (ast (p-search-query-parse query-string))
          (cb (lambda (res)
                (let* ((scores (p-search-query-bm25 res N total-size))
                       (probs (p-search-query-scores-to-p-linear scores)))
