@@ -68,6 +68,11 @@
 
 
 ;;; Custom
+
+(defconst p-search--custom-toggle-type
+  '(choice (const :tag "Off by default" nil)
+           (const :tag "On by default" on)))
+
 (defgroup p-search nil
   "Emacs Search Tool Aggregator."
   :prefix "p-search-"
