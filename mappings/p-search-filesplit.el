@@ -1,9 +1,8 @@
-;;; p-search-denote.el --- p-search mapping for Denote  -*- lexical-binding: t; -*-
+;;; p-search-filesplit.el --- p-search file splitting mapping -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024  Zachary Romero, Samuel W. Flint
+;; Copyright (C) 2024  Zachary Romero
 
 ;; Author: Zachary Romero
-;; Author: Samuel W. Flint <me@samuelwflint.com>
 ;; Keywords: tools
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -25,10 +24,9 @@
 ;;; Code:
 
 (require 'p-search)
-(require 'denote)
 
 (defun p-search-filesplit-function (args document)
-  "Annotate DOCUMENT with denote-related metadata."
+  "Split DOCUMENT according to ARGS."
   (let* ((split-size (alist-get 'split-size args))
          (file-content (p-search-document-property document 'content))
          (title (p-search-document-property document 'title)))
@@ -55,5 +53,5 @@
 
 (add-to-list 'p-search-candidate-mappings p-search-filesplit-mapping)
 
-(provide 'p-search-denote)
-;;; p-search-denote.el ends here
+(provide 'p-search-filesplit)
+;;; p-search-filesplit.el ends here
