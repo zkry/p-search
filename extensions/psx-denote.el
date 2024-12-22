@@ -1,4 +1,4 @@
-;;; p-search-denote.el --- p-search mapping for Denote  -*- lexical-binding: t; -*-
+;;; psx-denote.el --- p-search mapping for Denote  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024  Zachary Romero, Samuel W. Flint
 
@@ -40,37 +40,37 @@
 (p-search-def-field 'denote-keywords 'text :weight 3)
 (p-search-def-field 'denote-signature 'text :weight 3)
 
-(defgroup p-search-denote nil
+(defgroup psx-denote nil
   "Customization for Denote p-search mapping."
   :group 'p-search
   :group 'denote
-  :prefix "p-search-denote-")
+  :prefix "psx-denote-")
 
-(defconst p-search-denote--custom-toggle-type
+(defconst psx-denote--custom-toggle-type
   '(choice (const :tag "Off by default" nil)
            (const :tag "On by default" on)))
 
-(defcustom p-search-denote-categories-as-keywords-p nil
+(defcustom psx-denote-categories-as-keywords-p nil
   "Should denote keywords be generated as categories?"
-  :type p-search-denote--custom-toggle-type
-  :group 'p-search-denote)
+  :type psx-denote--custom-toggle-type
+  :group 'psx-denote)
 
-(defcustom p-search-denote-categories-as-text-p 'on
+(defcustom psx-denote-categories-as-text-p 'on
   "Should denote keywords be generated as formatted text?"
-  :type p-search-denote--custom-toggle-type
-  :group 'p-search-denote)
+  :type psx-denote--custom-toggle-type
+  :group 'psx-denote)
 
-(defcustom p-search-denote-include-signature-p 'on
+(defcustom psx-denote-include-signature-p 'on
   "Should the Denote signature be a part of metadata?"
-  :type p-search-denote--custom-toggle-type
-  :group 'p-search-denote)
+  :type psx-denote--custom-toggle-type
+  :group 'psx-denote)
 
-(defcustom p-search-denote-only-denote-p nil
+(defcustom psx-denote-only-denote-p nil
   "Should the p-search mapper drop non-denote files?"
-  :type p-search-denote--custom-toggle-type
-  :group 'p-search-denote)
+  :type psx-denote--custom-toggle-type
+  :group 'psx-denote)
 
-(defun p-search-denote-annotator (args document)
+(defun psx-denote-annotator (args document)
   "Annotate DOCUMENT with denote-related metadata."
   (let* ((file-name (p-search-document-property document 'file-name)))
     (let-alist args
@@ -98,27 +98,27 @@
           (push (cons 'denote-title title) new-fields)
           (list (p-search-document-extend document new-id new-fields)))))))
 
-(defconst p-search-denote-mapping
+(defconst psx-denote-mapping
   (p-search-candidate-mapping-create
-   :id 'p-search-denote-mapping
+   :id 'psx-denote-mapping
    :name "Denote"
    :required-property-list '(file-name)
    :input-spec '()
    :options-spec '((category-keywords . (p-search-infix-toggle
                                          :key "-kc"
                                          :description "Include Categorized Keywords"
-                                         :default-value (lambda () p-search-denote-categories-as-keywords-p)))
+                                         :default-value (lambda () psx-denote-categories-as-keywords-p)))
                    (category-text . (p-search-infix-toggle
                                      :key "-kt"
                                      :description "Include Textual Keywords"
-                                     :default-value (lambda () p-search-denote-categories-as-text-p)))
+                                     :default-value (lambda () psx-denote-categories-as-text-p)))
                    (include-signature . (p-search-infix-toggle
                                          :key "-s"
                                          :description "Include Signature"
-                                         :default-value (lambda () p-search-denote-include-signature-p))))
-   :function #'p-search-denote-annotator))
+                                         :default-value (lambda () psx-denote-include-signature-p))))
+   :function #'psx-denote-annotator))
 
-(add-to-list 'p-search-candidate-mappings p-search-denote-mapping)
+(add-to-list 'p-search-candidate-mappings psx-denote-mapping)
 
-(provide 'p-search-denote)
-;;; p-search-denote.el ends here
+(provide 'psx-denote)
+;;; psx-denote.el ends here

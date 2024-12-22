@@ -1,4 +1,4 @@
-;;; p-search-pdfinfo.el --- PDF Info mapping for p-search  -*- lexical-binding: t; -*-
+;;; psx-pdfinfo.el --- PDF Info mapping for p-search  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024  Samuel W. Flint
 
@@ -51,22 +51,22 @@
 (p-search-def-field 'pdf-pages 'text :weight 3)
 (p-search-def-field 'pdf-pagesize 'category)
 
-(defgroup p-search-pdfinfo nil
+(defgroup psx-pdfinfo nil
   "Customization for p-search pdfinfo mapping."
   :group 'p-search
-  :prefix "p-search-pdfinfo-")
+  :prefix "psx-pdfinfo-")
 
-(defcustom p-search-pdfinfo-executable (executable-find "pdfinfo")
+(defcustom psx-pdfinfo-executable (executable-find "pdfinfo")
   "Location of the pdfinfo executable."
   :type '(choice (const :tag "Not found" nil)
                  (file :must-match t :tag "Executable: "))
-  :group 'p-search-pdfinfo)
+  :group 'psx-pdfinfo)
 
-(defun p-search-pdfinfo--parse-info (filename)
+(defun psx-pdfinfo--parse-info (filename)
   "Run `pdfinfo' on FILENAME, and convert to a list of fields.
 
-`pdfinfo' will come from `p-search-pdfinfo-executable'."
-  (when-let ((output (string-trim (shell-command-to-string (format "%s -isodates %s" p-search-pdfinfo-executable filename))))
+`pdfinfo' will come from `psx-pdfinfo-executable'."
+  (when-let ((output (string-trim (shell-command-to-string (format "%s -isodates %s" psx-pdfinfo-executable filename))))
              (initial-field-list (mapcar (lambda (record)
                                            (let* ((parts (split-string record ":"))
                                                   (field-name (string-trim (car parts)))
@@ -99,28 +99,28 @@
              (add-to-list 'fields (cons 'pdf-pagesize (cdr field)))))))
       fields)))
 
-(defun p-search-pdfinfo-annotator (args document)
+(defun psx-pdfinfo-annotator (args document)
   "Annotate DOCUMENT with `pdfinfo'-derived fields.
 
 Options taken from ARGS."
   (let ((file-name (p-search-document-property document 'file-name)))
     (when (string= "pdf" (file-name-extension file-name))
       (if-let ((id (p-search-document-property document 'id))
-               (new-fields (p-search-pdfinfo--parse-info file-name)))
+               (new-fields (psx-pdfinfo--parse-info file-name)))
           (p-search-document-extend document
                                     (cons 'pdf id)
                                     new-fields)))))
 
-(defconst p-search-pdfinfo-mapping
+(defconst psx-pdfinfo-mapping
   (p-search-candidate-mapping-create
-   :id 'p-search-pdfinfo-mapping
+   :id 'psx-pdfinfo-mapping
    :name "PDF Info"
    :required-property-list '(file-name)
    :input-spec '()
    :options-spec '()
-   :function #'p-search-pdfinfo-annotator))
+   :function #'psx-pdfinfo-annotator))
 
-(add-to-list 'p-search-candidate-mappings p-search-pdfinfo-mapping)
+(add-to-list 'p-search-candidate-mappings psx-pdfinfo-mapping)
 
-(provide 'p-search-pdfinfo)
-;;; p-search-pdfinfo.el ends here
+(provide 'psx-pdfinfo)
+;;; psx-pdfinfo.el ends here
