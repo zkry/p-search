@@ -835,8 +835,6 @@ return a list of the IDs that DOC-ID maps to."
                (t
                 (let ((doc-id (alist-get 'id doc)))
                   (when (not (gethash doc-id candidates-set))
-                    (puthash gen-key (cons doc-id (gethash gen-key mappings->docs))
-                             mappings->docs)
                     (puthash :result-documents (cons doc-id (gethash :result-documents mappings->docs)) mappings->docs)
                     (puthash doc-id doc candidates-set))))))
             (puthash (cons gen args) mappings->docs generator->mappings->docs)))
