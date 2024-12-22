@@ -4023,7 +4023,14 @@ register to which the preset value will be saved."
   (when (y-or-n-p "Quit current p-search session?")
     (quit-window)))
 
-(defconst p-search-mode-map
+(defun p-search-terminate-session ()
+  "Terminate the current session, asking for confirmation."
+  (interactive)
+  (when (yes-or-no-p "Terminate current p-search session?")
+    (kill-buffer (current-buffer))
+    (quit-window)))
+
+(defvar p-search-mode-map
   (let ((map (make-keymap)))
     (suppress-keymap map t)
     (keymap-set map "a" #'p-search-add-dwim)
@@ -4047,6 +4054,7 @@ register to which the preset value will be saved."
     (keymap-set map "v" #'p-search-view-document)
     (keymap-set map "C-o" #'p-search-display-document)
     (keymap-set map "q" #'p-search-quit)
+    (keymap-set map "Q" #'p-search-terminate-session)
     ;; (keymap-set map "C-o" #'p-search-display-file)
     ;; (keymap-set map "1" #'p-search-show-level-1)
     ;; (keymap-set map "2" #'p-search-show-level-2)
