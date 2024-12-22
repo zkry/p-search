@@ -3598,7 +3598,7 @@ If PRESET is non-nil, set up session with PRESET."
 
 
 
-(defun p-search-display-result-info (result-id)
+(defun p-search-display-result-explanation (result-id)
   "Display the calculation info of RESULT-ID."
   (let* ((buf (get-buffer-create (format "*result-info-%s" result-id)))
          (candidates-by-generator p-search-candidates-by-generator)
@@ -3770,7 +3770,7 @@ If PRESET is non-nil, set up session with PRESET."
   (when-let* ((candidate-generator (get-char-property (point) 'p-search-candidate-generator)))
     (p-search-dispatch-edit-candidate-generator candidate-generator)))
 
-(defun p-search-info-dwim ()
+(defun p-search-explain-dwim ()
   "Edit the entity at point, be it a prior or candidate generator."
   (interactive)
   (when-let* ((prior (get-char-property (point) 'p-search-prior)))
@@ -3783,7 +3783,7 @@ If PRESET is non-nil, set up session with PRESET."
     ;; (p-search-display-candidate-generator-info candidate-generator)
     )
   (when-let* ((result (get-char-property (point) 'p-search-result)))
-    (p-search-display-result-info result)))
+    (p-search-display-result-explanation result)))
 
 (defun p-search-next-item (&optional no-scroll)
   "Move the point to the next item.
@@ -4032,7 +4032,6 @@ register to which the preset value will be saved."
     (keymap-set map "g" #'p-search-refresh-buffer)
     (keymap-set map "G" #'p-search-hard-refresh-buffer)
     ;; (keymap-set map "i" #'p-search-importance)
-    (keymap-set map "i" #'p-search-info-dwim)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
     (keymap-set map "M" #'p-search-add-mapping)
     (keymap-set map "n" #'p-search-next-item)
@@ -4040,6 +4039,7 @@ register to which the preset value will be saved."
     (keymap-set map "p" #'p-search-prev-item)
     ;; (keymap-set map "r" #'p-search-reinstantiate-prior)
     (keymap-set map "P" #'p-search-add-prior)
+    (keymap-set map "x" #'p-search-explain-dwim)
     (keymap-set map "+" #'p-search-increase-preview-size)
     (keymap-set map "-" #'p-search-decrease-preview-size)
     (keymap-set map "<tab>" #'p-search-toggle-section)
