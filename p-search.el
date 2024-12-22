@@ -3591,6 +3591,91 @@ If PRESET is non-nil, set up session with PRESET."
 ;;                             :search-engine-arg-name query-string))))
 
 
+;;; Help/Info Display
+
+;; This section contains the functions for displaying
+;; help/debugging/info concerting various priors.
+
+
+
+(defun p-search-display-result-info (result-id)
+  "Display the calculation info of RESULT-ID."
+  (let* ((buf (get-buffer-create (format "*result-info-%s" result-id)))
+         (candidates-by-generator p-search-candidates-by-generator)
+         (title (p-search-document-property result-id 'title))
+         (fields (p-search-document-property result-id 'fields))
+         (observations p-search-observations)
+         (marginal-p p-search-marginal)
+         (priors p-search-priors))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert (format "Document Title: %s\n\n" title))
+      (insert (format "Document ID: %s\n\n" result-id))
+
+      ;; Insert the candidate generator that created this document
+      (let ((generator+args))
+        (catch 'done
+          (maphash
+           (lambda (gen mapping->docs)
+             (let ((docs (gethash :result-documents mapping->docs)))
+               (when (seq-find
+                      (lambda (doc)
+                        ;; TODO - For the next speedup, this should be improved
+                        ;; a simple index could be stored
+                        (equal doc result-id))
+                      docs)
+                 (setq generator+args gen)
+                 (throw 'done nil))))
+           candidates-by-generator))
+        (let* ((generator (car generator+args))
+               (args (cdr generator+args))
+               (in-spec (p-search-candidate-generator-input-spec generator))
+               (opt-spec (p-search-candidate-generator-options-spec generator))
+               (source-name
+                (format "%s(%s)"
+                        (p-search-candidate-generator-name generator)
+                        (p-search--args-to-string in-spec opt-spec args))))
+          (insert (format "Document Source:\n%s\n\n" source-name))))
+
+      ;; Insert the fields of the document
+      (insert "Fields:\n")
+      (if (not fields)
+          (insert (propertize "no fields" 'face 'shadow))
+        (let ((max-field-width (seq-max (seq-map
+                                         (lambda (k+v)
+                                           (length (symbol-name (car k+v))))
+                                         fields))))
+          (pcase-dolist (`(,key . ,val) fields)
+            (insert
+             (format
+              (concat "%" (number-to-string (1+ max-field-width)) "s: %s\n") key val)))))
+      (insert "\n")
+
+      (insert "Scoring:\n")
+      (let* ((final-prob 1.0))
+        (if (not priors)
+            (insert (propertize "1.000000  no priors\n" 'face 'shadow))
+          (dolist (prior priors)
+            (let* ((prior-template (p-search-prior-template prior))
+                   (in-spec (p-search-prior-template-input-spec prior-template))
+                   (opt-spec (p-search-prior-template-options-spec prior-template))
+                   (args (p-search-prior-arguments prior))
+                   (prior-p (p-search--p-prior-doc prior result-id)))
+              (setq final-prob (* final-prob prior-p))
+              (insert (format "%7f: %s(%s)\n"
+                              prior-p
+                              (p-search-prior-template-name prior-template)
+                              (p-search--args-to-string in-spec opt-spec args))))))
+        (if (not p-search-observations)
+            (insert (propertize "1.000000  no observations\n" 'face 'shadow))
+          (let* ((obs (gethash result-id observations 1.0)))
+            (insert (format "%7f: Observation probability\n" obs))))
+        (insert "--------\n")
+        (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
+      (insert "\n")
+    (display-buffer buf))))
+
+
 ;;; Debug
 (defun p-search-display-candidates ()
   "Write the list of candidates into another buffer."
@@ -3684,6 +3769,21 @@ If PRESET is non-nil, set up session with PRESET."
     (p-search-dispatch-edit-mapping mapping))
   (when-let* ((candidate-generator (get-char-property (point) 'p-search-candidate-generator)))
     (p-search-dispatch-edit-candidate-generator candidate-generator)))
+
+(defun p-search-info-dwim ()
+  "Edit the entity at point, be it a prior or candidate generator."
+  (interactive)
+  (when-let* ((prior (get-char-property (point) 'p-search-prior)))
+    ;; (p-search-display-prior-info prior)
+    )
+  (when-let* ((mapping (get-char-property (point) 'p-search-mapping)))
+    ;; (p-search-display-mapping-info mapping)
+    )
+  (when-let* ((candidate-generator (get-char-property (point) 'p-search-candidate-generator)))
+    ;; (p-search-display-candidate-generator-info candidate-generator)
+    )
+  (when-let* ((result (get-char-property (point) 'p-search-result)))
+    (p-search-display-result-info result)))
 
 (defun p-search-next-item (&optional no-scroll)
   "Move the point to the next item.
@@ -3932,6 +4032,7 @@ register to which the preset value will be saved."
     (keymap-set map "g" #'p-search-refresh-buffer)
     (keymap-set map "G" #'p-search-hard-refresh-buffer)
     ;; (keymap-set map "i" #'p-search-importance)
+    (keymap-set map "i" #'p-search-info-dwim)
     (keymap-set map "k" #'p-search-kill-entity-at-point)
     (keymap-set map "M" #'p-search-add-mapping)
     (keymap-set map "n" #'p-search-next-item)
@@ -3966,8 +4067,7 @@ register to which the preset value will be saved."
   (hack-dir-local-variables-non-file-buffer)
   (add-hook 'post-command-hook #'p-search-post-command-hook t t)
   (setq-local truncate-lines t)
-  (setq-local bookmark-make-record-function #'p-search--make-bookmark)
-  )
+  (setq-local bookmark-make-record-function #'p-search--make-bookmark))
 
 (defun p-search (prefix)
   "Start a p-search session.

@@ -1,4 +1,4 @@
-;;; p-search.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
+;;; psx-symbols.el --- Emacs symbols search -*- lexical-binding: t; -*-
 
 ;; Author: Zachary Romero
 ;; URL: https://github.com/zkry/p-search.el
