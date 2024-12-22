@@ -69,10 +69,6 @@
 
 ;;; Custom
 
-(defconst p-search--custom-toggle-type
-  '(choice (const :tag "Off by default" nil)
-           (const :tag "On by default" on)))
-
 (defgroup p-search nil
   "Emacs Search Tool Aggregator."
   :prefix "p-search-"
@@ -178,7 +174,6 @@ This variable can take one of several types of of values:
                                      (:ag . "[^\s]")
                                      (:grep . "[^[:space:]]"))
   "Alist of search tool to wildcard regexp.")
-
 
 
 ;;; Vars
@@ -808,10 +803,20 @@ return a list of the IDs that DOC-ID maps to."
                       (doc-queue (list doc)))
                   (pcase-dolist (`(,mapping . ,args) p-search-mappings)
                     (setq mapping-key (append mapping-key (list (cons mapping args))))
-                    (let ((new-doc-queue '()))
+                    (let ((mapping-filter-unmodified-p (alist-get 'filter-unmodified args))
+                          (new-doc-queue '()))
                       (dolist (d doc-queue)
                         (when (p-search--document-map-p d mapping)
-                          (setq new-doc-queue (append new-doc-queue (funcall (p-search-candidate-mapping-function mapping) args doc)))))
+                          (let ((res (funcall (p-search-candidate-mapping-function mapping) args doc)))
+                            (cond
+                             ((eql res :remove))
+                             ((null res)
+                              (when (not mapping-filter-unmodified-p)
+                                (setq new-doc-queue (cons doc new-doc-queue))))
+                             ((and (consp res) (alist-get 'id res))
+                              (setq new-doc-queue (cons res new-doc-queue)))
+                             ((consp res)
+                              (setq new-doc-queue (append new-doc-queue res)))))))
                       (puthash mapping-key (append new-doc-queue (gethash mapping-key mappings->docs)) mappings->docs)
                       (setq doc-queue new-doc-queue)))
                   (puthash original-doc-id doc-queue p-search-candidate-ids-mapping)
@@ -2361,6 +2366,11 @@ This function will also start any process or thread described by TEMPLATE."
     (p-search--replace-candidate-generator generator+args args)
     (p-search-restart-calculation)))
 
+(defun p-search-transient-mapping-edit (mapping+args)
+  (let* ((args (transient-args 'p-search-transient-dispatcher)))
+    (p-search--replace-mapping mapping+args args)
+    (p-search-restart-calculation)))
+
 (defun p-search--resolve-spec (spec)
   "For each key in SPEC, if it is a function, call it and return resulting spec."
   (let* ((transient-type (car spec))
@@ -2489,30 +2499,31 @@ This function will also start any process or thread described by TEMPLATE."
   "Dispatch transient menu for creating CANDIDATE-GENERATOR."
   (let* ((input-specs (p-search-candidate-mapping-input-spec mapping))
          (option-specs (p-search-candidate-mapping-options-spec mapping)))
-    (if (and (not input-specs) (not option-specs))
-        ;; NOTE: If mappings ever get default args, this case will have to be removed.
-        (p-search-transient-mapping-create mapping)
-      (apply #'p-search-dispatch-transient
-             `(["Input"
-                ,@(seq-map
-                   (lambda (name+spec)
-                     (let* ((name (car name+spec))
-                            (spec (p-search--resolve-spec (cdr name+spec)))
-                            (reader (oref (get (car spec) 'transient--suffix) :reader))
-                            (default-value (p-search-read-default-spec-value name+spec)))
-                       (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
-                   input-specs)]
-               ["Options"
-                ,@(seq-map (lambda (name+spec)
-                             (let* ((name (car name+spec))
-                                    (spec (p-search--resolve-spec (cdr name+spec))))
-                               (p-search--transient-suffix-from-spec (cons name spec) nil)))
-                           option-specs)]
-               ["Actions"
-                ("c" "create"
-                 (lambda ()
-                   (interactive)
-                   (p-search-transient-mapping-create ,mapping)))])))))
+    (apply #'p-search-dispatch-transient
+           `(["Input"
+              ,@(seq-map
+                 (lambda (name+spec)
+                   (let* ((name (car name+spec))
+                          (spec (p-search--resolve-spec (cdr name+spec)))
+                          (reader (oref (get (car spec) 'transient--suffix) :reader))
+                          (default-value (p-search-read-default-spec-value name+spec)))
+                     (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
+                 input-specs)]
+             ["Options"
+              ,@(seq-map (lambda (name+spec)
+                           (let* ((name (car name+spec))
+                                  (spec (p-search--resolve-spec (cdr name+spec))))
+                             (p-search--transient-suffix-from-spec (cons name spec) nil)))
+                         option-specs)
+              ("-f" "filter unmodified"
+               p-search-infix-toggle
+               :init-state nil
+               :option-symbol filter-unmodified)]
+             ["Actions"
+              ("c" "create"
+               (lambda ()
+                 (interactive)
+                 (p-search-transient-mapping-create ,mapping)))]))))
 
 (defun p-search-dispatch-edit-candidate-generator (generator+args)
   "Dispatch transient menu for editing GENERATOR+ARGS."
@@ -2546,6 +2557,42 @@ This function will also start any process or thread described by TEMPLATE."
                (lambda ()
                  (interactive)
                  (p-search-transient-candidate-generator-edit (quote ,generator+args))))]))))
+
+(defun p-search-dispatch-edit-mapping (mapping+args)
+  (let* ((mapping (car mapping+args))
+         (prev-args (cdr mapping+args))
+         (input-specs (p-search-candidate-mapping-input-spec mapping))
+         (option-specs (p-search-candidate-mapping-options-spec mapping)))
+    (apply #'p-search-dispatch-transient
+           `(["Input"
+              ,@(seq-map
+                 (lambda (name+spec)
+                   (let* ((name (car name+spec))
+                          (spec (p-search--resolve-spec (cdr name+spec)))
+                          (reader (oref (get (car spec) 'transient--suffix) :reader))
+                          (default-value (alist-get name prev-args)))
+                     (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
+                 input-specs)]
+             ["Options"
+              ,@(seq-map (lambda (name+spec)
+                           (let* ((name (car name+spec))
+                                  (spec (p-search--resolve-spec (cdr name+spec)))
+                                  ;; we don't want to use the specs default when editing
+                                  ;; we we reset it with append.
+                                  (default-value (alist-get name prev-args)))
+                             (unless default-value
+                               (setq spec (append spec '(:default-value nil))))
+                             (p-search--transient-suffix-from-spec (cons name spec) t default-value)))
+                         option-specs)
+              ("-f" "filter unmodified"
+               p-search-infix-toggle
+               :init-state ,(alist-get 'filter-unmodified prev-args)
+               :option-symbol filter-unmodified)]
+             ["Actions"
+              ("e" "edit"
+               (lambda ()
+                 (interactive)
+                 (p-search-transient-mapping-edit (quote ,mapping+args))))]))))
 
 (defun p-search-dispatch-select-prior ()
   "Dispatch transient menu for items in PRIOR-TEMPLATES."
@@ -3080,6 +3127,22 @@ The number of lines returned is determined by `p-search-document-preview-size'."
              generator+args))
          p-search-active-candidate-generators)))
 
+(defun p-search--replace-mapping (old-mapping+args new-args)
+  (pcase-dolist (`(,key . _) (p-search-candidate-mapping-input-spec (car old-mapping+args)))
+    (unless (alist-get key new-args)
+      (error "Unable to create mapping %s, missing arg %s"
+             (p-search-candidate-mapping-name (car old-mapping+args))
+             key)))
+  (setq p-search-final-candidates-cache nil)
+  (setq p-search-candidates-by-generator nil)
+  (setq p-search-mappings
+        (seq-map
+         (lambda (mapping+args)
+           (if (equal mapping+args old-mapping+args)
+               (cons (car old-mapping+args) new-args)
+             mapping+args))
+         p-search-mappings)))
+
 (defun p-search-initialize-session-variables ()
   "Instantiate the session-specific local variables."
   ;; (setq p-search-observations (make-hash-table :test 'equal))
@@ -3198,7 +3261,7 @@ mapping as this data is needed to retrieve the document count."
             (insert (format "%s: %s\n"
                             input-key
                             (propertize (format "%s" val) 'face 'p-search-value)))))
-        (pcase-dolist (`(,opt-key . _) (append opt-spec '((complement . nil) (importance . nil))))
+        (pcase-dolist (`(,opt-key . _) (append opt-spec '((filter-unmodified . nil))))
           (when-let (val (alist-get opt-key args))
             (insert (format "%s: %s\n"
                             opt-key
@@ -3568,8 +3631,10 @@ If PRESET is non-nil, set up session with PRESET."
   (interactive)
   (when-let* ((prior (get-char-property (point) 'p-search-prior)))
     (p-search-dispatch-edit-prior prior))
-  (when-let* ((prior (get-char-property (point) 'p-search-candidate-generator)))
-    (p-search-dispatch-edit-candidate-generator prior)))
+  (when-let* ((mapping (get-char-property (point) 'p-search-mapping)))
+    (p-search-dispatch-edit-mapping mapping))
+  (when-let* ((candidate-generator (get-char-property (point) 'p-search-candidate-generator)))
+    (p-search-dispatch-edit-candidate-generator candidate-generator)))
 
 (defun p-search-next-item (&optional no-scroll)
   "Move the point to the next item.
@@ -3920,7 +3985,6 @@ controlled by the custom variable
 
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-buffers)
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-filesystem)
-(setq p-search-prior-templates nil)
 (add-to-list 'p-search-prior-templates p-search-prior-major-mode)
 (add-to-list 'p-search-prior-templates p-search-prior-title)
 (add-to-list 'p-search-prior-templates p-search-prior-subdirectory)

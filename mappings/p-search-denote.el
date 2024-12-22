@@ -46,32 +46,35 @@
   :group 'denote
   :prefix "p-search-denote-")
 
+(defconst p-search-denote--custom-toggle-type
+  '(choice (const :tag "Off by default" nil)
+           (const :tag "On by default" on)))
+
 (defcustom p-search-denote-categories-as-keywords-p nil
   "Should denote keywords be generated as categories?"
-  :type p-search--custom-toggle-type
+  :type p-search-denote--custom-toggle-type
   :group 'p-search-denote)
 
 (defcustom p-search-denote-categories-as-text-p 'on
   "Should denote keywords be generated as formatted text?"
-  :type p-search--custom-toggle-type
+  :type p-search-denote--custom-toggle-type
   :group 'p-search-denote)
 
 (defcustom p-search-denote-include-signature-p 'on
   "Should the Denote signature be a part of metadata?"
-  :type p-search--custom-toggle-type
+  :type p-search-denote--custom-toggle-type
   :group 'p-search-denote)
 
 (defcustom p-search-denote-only-denote-p nil
   "Should the p-search mapper drop non-denote files?"
-  :type p-search--custom-toggle-type
+  :type p-search-denote--custom-toggle-type
   :group 'p-search-denote)
 
 (defun p-search-denote-annotator (args document)
   "Annotate DOCUMENT with denote-related metadata."
   (let* ((file-name (p-search-document-property document 'file-name)))
     (let-alist args
-      (cond
-       ((denote-file-is-note-p file-name)
+      (when (denote-file-is-note-p file-name)
         (let* ((id (p-search-document-property document 'id))
                (new-id (list 'denote id))
                (identifier (denote-retrieve-filename-identifier file-name))
@@ -93,9 +96,7 @@
           (when title
             (push (cons 'denote-title title) new-fields))
           (push (cons 'denote-title title) new-fields)
-          (list (p-search-document-extend document new-id new-fields))))
-       ((not .drop-non-denote)
-        (list document))))))
+          (list (p-search-document-extend document new-id new-fields)))))))
 
 (defconst p-search-denote-mapping
   (p-search-candidate-mapping
@@ -113,11 +114,7 @@
                    (include-signature . (p-search-infix-toggle
                                          :key "-s"
                                          :description "Include Signature"
-                                         :default-value (lambda () p-search-denote-include-signature-p)))
-                   (drop-non-denote . (p-search-infix-toggle
-                                       :key "-d"
-                                       :description "Drop Non-Denote Files"
-                                       :default-value (lambda () p-search-denote-only-denote-p))))
+                                         :default-value (lambda () p-search-denote-include-signature-p))))
    :function #'p-search-denote-annotator))
 
 (add-to-list 'p-search-candidate-mappings p-search-denote-mapping)
