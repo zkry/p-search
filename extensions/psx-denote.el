@@ -81,6 +81,7 @@
                (title (denote-retrieve-filename-title file-name))
                (keywords (denote-extract-keywords-from-path file-name))
                (type (denote-file-type file-name))
+               (title-nice (denote-retrieve-front-matter-title-value file-name type))
                (new-fields `((denote-type . ,type)
                              (denote-identifier . ,identifier))))
 
@@ -95,7 +96,9 @@
               (push (cons 'denote-keywords (string-join keywords ", ")) new-fields)))
           (when title
             (push (cons 'denote-title title) new-fields))
-          (push (cons 'denote-title title) new-fields)
+          (when (and (stringp title-nice)
+                     (not (string= title title-nice)))
+            (push (cons 'denote-title (list title-nice title)) new-fields))
           (list (p-search-document-extend document new-id new-fields)))))))
 
 (defconst psx-denote-mapping
