@@ -62,6 +62,11 @@
                  (file :must-match t :tag "Executable: "))
   :group 'p-search-pdfinfo)
 
+(defcustom p-search-pdfinfo-drop-non-pdfs-p nil
+  "Should Non-PDF files be dropped by default?"
+  :type p-search--custom-toggle-type
+  :group 'p-search-pdfinfo)
+
 (defun p-search-pdfinfo--parse-info (filename)
   "Run `pdfinfo' on FILENAME, and convert to a list of fields.
 
@@ -98,22 +103,31 @@
             ("Page size"
              (add-to-list 'fields (cons 'pdf-pagesize (cdr field))))))))))
 
-(defun p-search-pdfinfo-annotator (_args document)
-  "Annotate DOCUMENT with `pdfinfo'-derived fields."
+(defun p-search-pdfinfo-annotator (args document)
+  "Annotate DOCUMENT with `pdfinfo'-derived fields.
+
+Options taken from ARGS."
   (let ((file-name (p-search-document-property document 'file-name)))
-    (when (string= "pdf" (file-name-extension file-name))
-      (when-let ((id (p-search-document-property document 'id))
-                 (new-fields (p-search-pdfinfo--parse-info file-name)))
-        (list (p-search-document-extend document
-                                        (cons 'pdf id)
-                                        new-fields))))))
+    (cond
+     ((string= "pdf" (file-name-extension file-name))
+      (if-let ((id (p-search-document-property document 'id))
+               (new-fields (p-search-pdfinfo--parse-info file-name)))
+          (list (p-search-document-extend document
+                                          (cons 'pdf id)
+                                          new-fields))
+        (list document)))
+     ((not (alist-get 'drop-non-pdfs args))
+      (list document)))))
 
 (defconst p-search-pdfinfo-mapping
   (p-search-candidate-mapping
    :name "PDF Info"
    :required-property-list '(file-name)
    :input-spec '()
-   :options-spec '()
+   :options-spec '((drop-non-pdfs . (p-search-infix-toggle
+                                     :key "-d"
+                                     :description "Drop non-PDF files"
+                                     :default-value (lambda () p-search-pdfinfo-drop-non-pdfs-p))))
    :function #'p-search-pdfinfo-annotator))
 
 (add-to-list 'p-search-candidate-mappings p-search-pdfinfo-mapping)
