@@ -1879,6 +1879,11 @@ If SIZE is provided create the heap with this size."
 (defun p-search-prior-modified-p (p importance)
   "Return the modified probability of P based on IMPORTANCE."
   (pcase importance
+    ('filter
+     (cond
+      ((> p 0.5) 1)
+      ((= p 0.5) 0.5)
+      (t 0)))
     ('critical
      (cond
       ((> p 0.5) 0.999)
