@@ -1807,6 +1807,11 @@ This function will error if any candidate generator of prior-template doesn't ha
         (error "Unable to bookmark Candidate Generator \"%s\" as it doesn't have an ID."
                (p-search-candidate-generator-name cg)))
       (push `(:candidate-generator ,(p-search-candidate-generator-id cg) :args ,args) ress))
+    (pcase-dolist (`(,mp . ,args) p-search-mappings)
+      (unless (p-search-candidate-mapping-id mp)
+        (error "Unable to bookmark Candidate Generator \"%s\" as it doesn't have an ID."
+               (p-search-candidate-generator-name mp)))
+      (push `(:candidate-mapping ,(p-search-candidate-mapping-id mp) :args ,args) ress))
     (pcase-dolist (prior p-search-priors)
       (let* ((template-id (p-search-prior-template-id (p-search-prior-template prior)))
              (args (p-search-prior-arguments prior)))
@@ -1814,6 +1819,7 @@ This function will error if any candidate generator of prior-template doesn't ha
           (error "Unable to bookmark Prior \"%s\" as it doesn't have an ID"
                  (p-search-prior-template-name (p-search-prior-template prior))))
         (push `(:prior-template ,template-id :args ,args) ress)))
+    (setq ress (nreverse ress))
     `(:group ,ress)))
 
 
