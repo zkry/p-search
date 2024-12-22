@@ -112,7 +112,8 @@ Options taken from ARGS."
                                     new-fields)))))
 
 (defconst p-search-pdfinfo-mapping
-  (p-search-candidate-mapping
+  (p-search-candidate-mapping-create
+   :id 'p-search-pdfinfo-mapping
    :name "PDF Info"
    :required-property-list '(file-name)
    :input-spec '()

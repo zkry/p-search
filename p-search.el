@@ -195,7 +195,8 @@ Key is of the type (cons type-symbol properties-p-list)")
 (defconst p-search-candidate-generators '()
   "List of candidate-generator objects known to the p-search system.")
 
-(defconst p-search-candidate-mappings '())
+(defconst p-search-candidate-mappings '()
+  "List of known mappings, able to be easily added via `p-search-add-mapping'")
 
 (defconst p-search-default-candidate-generators '()
   "List of candidate generators to be applied on startup of p-search session.")
@@ -386,7 +387,7 @@ the candidate generator.  This requirement may relax in future implementations."
 
 (cl-defstruct (p-search-candidate-mapping
                (:copier nil)
-               (:constructor p-search-candidate-mapping))
+               (:constructor p-search-candidate-mapping-create))
   "Structure representing a mapping from one set of candidate documents to another."
   (name nil
         :documentation "Display name of the mapping to be shown on search page.")
@@ -399,7 +400,13 @@ Any generator providing documents having all these properties can use this mappi
   (function nil :documentation "Function to generate new candidate from existing candidate.
 This function should take two arguments: the combined
 input/option values alist and the document data to be mapped.
-The function should return a list of document mappings."))
+The function should return either the modified document, a list
+of derivitive documents, nil (indicating no change), or the
+symbol :remove (if the document should not be considered at all).")
+  (id nil
+      :documentation "ID of the candidate mapping.  Used to implicitly refer to the
+candidate mapping.  This should be the symbol whos value is the
+candidate mapping."))
 
 (cl-defstruct (p-search-prior-template
                (:copier nil)
@@ -872,7 +879,9 @@ TYPE should be a field type sympol, such as `text' or `category'."
           (funcall default id))))))
 
 (defun p-search-document-extend (document &optional new-id new-fields new-props)
-  "Add NEW-ID, FIELDS, and NEW-PROPS to DOCUMENT, returning DOCUMENT."
+  "Add NEW-ID, FIELDS, and NEW-PROPS to DOCUMENT, returning DOCUMENT.
+NEW-FIELDS are added in addition the the document's previous
+fields, allowing multiple entries."
   (let ((document document))
     (when new-props
       (setq document (append new-props document)))
@@ -1680,11 +1689,16 @@ exist in ARGS, throw an error."
   ;;       adding candidate generator logic.
   (let ((defaults))
     (pcase-dolist (`(,arg-name . (,_ . ,spec-plist))
-                   (if (p-search-candidate-generator-p candidate-generator-or-prior-template)
-                       (p-search-candidate-generator-input-spec
-                        candidate-generator-or-prior-template)
+                   (cond
+                    ((p-search-candidate-generator-p candidate-generator-or-prior-template)
+                     (p-search-candidate-generator-input-spec
+                      candidate-generator-or-prior-template))
+                    ((p-search-candidate-mapping-p candidate-generator-or-prior-template)
+                     (p-search-candidate-mapping-input-spec
+                      candidate-generator-or-prior-template))
+                    (t
                      (p-search-prior-template-input-spec
-                      candidate-generator-or-prior-template)))
+                      candidate-generator-or-prior-template))))
       (unless (alist-get arg-name args)
         (let ((default (plist-get spec-plist :default-value)))
           (if default
@@ -1706,7 +1720,8 @@ instead return a function which will run the function.
  A preset plist should contain the entry :name STR
 and one of the following:
 
-- :candidate-generator GENERATOR-OBJ-SYM and :args ARG-ALISt
+- :candidate-generator GENERATOR-OBJ-SYM and :args ARG-ALIST
+- :candidate-mapping  MAPPING-OBJ-SYM and :args ARG-ALIST
 - :prior-template TEMPLATE-OBJ-SYM and :args ARG-ALIST
 - :group LIST-OF-PRESET-ELTS
 
@@ -1717,6 +1732,7 @@ p-search-engine mode which field should be updated when
 performing a search."
   (let* ((prior-template (plist-get preset-elt :prior-template))
          (candidate-generator (plist-get preset-elt :candidate-generator))
+         (candidate-mapping (plist-get preset-elt :candidate-mapping))
          (group (plist-get preset-elt :group))
          (args (plist-get preset-elt :args))
          (inputs (plist-get preset-elt :input-functions))
@@ -1745,6 +1761,7 @@ performing a search."
           (when engine-arg-name
             (setq p-search-engine-specification
                   (list prior engine-arg-name))))))
+
      (candidate-generator
       (let ((candidate-generator
              (if (symbolp candidate-generator)
@@ -1753,6 +1770,15 @@ performing a search."
         (setq args (p-search--verify-and-set-defaults candidate-generator args))
         (p-search--add-candidate-generator
          candidate-generator
+         args)))
+     (candidate-mapping
+      (let ((candidate-mapping
+             (if (symbolp candidate-mapping)
+                 (symbol-value candidate-mapping)
+               candidate-mapping)))
+        (setq args (p-search--verify-and-set-defaults candidate-mapping args))
+        (p-search--add-mapping
+         candidate-mapping
          args))))
     (unless no-calc
       (p-search-restart-calculation))))

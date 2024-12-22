@@ -41,7 +41,8 @@
        (seq-split (string-split file-content "\n") split-size)))))
 
 (defconst p-search-filesplit-mapping
-  (p-search-candidate-mapping
+  (p-search-candidate-mapping-create
+   :id 'p-search-filesplit-mapping
    :name "File Split"
    :required-property-list '()
    :input-spec '((split-size . (p-search-infix-number
