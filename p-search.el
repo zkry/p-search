@@ -1111,6 +1111,80 @@ INIT is the initial value given to the reduce operation."
      "test"))
   "Example candiade generator creating three documents.")
 
+(defun p-search--filesystem-generator-function (args)
+  "Generate list of filesystem candidates from ARGS.
+ARGS is an alist containing values specified in the filesystem
+candidate generator."
+  (let-alist args
+    (let* ((default-directory (expand-file-name .base-directory))
+           (git-available-p (p-search--git-available-p)))
+      (when (and .use-git-ignore (not git-available-p))
+        (message "Cannot use git ignore for directory %s.  Falling back on all files." default-directory))
+      (let* ((default-directory .base-directory)
+             (file-candidates (if (and .use-git-ignore git-available-p)
+                                  (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
+                                (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
+             (documents '()))
+        (dolist (file file-candidates)
+          (catch 'skip
+            (when (string-prefix-p "./" file)
+              (setq file (substring file 2)))
+            (when (and (not (and .ignore-pattern (string-match-p .ignore-pattern file)))
+                       (or (equal .filename-regexp ".*")
+                           (string-match-p .filename-regexp file)))
+              (setq file (expand-file-name (file-name-concat default-directory file)))
+              (when (file-attributes file) ;; ensure only files on file-system get added
+                (push (p-search-documentize `(file ,file)) documents)))))
+        (nreverse documents)))))
+
+(defun p-search--filesystem-term-frequency-function (gen+args query-term callback)
+  "Count term frequencies using search tool as specified by GEN+ARGS.
+QUERY-TERM is the term for which the term frequency should be
+counted.  After counting, CALLBACK will be called with a hashmap
+of the term frequency counts."
+  (let* ((args (cdr gen+args))
+         (default-directory (alist-get 'base-directory args))
+         (search-tool (alist-get 'search-tool args))
+         (file-counts (make-hash-table :test #'equal))
+         (command (p-search-query--command query-term search-tool))
+         (parent-buffer (current-buffer)))
+    (let* ((buf (generate-new-buffer "*p-search rg")))
+      (with-current-buffer buf
+        (setq p-search-parent-session-buffer parent-buffer))
+      (make-process
+       :name "p-search-text-search"
+       :buffer buf
+       :command command
+       :sentinel
+       (lambda (proc event)
+         (when (or (member event '("finished\n" "deleted\n"))
+                   (string-prefix-p "exited abnormally with code" event)
+                   (string-prefix-p "failed with code" event))
+           (with-current-buffer (process-buffer proc)
+             (let* ((default-directory (expand-file-name default-directory))
+                    (files (string-split (buffer-string) "\n")))
+               (dolist (f files)
+                 (when (string-prefix-p "./" f)
+                   (setq f (substring f 2)))
+                 (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
+                   (let* ((fname (match-string 1 f))
+                          (id (list 'file (file-name-concat default-directory fname)))
+                          (prev-count (gethash id file-counts 0))
+                          (count (string-to-number (match-string 2 f)))
+                          (doc-id (list 'file (file-name-concat default-directory fname))))
+                     (when (and (not (zerop count)))
+                       (puthash doc-id (+ prev-count count) file-counts)))))
+               (with-current-buffer p-search-parent-session-buffer
+                 (funcall callback file-counts))))
+           (kill-buffer (process-buffer proc))))))))
+
+(defun p-search--filesystem-lighter-function (args)
+  "Return string representing the filesystem generator with arguments ARGS."
+  (let* ((base-directory (expand-file-name (alist-get 'base-directory args)))
+         (parent-prefix (file-name-parent-directory base-directory))
+         (dir-name (substring base-directory (length parent-prefix))))
+    (format "FS:%s" dir-name)))
+
 (defconst p-search-candidate-generator-filesystem
   (p-search-candidate-generator-create
    :id 'p-search-candidate-generator-filesystem
@@ -1135,74 +1209,9 @@ INIT is the initial value given to the reduce operation."
                                       :key "-g"
                                       :description "Git ls-files"
                                       :default-value on)))
-   :function
-   (lambda (args)
-     (let-alist args
-       (let* ((default-directory (expand-file-name .base-directory))
-              (git-available-p (p-search--git-available-p)))
-         (when (and .use-git-ignore (not git-available-p))
-           (message "Cannot use git ignore for directory %s.  Falling back on all files." default-directory))
-         (let* ((default-directory .base-directory)
-                (file-candidates (if (and .use-git-ignore git-available-p)
-                                     (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
-                                   (string-split (shell-command-to-string "find . -type f") "\n" t "[\n ]")))
-                (documents '()))
-           (dolist (file file-candidates)
-             (catch 'skip
-               (when (string-prefix-p "./" file)
-                 (setq file (substring file 2)))
-               (when (and (not (and .ignore-pattern (string-match-p .ignore-pattern file)))
-                          (or (equal .filename-regexp ".*")
-                              (string-match-p .filename-regexp file)))
-                 (setq file (expand-file-name (file-name-concat default-directory file)))
-                 (when (file-attributes file) ;; ensure only files on file-system get added
-                   (push (p-search-documentize `(file ,file)) documents)))))
-           (nreverse documents)))))
-   :term-frequency-function
-   (cl-function
-    (lambda (gen+args query-term callback)
-      (let* ((args (cdr gen+args))
-             (default-directory (alist-get 'base-directory args))
-             (search-tool (alist-get 'search-tool args))
-             (file-counts (make-hash-table :test #'equal))
-             (command (p-search-query--command query-term search-tool))
-             (parent-buffer (current-buffer)))
-        (let* ((buf (generate-new-buffer "*p-search rg")))
-          (with-current-buffer buf
-            (setq p-search-parent-session-buffer parent-buffer))
-          (make-process
-           :name "p-search-text-search"
-           :buffer buf
-           :command command
-           :sentinel
-           (lambda (proc event)
-             (when (or (member event '("finished\n" "deleted\n"))
-                       (string-prefix-p "exited abnormally with code" event)
-                       (string-prefix-p "failed with code" event))
-               (with-current-buffer (process-buffer proc)
-                 (let* ((default-directory (expand-file-name default-directory))
-                        (files (string-split (buffer-string) "\n")))
-                   (dolist (f files)
-                     (when (string-prefix-p "./" f)
-                       (setq f (substring f 2)))
-                     (when (string-match "^\\(.*\\):\\([0-9]*\\)$" f)
-                       (let* ((fname (match-string 1 f))
-                              (id (list 'file (file-name-concat default-directory fname)))
-                              (prev-count (gethash id file-counts 0))
-                              (count (string-to-number (match-string 2 f)))
-                              (doc-id (list 'file (file-name-concat default-directory fname))))
-                         (when (and (not (zerop count)))
-                           (puthash doc-id (+ prev-count count) file-counts)))))
-                   (defvar my-file-counts file-counts)
-                   (with-current-buffer p-search-parent-session-buffer
-                     (funcall callback file-counts))))
-               (kill-buffer (process-buffer proc)))))))))
-   :lighter-function
-   (lambda (args)
-     (let* ((base-directory (expand-file-name (alist-get 'base-directory args)))
-            (parent-prefix (file-name-parent-directory base-directory))
-            (dir-name (substring base-directory (length parent-prefix))))
-       (format "FS:%s" dir-name)))))
+   :function #'p-search--filesystem-generator-function
+   :term-frequency-function #'p-search--filesystem-term-frequency-function
+   :lighter-function #'p-search--filesystem-lighter-function))
 
 ;;; Generic priors
 
@@ -1288,6 +1297,30 @@ INIT is the initial value given to the reduce operation."
 
 ;;; File system priors
 
+(defun p-search--mtime-recency-init-function (prior)
+  "Initialization function for mtime-recency prior."
+  (let* ((args (p-search-prior-arguments prior))
+         (target-date (alist-get 'target-date args))
+         (target-floattime
+          (thread-first (if (<= (length target-date) 11)
+                            (concat target-date " 12:00")
+                          target-date)
+                        parse-time-string
+                        encode-time
+                        float-time))
+         (time-scale (alist-get 'time-scale args))
+         (k-param (alist-get time-scale p-search--time-scales))
+         (documents (p-search-candidates-with-properties '(file-name))))
+    (maphash
+     (lambda (_ document)
+       (let*  ((file-name (p-search-document-property document 'file-name))
+               (mtime (nth 5 (file-attributes file-name))))
+         (when mtime
+           (let* ((seconds-passed (abs (- target-floattime (float-time mtime))))
+                  (p (p-search--exponential 0.3 0.7 k-param seconds-passed)))
+             (p-search-set-score prior document p)))))
+     documents)))
+
 (defconst p-search-prior-mtime-recency
   (let ((instruction-string
          "The scale of time where you expecct the most differentiation to happen.
@@ -1318,31 +1351,27 @@ are peanalized by how far away it is."))
                                   :description "Time Scale"
                                   :instruction-string ,instruction-string
                                   :choices ,(mapcar #'car p-search--time-scales)
-                                  :default-value :months))
-                   )
-     :initialize-function
-     (lambda (prior)
-       (let* ((args (p-search-prior-arguments prior))
-              (target-date (alist-get 'target-date args))
-              (target-floattime
-               (thread-first (if (<= (length target-date) 11)
-                                 (concat target-date " 12:00")
-                               target-date)
-                             parse-time-string
-                             encode-time
-                             float-time))
-              (time-scale (alist-get 'time-scale args))
-              (k-param (alist-get time-scale p-search--time-scales))
-              (documents (p-search-candidates-with-properties '(file-name))))
-         (maphash
-          (lambda (_ document)
-            (let*  ((file-name (p-search-document-property document 'file-name))
-                    (mtime (nth 5 (file-attributes file-name))))
-              (when mtime
-                (let* ((seconds-passed (abs (- target-floattime (float-time mtime))))
-                       (p (p-search--exponential 0.3 0.7 k-param seconds-passed)))
-                  (p-search-set-score prior document p)))))
-          documents))))))
+                                  :default-value :months)))
+     :initialize-function #'p-search--mtime-recency-init-function)))
+
+(defun p-search--subdirectory-prior-init-function (prior)
+  "Initialization function for subdirectory PRIOR."
+  (let* ((args (p-search-prior-arguments prior))
+         (include-directory (alist-get 'include-directory args))
+         (directory-expanded (expand-file-name include-directory))
+         (documents (p-search-candidates-with-properties '(file-name))))
+    ;; TODO - When an active prior exists, p-search-candidates should *by default* only
+    ;;        return the candidates that have the specified properties
+    (maphash
+     (lambda (_ document)
+       (catch 'out
+         (let* ((file-name (p-search-document-property document 'file-name))
+                (file-expanded (expand-file-name file-name)))
+           (if (string-prefix-p directory-expanded file-expanded)
+               (p-search-set-score prior document p-search-score-yes)
+             (p-search-set-score prior document p-search-score-no)
+             (throw 'out nil)))))
+     documents)))
 
 (defconst p-search-prior-subdirectory
   (p-search-prior-template-create
@@ -1353,24 +1382,7 @@ are peanalized by how far away it is."))
    :input-spec '((include-directory . (p-search-infix-directory
                                          :key "d"
                                          :description "Directories")))
-   :initialize-function
-   (lambda (prior)
-     (let* ((args (p-search-prior-arguments prior))
-            (include-directory (alist-get 'include-directory args))
-            (directory-expanded (expand-file-name include-directory))
-            (documents (p-search-candidates-with-properties '(file-name))))
-       ;; TODO - When an active prior exists, p-search-candidates should *by default* only
-       ;;        return the candidates that have the specified properties
-       (maphash
-        (lambda (_ document)
-          (catch 'out
-            (let* ((file-name (p-search-document-property document 'file-name))
-                   (file-expanded (expand-file-name file-name)))
-              (if (string-prefix-p directory-expanded file-expanded)
-                  (p-search-set-score prior document p-search-score-yes)
-                (p-search-set-score prior document p-search-score-no)
-                (throw 'out nil)))))
-        documents)))
+   :initialize-function #'p-search--subdirectory-prior-init-function
    :transient-key-string "sd"))
 
 ;;; Search priors
