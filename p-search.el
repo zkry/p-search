@@ -1118,8 +1118,10 @@ candidate generator."
   (let-alist args
     (let* ((default-directory (expand-file-name .base-directory))
            (git-available-p (p-search--git-available-p)))
-      (when (and .use-git-ignore (not git-available-p))
-        (message "Cannot use git ignore for directory %s.  Falling back on all files." default-directory))
+      (if (and .use-git-ignore (not git-available-p))
+          (message "Cannot use git ignore for directory %s as no Git repository was found.  Falling back on all files.\nIf this takes longer than expected, your selected directory may have too many items." default-directory)
+        (message "Generating list of filesystem candidates.  If this takes longer than expected, your selected directory may have too many items."))
+
       (let* ((default-directory .base-directory)
              (file-candidates (if (and .use-git-ignore git-available-p)
                                   (string-split (shell-command-to-string "git ls-files") "\n" t "[\n ]")
