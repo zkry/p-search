@@ -878,9 +878,10 @@ TYPE should be a field type sympol, such as `text' or `category'."
 
 (defun p-search-document-extend (document &optional new-id new-fields new-props)
   "Add NEW-ID, FIELDS, and NEW-PROPS to DOCUMENT, returning DOCUMENT.
-NEW-FIELDS and NEW-PROPS should both be alists.
-NEW-FIELDS are added in addition the the document's previous
-fields, allowing multiple entries.  NEW-PROPS replace any existing property."
+NEW-FIELDS and NEW-PROPS should both be alists.  NEW-FIELDS are
+added in addition the the document's previous fields, allowing
+multiple entries.  Properties in NEW-PROPS that are already in
+the documents properties will overwite the previous value."
   (let ((document document))
     (when new-props
       (setq document (append new-props document)))
