@@ -79,6 +79,10 @@
 
     You can delete a prior with the command =p-search-kill-entry-at-point= (~k~).
 
+    Running =p-search-explain-dwm= (~x~) with the point on a prior
+    will display an explanation of the prior, showing a list of the
+    results it has generated.
+
 
 *** Calculation
 
@@ -170,6 +174,10 @@
    multiplying it by 0.3. With prefix =C-u p-search-observe=, you can
    specify the probability.  After you perform the observation the
    probabilities will be recalculated and the results will update.
+
+   Running =p-search-explain-dwm= (~x~) with the point on a result
+   will display an explanation of the result, showing why it was
+   given the score it got.
 
 
 *** p-search-peruse-mode
