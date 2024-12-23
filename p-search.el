@@ -383,7 +383,15 @@ generator's arguments and returns a string to be used in the sessions buffer nam
   (id nil
    :documentation "ID of the candidate generator.  Used to implicitly refer to
 candidate generators.  This should be the symbol whoes value is
-the candidate generator.  This requirement may relax in future implementations."))
+the candidate generator.  This requirement may relax in future implementations.")
+  (condenced-arg-display-function nil
+   :documentation "Function used to display the candidate generators args.  By
+default, the function `p-search-args-to-string' is used, which
+for the sake of brevity, only displays the required inputs.  If
+provided, this function should accept three arguments: the
+candidate generator's input-spec, option-spec, and combined
+arguments.  The function should return a string to be displayed
+alongside the generator when it's section is folded."))
 
 (cl-defstruct (p-search-candidate-mapping
                (:copier nil)
@@ -406,7 +414,14 @@ symbol :remove (if the document should not be considered at all).")
   (id nil
       :documentation "ID of the candidate mapping.  Used to implicitly refer to the
 candidate mapping.  This should be the symbol whos value is the
-candidate mapping."))
+candidate mapping.")
+  (condenced-arg-display-function nil
+   :documentation "Function used to display the mapping's args.  By
+default, the function `p-search-args-to-string' is used.  If
+provided, this function should accept three arguments: the
+mapping's input-spec, option-spec, and combined arguments.  The
+function should return a string to be displayed alongside the
+mapping when it's section is folded."))
 
 (cl-defstruct (p-search-prior-template
                (:copier nil)
@@ -3262,7 +3277,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
      page-width
      (- page-width 12))))
 
-(defun p-search--args-to-string (input-spec _options-spec args)
+(defun p-search-args-to-string (input-spec _options-spec args)
   "Return a string representing ARGS.
 Use INPUT-SPEC and OPTIONS-SPEC for information on how to format
 values of ARGS."
@@ -3278,13 +3293,39 @@ values of ARGS."
        args))
      ", ")))
 
+(defun p-search--condenced-arg-string (cg+args-or-mp+args-or-prior)
+  (cond
+   ((p-search-prior-p cg+args-or-mp+args-or-prior)
+    (let* ((prior cg+args-or-mp+args-or-prior)
+           (template (p-search-prior-template prior))
+           (in-spec (p-search-prior-template-input-spec template))
+           (opt-spec (p-search-prior-template-options-spec template))
+           (args (p-search-prior-arguments prior)))
+      (p-search-args-to-string in-spec opt-spec args)))
+   ((p-search-candidate-generator-p (car cg+args-or-mp+args-or-prior))
+    (pcase-let ((`(,generator . ,args) cg+args-or-mp+args-or-prior))
+      (let ((in-spec (p-search-candidate-generator-input-spec generator))
+            (opt-spec (p-search-candidate-generator-options-spec generator))
+            (disp-func (p-search-candidate-generator-condenced-arg-display-function generator)))
+        (if disp-func
+            (funcall disp-func in-spec opt-spec args)
+          (p-search-args-to-string in-spec opt-spec args)))))
+   ((p-search-candidate-mapping-p (car cg+args-or-mp+args-or-prior))
+    (pcase-let ((`(,mapping . ,args) cg+args-or-mp+args-or-prior))
+      (let ((in-spec (p-search-candidate-mapping-input-spec mapping))
+            (opt-spec (p-search-candidate-mapping-options-spec mapping))
+            (disp-func (p-search-candidate-mapping-condenced-arg-display-function mapping)))
+        (if disp-func
+            (funcall disp-func in-spec opt-spec args)
+          (p-search-args-to-string in-spec opt-spec args)))))))
+
 (defun p-search--insert-candidate-generator (generator+args)
   "Insert GENERATOR+ARGS into current buffer."
   (pcase-let* ((`(,generator . ,args) generator+args))
     (let* ((gen-name (p-search-candidate-generator-name generator))
            (in-spec (p-search-candidate-generator-input-spec generator))
            (opt-spec (p-search-candidate-generator-options-spec generator))
-           (args-string (p-search--args-to-string in-spec opt-spec args))
+           (args-string (p-search--condenced-arg-string generator+args))
            (docs (when p-search-candidates-by-generator (gethash generator+args (gethash generator+args p-search-candidates-by-generator))))
            (heading-line (concat (propertize gen-name
                                              'face 'p-search-prior)
@@ -3313,7 +3354,7 @@ mapping as this data is needed to retrieve the document count."
     (let* ((mapping-name (p-search-candidate-mapping-name mapping))
            (in-spec (p-search-candidate-mapping-input-spec mapping))
            (opt-spec (p-search-candidate-mapping-options-spec mapping))
-           (args-string (p-search--args-to-string in-spec opt-spec args))
+           (args-string (p-search--condenced-arg-string mapping+args))
            (docs-count (p-search--doc-count-of-mapping mapping+args))
            (heading-line (concat (propertize mapping-name 'face 'p-search-prior)
                                  (format " (%d)" docs-count))))
@@ -3340,7 +3381,7 @@ mapping as this data is needed to retrieve the document count."
          (name (p-search-prior-template-name template))
          (in-spec (p-search-prior-template-input-spec template))
          (opt-spec (p-search-prior-template-options-spec template))
-         (args-string (p-search--args-to-string in-spec opt-spec args))
+         (args-string (p-search--condenced-arg-string prior))
          (importance (alist-get 'importance args))
          (importance-char (alist-get importance '((critical . "!")
                                                   (high . "H")
@@ -3642,13 +3683,10 @@ If PRESET is non-nil, set up session with PRESET."
                  (throw 'done nil))))
            candidates-by-generator))
         (let* ((generator (car generator+args))
-               (args (cdr generator+args))
-               (in-spec (p-search-candidate-generator-input-spec generator))
-               (opt-spec (p-search-candidate-generator-options-spec generator))
                (source-name
                 (format "%s(%s)"
                         (p-search-candidate-generator-name generator)
-                        (p-search--args-to-string in-spec opt-spec args))))
+                        (p-search--condenced-arg-string generator+args))))
           (insert (format "Document Source:\n%s\n\n" source-name))))
 
       ;; Insert the fields of the document
@@ -3671,15 +3709,12 @@ If PRESET is non-nil, set up session with PRESET."
             (insert (propertize "1.000000  no priors\n" 'face 'shadow))
           (dolist (prior priors)
             (let* ((prior-template (p-search-prior-template prior))
-                   (in-spec (p-search-prior-template-input-spec prior-template))
-                   (opt-spec (p-search-prior-template-options-spec prior-template))
-                   (args (p-search-prior-arguments prior))
                    (prior-p (p-search--p-prior-doc prior result-id)))
               (setq final-prob (* final-prob prior-p))
               (insert (format "%7f: %s(%s)\n"
                               prior-p
                               (p-search-prior-template-name prior-template)
-                              (p-search--args-to-string in-spec opt-spec args))))))
+                              (p-search--condenced-arg-string prior))))))
         (if (not p-search-observations)
             (insert (propertize "1.000000  no observations\n" 'face 'shadow))
           (let* ((obs (gethash result-id observations 1.0)))
@@ -3692,9 +3727,6 @@ If PRESET is non-nil, set up session with PRESET."
 (defun p-search-display-prior-explanation (prior)
   "Display the explanation of PRIOR in a new buffer."
   (let* ((prior-template (p-search-prior-template prior))
-         (in-spec (p-search-prior-template-input-spec prior-template))
-         (opt-spec (p-search-prior-template-options-spec prior-template))
-         (args (p-search-prior-arguments prior))
          (buf (get-buffer-create (format "*prior-explain-%s*"
                                          (p-search-prior-template-name prior-template)))))
     (with-current-buffer buf
@@ -3703,7 +3735,7 @@ If PRESET is non-nil, set up session with PRESET."
                       (propertize
                        (p-search-prior-template-name prior-template)
                        'face 'bold)
-                      (p-search--args-to-string in-spec opt-spec args)))
+                      (p-search--condenced-arg-string prior)))
       (insert "Results:\n")
       (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
         (maphash
