@@ -3610,11 +3610,9 @@ If PRESET is non-nil, set up session with PRESET."
 ;; This section contains the functions for displaying
 ;; help/debugging/info concerting various priors.
 
-
-
 (defun p-search-display-result-explanation (result-id)
-  "Display the calculation info of RESULT-ID."
-  (let* ((buf (get-buffer-create (format "*result-info-%s" result-id)))
+  "Display the calculation explanation of RESULT-ID."
+  (let* ((buf (get-buffer-create (format "*result-explain-%s" result-id)))
          (candidates-by-generator p-search-candidates-by-generator)
          (title (p-search-document-property result-id 'title))
          (fields (p-search-document-property result-id 'fields))
@@ -3654,7 +3652,7 @@ If PRESET is non-nil, set up session with PRESET."
       ;; Insert the fields of the document
       (insert "Fields:\n")
       (if (not fields)
-          (insert (propertize "no fields" 'face 'shadow))
+          (insert (propertize "no fields\n" 'face 'shadow))
         (let ((max-field-width (seq-max (seq-map
                                          (lambda (k+v)
                                            (length (symbol-name (car k+v))))
@@ -3687,7 +3685,33 @@ If PRESET is non-nil, set up session with PRESET."
         (insert "--------\n")
         (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
       (insert "\n")
-    (display-buffer buf))))
+      (display-buffer buf))))
+
+(defun p-search-display-prior-explanation (prior)
+  "Display the explanation of PRIOR in a new buffer."
+  (let* ((prior-template (p-search-prior-template prior))
+         (in-spec (p-search-prior-template-input-spec prior-template))
+         (opt-spec (p-search-prior-template-options-spec prior-template))
+         (args (p-search-prior-arguments prior))
+         (buf (get-buffer-create (format "*prior-explain-%s*"
+                                         (p-search-prior-template-name prior-template)))))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert (format "Prior: %s(%s)\n\n"
+                      (propertize
+                       (p-search-prior-template-name prior-template)
+                       'face 'bold)
+                      (p-search--args-to-string in-spec opt-spec args)))
+      (insert "Results:\n")
+      (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
+        (maphash
+         (lambda (doc-id p)
+           (heap-add res-hp (cons doc-id p)))
+         (p-search-prior-results prior))
+        (while (not (heap-empty res-hp))
+          (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
+            (insert (format "%7f: %s\n" p doc-id))))))
+    (display-buffer buf)))
 
 
 ;;; Debug
@@ -3788,8 +3812,7 @@ If PRESET is non-nil, set up session with PRESET."
   "Edit the entity at point, be it a prior or candidate generator."
   (interactive)
   (when-let* ((prior (get-char-property (point) 'p-search-prior)))
-    ;; (p-search-display-prior-info prior)
-    )
+    (p-search-display-prior-explanation prior))
   (when-let* ((mapping (get-char-property (point) 'p-search-mapping)))
     ;; (p-search-display-mapping-info mapping)
     )
