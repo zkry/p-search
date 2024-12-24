@@ -252,6 +252,10 @@ Elements are of the type (DOC-ID PROB).")
 (defvar-local p-search-top-n 5
   "Number of results to display in p-search buffer.")
 
+(defvar-local p-search-results-page-no 0
+  "The sessions current search-results display offset.
+This should normally be set to a multiplue of `p-search-top-n'.")
+
 (defvar-local p-search-observations nil
   "Hash table of observiations.")
 
@@ -2216,6 +2220,7 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
 
 (defun p-search-restart-calculation ()
   "Re-generate all candidates, and re-run all priors."
+  (setq p-search-results-page-no 0)
   (setq p-search-candidates-by-generator nil)
   (setq p-search-final-candidates-cache nil)
   (dolist (prior p-search-priors)
@@ -2234,14 +2239,17 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
 (defun p-search-top-results ()
   "Return the top results of the posterior probs."
   (when p-search-posterior-probs
-    (let* ((elts '()))
-      (dotimes (i p-search-top-n)
-        (let* ((newelt (heap-delete-root p-search-posterior-probs)))
-          (push newelt elts)))
+    (let* ((hp (heap-copy p-search-posterior-probs))
+           (elts '())
+           (skip-amt (* p-search-top-n p-search-results-page-no)))
+      (catch 'done
+        (dotimes (i (max (+ p-search-top-n skip-amt)))
+          (when (heap-empty hp)
+            (throw 'done nil))
+          (let* ((newelt (heap-delete-root hp)))
+            (when (>= i skip-amt)
+              (push newelt elts)))))
       (setq elts (nreverse elts))
-      (setq elts (seq-filter #'identity elts))
-      (dolist (elt elts)
-        (heap-add p-search-posterior-probs elt))
       elts)))
 
 (defun p-search--debug-document-posterior-calculations ()
@@ -2261,6 +2269,7 @@ If NO-REPRINT is nil, don't redraw p-search buffer."
       (pcase-dolist (`(,doc ,p) elts)
         (insert (format "%15f %s\n" p doc))))
     (display-buffer buffer)))
+
 
 ;;; Entropy Calculation
 
@@ -3428,7 +3437,12 @@ mapping as this data is needed to retrieve the document count."
            (page-dims (p-search--display-columns)))
       (p-search-add-section
           `((heading . ,(propertize
-                         (format "Search Results (%d)" (heap-size p-search-posterior-probs))
+                         (if (eql 0 p-search-results-page-no)
+                             (format "Search Results (%d)" (heap-size p-search-posterior-probs))
+                           (format "Search Results, page %d/%d (%d)"
+                                   (1+ p-search-results-page-no)
+                                   (1+ (/ (1- (hash-table-count (p-search-candidates))) p-search-top-n))
+                                   (heap-size p-search-posterior-probs)))
                          'face 'p-search-section-heading))
             (props . (p-search-results t p-search-section-id results))
             (key . p-search-results-header))
@@ -3464,73 +3478,74 @@ mapping as this data is needed to retrieve the document count."
   "Redraw the current buffer from the session's state."
   ;; (unless (derived-mode-p 'p-search-mode)
   ;;   (error "Unable to print p-search state of buffer not in p-search-mode"))
-  (if p-search-engine-specification
-      (p-search--reprint-engine)
-    (let* ((inhibit-read-only t)
-           (at-line (line-number-at-pos))
-           (occlusion-states '()))
-      ;; TODO - occlusion states
-      (dolist (ov (overlays-in (point-min) (point-max)))
-        (when (overlay-get ov 'p-search-key)
-          (push (cons (overlay-get ov 'p-search-key)
-                      (overlay-get ov 'p-search-section-hidden))
-                occlusion-states))
-        (delete-overlay ov))
-      (erase-buffer)
-      (p-search-add-section
-          `((heading . ,(propertize (format "Candidate Generators (%d)"
-                                            (length p-search-active-candidate-generators))
-                                    'face 'p-search-section-heading))
-            (props . (p-search-section-id candidate-generators)))
-        (when (= 0 (length p-search-active-candidate-generators))
-          (insert (propertize "Press \"C\" to add a candidate generator.\n"
-                              'face 'shadow)))
-        (dolist (generator-args p-search-active-candidate-generators)
-          (p-search--insert-candidate-generator generator-args))
-        (insert "\n"))
-      (unless (= 0 (length p-search-active-candidate-generators))
+  (let ((inhibit-redisplay t))
+    (if p-search-engine-specification
+        (p-search--reprint-engine)
+      (let* ((inhibit-read-only t)
+             (at-line (line-number-at-pos))
+             (occlusion-states '()))
+        ;; TODO - occlusion states
+        (dolist (ov (overlays-in (point-min) (point-max)))
+          (when (overlay-get ov 'p-search-key)
+            (push (cons (overlay-get ov 'p-search-key)
+                        (overlay-get ov 'p-search-section-hidden))
+                  occlusion-states))
+          (delete-overlay ov))
+        (erase-buffer)
         (p-search-add-section
-            `((heading . ,(propertize (format "Mappings (%d)" (length p-search-mappings))
+            `((heading . ,(propertize (format "Candidate Generators (%d)"
+                                              (length p-search-active-candidate-generators))
                                       'face 'p-search-section-heading))
-              (props . (p-search-section-id mappings)))
-          (when (= 0 (length p-search-mappings))
-            (insert (propertize "Press \"M\" to add a candidate mapping.\n" 'face 'shadow)))
-          (dolist (mapping p-search-mappings)
-            (p-search--insert-mapping mapping))
-          (insert "\n")))
+              (props . (p-search-section-id candidate-generators)))
+          (when (= 0 (length p-search-active-candidate-generators))
+            (insert (propertize "Press \"C\" to add a candidate generator.\n"
+                                'face 'shadow)))
+          (dolist (generator-args p-search-active-candidate-generators)
+            (p-search--insert-candidate-generator generator-args))
+          (insert "\n"))
+        (unless (= 0 (length p-search-active-candidate-generators))
+          (p-search-add-section
+              `((heading . ,(propertize (format "Mappings (%d)" (length p-search-mappings))
+                                        'face 'p-search-section-heading))
+                (props . (p-search-section-id mappings)))
+            (when (= 0 (length p-search-mappings))
+              (insert (propertize "Press \"M\" to add a candidate mapping.\n" 'face 'shadow)))
+            (dolist (mapping p-search-mappings)
+              (p-search--insert-mapping mapping))
+            (insert "\n")))
 
-      (let* ((page-dims (p-search--display-columns))
-             (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
-                                         'face 'p-search-section-heading))
-             (heading (concat heading-line-1
-                              ;; NOTE: the following code adds the entropy display
-                              ;;       I haven't found this useful at all, so I'm leaving
-                              ;;       it out for now
-                              ;; (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
-                              ;; (if (> (length p-search-priors) 0)
-                              ;;     (propertize "H" 'face 'bold)
-                              ;;   " ")
-                              )))
-        (p-search-add-section `((heading . ,heading)
-                                (props . (p-search-section-id priors)))
-          (unless p-search-priors
-            (insert (propertize "No priors currently being applied.
+        (let* ((page-dims (p-search--display-columns))
+               (heading-line-1 (propertize (format "Priors (%d)" (length p-search-priors))
+                                           'face 'p-search-section-heading))
+               (heading (concat heading-line-1
+                                ;; NOTE: the following code adds the entropy display
+                                ;;       I haven't found this useful at all, so I'm leaving
+                                ;;       it out for now
+                                ;; (make-string (- (cadr page-dims) (length heading-line-1)) ?\s)
+                                ;; (if (> (length p-search-priors) 0)
+                                ;;     (propertize "H" 'face 'bold)
+                                ;;   " ")
+                                )))
+          (p-search-add-section `((heading . ,heading)
+                                  (props . (p-search-section-id priors)))
+            (unless p-search-priors
+              (insert (propertize "No priors currently being applied.
 Press \"P\" to add new search criteria.\n" 'face 'shadow)))
-          (dolist (prior p-search-priors)
-            (p-search--insert-prior prior))
-          (insert "\n")))
-      ;; TODO - Toggle occluded sections
-      (p-search--insert-results)
-      (goto-char (point-min))
-      (forward-line (1- at-line))
-      (save-excursion
-        (let* ((ovs (overlays-in (point-min) (point-max))))
-          (dolist (ov ovs)
-            (let* ((key (overlay-get ov 'p-search-key))
-                   (is-hidden (alist-get key occlusion-states nil nil #'equal)))
-              (when is-hidden
-                (goto-char (overlay-start ov))
-                (p-search-toggle-section)))))))))
+            (dolist (prior p-search-priors)
+              (p-search--insert-prior prior))
+            (insert "\n")))
+        ;; TODO - Toggle occluded sections
+        (p-search--insert-results)
+        (goto-char (point-min))
+        (forward-line (1- at-line))
+        (save-excursion
+          (let* ((ovs (overlays-in (point-min) (point-max))))
+            (dolist (ov ovs)
+              (let* ((key (overlay-get ov 'p-search-key))
+                     (is-hidden (alist-get key occlusion-states nil nil #'equal)))
+                (when is-hidden
+                  (goto-char (overlay-start ov))
+                  (p-search-toggle-section))))))))))
 
 (defun p-search-setup-buffer (&optional preset)
   "Initial setup for p-search buffer.
@@ -3966,6 +3981,7 @@ item's contents."
   (interactive)
   (unless (derived-mode-p 'p-search-mode)
     (error "No current p-search session found"))
+  (setq p-search-results-page-no 0)
   (p-search--reprint))
 
 (defun p-search-hard-refresh-buffer ()
@@ -4037,6 +4053,36 @@ item's contents."
   "Move point to the Search Results section of the buffer."
   (interactive)
   (p-search--jump-to-section-id 'results))
+
+(defun p-search-prev-results-page ()
+  "View the previous page of search results."
+  (interactive)
+  (if (eql p-search-results-page-no 0)
+      (beep)
+    (setq p-search-results-page-no (max 0 (1- p-search-results-page-no)))
+    (p-search--reprint)))
+
+(defun p-search-next-results-page ()
+  "View the next page of search results."
+  (interactive)
+  (let ((max-page (/ (1- (hash-table-count (p-search-candidates))) p-search-top-n)))
+    (if (eql p-search-results-page-no max-page)
+        (beep)
+      (setq p-search-results-page-no (1+ p-search-results-page-no))
+      (p-search--reprint))))
+
+(defun p-search-first-results-page ()
+  "Fiew the first page of search results."
+  (interactive)
+  (setq p-search-results-page-no 0)
+  (p-search--reprint))
+
+(defun p-search-last-results-page ()
+  "View the last page of search results."
+  (interactive)
+  (setq p-search-results-page-no
+        (/ (1- (hash-table-count (p-search-candidates))) p-search-top-n))
+  (p-search--reprint))
 
 (defun p-search-observe (prefix)
   "Perform observation on search result at point.
@@ -4124,6 +4170,10 @@ register to which the preset value will be saved."
     (keymap-set map "<return>" #'p-search-find-document)
     (keymap-set map "v" #'p-search-view-document)
     (keymap-set map "C-o" #'p-search-display-document)
+    ;; (keymap-set map "M-<" #'p-search-first-results-page)
+    (keymap-set map "<" #'p-search-prev-results-page)
+    ;; (keymap-set map "M->" #'p-search-last-results-page)
+    (keymap-set map ">" #'p-search-next-results-page)
     (keymap-set map "q" #'p-search-quit)
     (keymap-set map "Q" #'p-search-terminate-session)
     ;; (keymap-set map "C-o" #'p-search-display-file)
