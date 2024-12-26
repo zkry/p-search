@@ -101,6 +101,19 @@
             (push (cons 'denote-title (list title-nice title)) new-fields))
           (list (p-search-document-extend document new-id new-fields)))))))
 
+(defun psx-denote--arg-display (_input-spec _output-spec arguments)
+  "Display ARGUMENTS in a condensed format."
+  (let-alist arguments
+    (format "category: %s, signature: %s"
+            (propertize
+             (cond
+              ((and .category-keywords .category-text) "both")
+              (.category-keywords "cat")
+              (.category-text "text")
+              (t "off"))
+             'face 'p-search-value)
+            (propertize (if .include-signature "on" "off") 'face 'p-search-value))))
+
 (defconst psx-denote-mapping
   (p-search-candidate-mapping-create
    :id 'psx-denote-mapping
@@ -119,7 +132,8 @@
                                          :key "-s"
                                          :description "Include Signature"
                                          :default-value (lambda () psx-denote-include-signature-p))))
-   :function #'psx-denote-annotator))
+   :function #'psx-denote-annotator
+   :condenced-arg-display-function #'psx-denote--arg-display))
 
 (add-to-list 'p-search-candidate-mappings psx-denote-mapping)
 
