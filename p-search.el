@@ -1106,10 +1106,13 @@ INIT is the initial value given to the reduce operation."
    :options-spec '()
    :function
    (lambda (_args)
-     (seq-map
-      (lambda (buf)
-        (p-search-documentize `(buffer ,buf)))
-      (buffer-list)))
+     (let ((docs))
+       (seq-map
+        (lambda (buf)
+          (unless (= (aref (buffer-name buf) 0) ?\s)
+            (push (p-search-documentize `(buffer ,buf)) docs)))
+        (buffer-list))
+       docs))
    :lighter-function
    (lambda (_args)
      "buffers")))
