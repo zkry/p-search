@@ -3506,7 +3506,8 @@ mapping as this data is needed to retrieve the document count."
           (dolist (generator-args p-search-active-candidate-generators)
             (p-search--insert-candidate-generator generator-args))
           (insert "\n"))
-        (unless (= 0 (length p-search-active-candidate-generators))
+        (when (and (> 0 (length p-search-active-candidate-generators))
+                   (> 0 (length p-search-candidate-mappings)))
           (p-search-add-section
               `((heading . ,(propertize (format "Mappings (%d)" (length p-search-mappings))
                                         'face 'p-search-section-heading))
