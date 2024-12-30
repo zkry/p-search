@@ -15,7 +15,7 @@
 
   [[./documents/screenshot.png]]
 
-* Instalation
+* Installation
 
   Until p-search is available on ELPA/MELPA, you will have to install
   this package manually.  The only dependency of p-search is [[https://elpa.gnu.org/devel/heap.html][heap]].
@@ -27,7 +27,7 @@
 
   Using Straight:
 #+begin_src lisp
-  (use-package p-search :straight (:host github :repo "https://github.com/zkry/p-search.git"))
+  (use-package p-search :straight (:host github :repo "zkry/p-search"))
 #+end_src
 
 
