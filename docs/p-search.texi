@@ -42,6 +42,9 @@ General Public License for more details.
 @node Top
 @top p-search User Manual
 
+p-search is a local search engine for Emacs with the goals of being
+configurable and customizable to assist you in your daily needs.
+
 @c @noindent
 This manual is for p-search version 0.1.0.
 
@@ -57,37 +60,18 @@ hallmark of the Emacs ecosystem.  By ``Search engine,'' I mean a
 program that systematically organizes @emph{things} to search, and
 coordinates @emph{queries}, combining their results.
 
-What are @emph{you} looking for?  The @emph{file} which you'll need to
-modify to implement your sprint's ticket?  The @emph{function} which
-contains the routing patter for your system's architecture?  A
-@emph{note} which you have a faint memory of writing, but aren't even
-sure it exists?  That @emph{blog post} on your colleage's website on
-the exotic floura of the Nusantara?  Or maybe your camera drone
-crashed somewhere in the Swiss Alps and you're organizing a search
-party to recover the the footage.
+Before becomming enthralled by the minutiae of p-search we should
+first go over the rationale behind this package.  To do so, we must
+consider what it means to search.
 
-p-search is designed to be able to assist you in all of these
-situations.  If the functionality you require isn't supported now, it
-should be fairly straightforward to extend it to meet your needs.
-
-
-@node Principals of p-search
-@section Principals of p-search
-
-Before becomming enthralled by the minutiae of p-search, its
-interfaces, its customizable variables, its points of extensibility,
-we should first go over the rationale behind this package.  To do so,
-we must consider what it means to search.
-
-There's a certain dance, a peculiar wandering, associated with the act
-of searching.  It begins, as it must, in the mind.  A particular state
-is envisioned: your lost keys in your hand, a software feature
-implemented, or understanding the workings of a certain software
-component.  Your mind then maps out the entire set of actions leading
-to said state: you find your keys under your bed, or you find them in
-your pants pocket, or you ask your spouse and the keys are handed to
-you.  Again in your mind, each outcome is given a probability of
-ocurring.
+There's a certain dance associated with the act of searching.  It
+begins, as it must, in the mind.  A particular state is envisioned:
+your lost keys in your hand, a software feature implemented, or
+understanding the workings of a certain software component.  Your mind
+then maps out the entire set of actions leading to said state: you
+find your keys under your bed, or you find them in your pants pocket,
+or you ask your spouse and the keys are handed to you.  Again in your
+mind, each outcome is given a probability of occurring.
 
 You then proceed from one action to another, starting from the most
 likely, and proceeding to the unexpected.  From glancing at the
@@ -106,10 +90,11 @@ looking for was never written and you'll have to write it, or your
 camera drone was seized by authorities and your best hope now is for
 the whole incident to be forgotten.
 
-Let's now take a closer look at each step in the search process, and how p-search attempts to capture it in code.
+Let's now take a closer look at each step in the search process, and
+how p-search attempts to capture it in code.
 
 @node The Search Candidates
-@subsection The Search Candidates
+@section The Search Candidates
 
 The first part of the search process is defining what is being
 searched.  If you're searching for a file, it's usually bound by a
@@ -125,7 +110,7 @@ subdirectory.
 
 A candidate in p-search is defined as something with key-value
 attributes.  A filesystem candidate could have a filename, file
-content, modifiction date, size, etc.  An Emacs buffer candidate, for
+content, modification date, size, etc.  An Emacs buffer candidate, for
 example, you want to search your open buffers, could have a content,
 name, and Emacs buffer object.  A physical location candidate could
 have a latitude and longitude.
@@ -137,7 +122,7 @@ latitude/longitude, you can perform a distance search.  If a candidate
 has a git-root property, then you can perform a search by git authors.
 
 @node Candidate Mappings
-@subsection Candidate Mappings
+@section Candidate Mappings
 
 Unfortunately, many searches can't be reduced to a search on an
 operating system's file system.  As a simple example, suppose you
@@ -152,17 +137,17 @@ There are many cases where you'll want to add search criteria to an
 already existing search candidate and ``mappings'' in p-search allow
 you to do this.  A mapping in p-search is essentially a function that
 takes a document (defined by key-value properties) and returns an
-expanded document, wiht perhaps new properties and fields to search
+expanded document, with perhaps new properties and fields to search
 on.  This in turn allows for a high level composability between
 various components, allowing you to mix and match what particular
 details you're interested in searching on.
 
 @node Asserting Probabilities
-@subsection Asserting Probabilities
+@section Asserting Probabilities
 
 A search begins in the place most likely to have the positive result.
 If you dropped your keys while jogging, you would assign a much higher
-probability to the area on on your route rather than the paths you
+probability to the area on your route rather than the paths you
 didn't tread.  If you're uncertain about where you ran, perhaps you
 passed through a wooded area with no clear trail, then your
 probability will be diffused, diluted among all possible routes.  And
@@ -181,7 +166,7 @@ you believe to be important.
 If for example you're looking for a particular function, you'll
 conjure in your mind words which you believe the function will
 contain.  You can then perform a text query in p-search which will
-assign higher probabilites to files containing these words.  If you
+assign higher probabilities to files containing these words.  If you
 believe a file was modified at a certain time, you can assert such a
 prior, and the closer a file was modified to that time, the higher a
 probability is given to it. As mentioned in Candidate Mappings ??LINK,
@@ -190,7 +175,7 @@ author.  These fields can too become the target of a search.
 
 
 @node Searching and Making Observations
-@subsection Searching and Making Observations
+@section Searching and Making Observations
 
 After adding a number of priors, you'll then proceed to peruse the
 search results.  p-search orders the results so the most probable
@@ -200,12 +185,12 @@ the file as such, lowering its probability.
 
 Just like when looking for things and you end up searching the same
 location more than once, even after marking a p-search result as
-irrelivent, the file may still come up again, even before other files
+irrelevant, the file may still come up again, even before other files
 that have never been looked at.  If all the priors you've applied
 point to a certain file, even after making an observation, it may
 still very well have a high probability.
 
-You may notice that the results coming back aren't relevent.  If you
+You may notice that the results coming back aren't relevant.  If you
 can find what these have in common, for example, them being in a test
 directory, or being related to another sense of an ambiguous term, you
 can add more priors to further refine the results.
@@ -214,7 +199,7 @@ And thus your search comes to an end.  You will have hopefully found
 that which you set out after.  If you find the search session you
 created useful, p-search allows you to save it for use again.  Maybe
 you have a new idea for a prior function that you want to implement in
-Elsip.  Or you can kill the session and erase from your mind the wild
+Elisp.  Or you can kill the session and erase from your mind the wild
 goose chase you were set upon.
 
 In any case, it's my hope that p-search assisted you on your journey.
@@ -246,7 +231,7 @@ While p-search can function without any external commands, if you intend to sear
 @chapter Getting Started
 
 This chapter will cover a simple end-to-end workflow with p-search to
-get you familliar with the program.  This tutorial will use the Emacs
+get you familiar with the program.  This tutorial will use the Emacs
 source code to demonstrate its features.
 
 @node Creating the p-search session
@@ -256,7 +241,7 @@ You can start a p-search session with @kbd{M-x p-search}.  By default,
 this will start a session set up to search files either in the
 project's (see project.el) directory, or if no project exists, the
 current directory.  For this reason, be careful not to start a
-p-search session from a directory with an excessie amount of files,
+p-search session from a directory with an excessive amount of files,
 like your home directory.
 
 @image{getting-started-1, 200mm}
@@ -290,15 +275,17 @@ Queries in p-search are @strong{not} like the text passed into a tool like @comm
 With the query created, your should see a new item under @samp{Priors
 (1)} indicating your new query.  The @samp{text query} prior will have
 the text ``loading'' next to it as the command runs in the background.
-If you are using @command{grep} and don't have ripgerp (@command{rg})
+If you are using @command{grep} and don't have ripgrep (@command{rg})
 installed, this search on a directory as large as Emacs can take
 around a minute to complete.
 
 After the commands complete, the ``loading'' text will go away and the items in @samp{Search Results} should update.  The results are now as follows, along with my impressions on the search results:
 
+@image{getting-started-2, 200mm}
+
 @itemize
 @item
-@samp{.../emacs/test/lisp/emacs-lisp/cl-seq-tests.el} Thoughs: I didn't want to read tests, but @samp{cl-seq} could be an interesting place to look if I was interested in some functions on top of lists.
+@samp{.../emacs/test/lisp/emacs-lisp/cl-seq-tests.el} Thoughts: I didn't want to read tests, but @samp{cl-seq} could be an interesting place to look if I was interested in some functions on top of lists.
 
 @item
 @samp{.../emacs/doc/lispref/lists.texi} Thoughts: Interesting, there's a ``lists'' section of documentation.  I was looking for code but maybe I'll take a look at this some other time.
@@ -311,7 +298,7 @@ After the commands complete, the ``loading'' text will go away and the items in 
 @samp{.../emacs/lisp/progmodes/ebnf-otz.el}  Thoughts: I have literally no idea what this is about.  I'll have to read the source for this.
 
 @item
-@samp{.../emacs/lisp/org/org-list.el} Thoughts: Ok, another ambiguity.  I was interested in the internals
+@samp{.../emacs/lisp/org/org-list.el} Thoughts: OK, another ambiguity.  I was interested in the internals
 
 @end itemize
 
@@ -320,7 +307,7 @@ So the results I got back were related to lists but this isn't what I wanted.  L
 @node Refining our Search
 @section Refining our Search
 
-First, with the term ``list'' being ambigous, I want to add a second
+First, with the term ``list'' being ambiguous, I want to add a second
 term, ``cons'' which may help disambiguate the query as I know lists
 in Emacs are composed of cons cells.  To do this, put the point over
 the @samp{text query} prior and press @kbd{e} to edit it.  You can
@@ -328,7 +315,7 @@ modify all the properties of the prior, but we're only interested in
 its query term so we press @kbd{q} to edit the query term.  Enter the
 text ``list cons'' @key{RET} @kbd{e} to have it search both.
 
-Next, since we're concered about internals, let's add another prior
+Next, since we're concerned about internals, let's add another prior
 matching only @samp{.c} files.  To do this, we press @kbd{P}
 (@code{p-search-add-prior}) and then @kbd{h} (for ``title heading'').
 Enter the text @samp{.c}, then @key{RET} and @kbd{c} to create the
@@ -341,10 +328,16 @@ Press @kbd{P}, then @kbd{g a} (for ``git author''), then select
 @samp{Richard M. Stallman} from the selections.  Wait for this prior
 to run and let's look at our final results.
 
+@image{getting-started-3}
+
 @node Final Results
 @section Final Results
 
-The results now look even more relevant from the first time.  It seems the irrelevant results now are due to the the functions @code{list} and @code{cons} being called so much.
+The results now look even more relevant from the first time.  It seems
+the irrelevant results now are due to the functions @code{list}
+and @code{cons} being called so much.
+
+@image{getting-started-4}
 
 @itemize
 @item
@@ -401,7 +394,7 @@ Initialize the session with the candidate generator (see @code{p-search-candidat
 If a @emph{preset} plist is provided, initialize the session with the provided preset.  Presets are a way of defining p-search sessions with data. See ???
 
 @item a function
-Call the provided function to obtain the session's initial candidate generator.  The function should take no arguments and return eithr a cons cell or preset plist as described above.
+Call the provided function to obtain the session's initial candidate generator.  The function should take no arguments and return either a cons cell or preset plist as described above.
 
 @end table
 @end defopt
@@ -457,9 +450,9 @@ everything that will be searched to be enumerated upfront.  This is
 because p-search is not inherently tied to the running of any specific
 tool and so a starting point needs to be established.
 
-The documents that candidate generators provide are essentailly sets
+The documents that candidate generators provide are essentially sets
 of key-value pairs.  It is the various properties on the document that
-determines the type of operations which can be perfomred.  For
+determines the type of operations which can be performed.  For
 example, if you are searching for Elisp function symbols, you won't be
 able to search by Git Author. The inner workings of candidate
 generators and how to create them will be explained in the section on
@@ -496,7 +489,7 @@ you want, and then press @kbd{e} to finish the editing.
 @item @kbd{k} (@code{p-search-kill-entity-at-point})
 @kindex k
 @findex p-search-kill-entity-at-point
-This command removes the entity at the point, be it a candidate generator, mapping, or prior.  After the removeal, the entire calculation process restarts.
+This command removes the entity at the point, be it a candidate generator, mapping, or prior.  After the removal, the entire calculation process restarts.
 @end table
 
 @defopt p-search-candidate-generators
@@ -529,7 +522,7 @@ to be blank.
 
 The remainder of the candidate generator section will cover the
 candidate generators that come packaged in p-search.  The most
-prominant one is the filesystem candidate generator.  p-search
+prominent one is the filesystem candidate generator.  p-search
 defaults to creating this in a variety of situations.  The candidate
 generator makes a document for each file in a directory.  You will be
 prompted for the following arguments when creating a filesystem
@@ -627,13 +620,13 @@ likely you will need to use mappings.  If you are using p-search as a
 more intelligent grep however, you will likely not need mappings.
 
 It is also likely that a pre-existing mapping will not suit your needs
-and wou will have to create a new one.  This is explained a later
+and would will have to create a new one.  This is explained a later
 chapter (???).
 
 @node Creating and Editing Mappings
 @subsection Creating and Editing Mappings
 
-Simmilar to candidate generators, the list of known candidate mappings
+Similar to candidate generators, the list of known candidate mappings
 is stored in the variable @code{p-search-candidate-mappings}.  Your p-search session may or may not have this list populated.  You can press @kbd{M} to add a mapping.
 
 @table @asis
@@ -647,15 +640,15 @@ After selecting the prior you want, you will the proceed to configure the mappin
 
 Mappings can be edited and killed simmilar to how candidate generators are, via @kbd{e} (@code{p-search-edit-dwim}) and @kbd{k} (@code{p-search-kill-entity-at-point}) respectively.
 
-A mapping works simmilar to the map function in the functional programming paradigmn.  Each mapping has a function which takes in the candidate document (which is a set of key-value pairs), and returns one or more deriving documents, nil meaning nothing can be done, or @code{:remove}, which explicitly removes a document. Every mapping can be created with the option @kbd{-f} (@samp{filter}).  When on, a mapping that doesn't do anything to a document will remove the document.
+A mapping works simmilar to the map function in the functional programming paradigm.  Each mapping has a function which takes in the candidate document (which is a set of key-value pairs), and returns one or more deriving documents, nil meaning nothing can be done, or @code{:remove}, which explicitly removes a document. Every mapping can be created with the option @kbd{-f} (@samp{filter}).  When on, a mapping that doesn't do anything to a document will remove the document.
 
 @node Priors
 @section Priors
 
-Priors are the entities in p-search that score documents according to some criteria.  Some priors may look for the occurrance of specific strings while others are more broad, perhaps assigning a score based on when the file was last modified.  The name ``prior'' comes from the fact that these are the assertions you make a priori, before looking at the results, and are meant to quantitively reflect you belives via a probability (value between 0 and 1).
+Priors are the entities in p-search that score documents according to some criteria.  Some priors may look for the occurrence of specific strings while others are more broad, perhaps assigning a score based on when the file was last modified.  The name ``prior'' comes from the fact that these are the assertions you make a priori, before looking at the results, and are meant to quantitatively reflect you believes via a probability (value between 0 and 1).
 
 When you're trying to find something with p-search, try to think
-beyond the the particular string you want to search for.  Think of
+beyond the particular string you want to search for.  Think of
 everything you believe about the file and try to reflect it via a
 prior.  If a prior doesn't exist for the criteria you want, feel free
 to open an issue, or you can even try your hand at creating one yourself as explained in a later chapter.
@@ -663,7 +656,7 @@ to open an issue, or you can even try your hand at creating one yourself as expl
 @node Creating and Editing Priors
 @subsection Creating and Editing Priors
 
-Creating priors follows a simmillar patter to creating candidate generators and mappings.  You can create a prior by pressing @kbd{P} (@code{p-search-add-prior}).  Like the creation process for the other entities, you will go through two steps: selecting and configuring.
+Creating priors follows a similar patter to creating candidate generators and mappings.  You can create a prior by pressing @kbd{P} (@code{p-search-add-prior}).  Like the creation process for the other entities, you will go through two steps: selecting and configuring.
 
 @table @asis
 @item @kbd{P} (@code{p-search-add-prior})
@@ -692,7 +685,7 @@ The final score is the product of all prior's probabilities.
 A normalized score is displayed to the user so that all probabilities add to one.
 @end itemize
 
-Other search systems employ a scoring system that incorperates additive elements as well as multiplicitive.  The problem with such an approach for p-search is that it ruins composability.   p-search is meant to be a tool to generate search setups on the fly.  Having a formula like @code{SCORE = FILE-SCORE * 1.2 + QUERY-SCORE * 1.3 + GIT-AUTHOR * 2} would require the user to evaluate each piece of the equation when any change is made.
+Other search systems employ a scoring system that incorporates additive elements as well as multiplicative.  The problem with such an approach for p-search is that it ruins composability.   p-search is meant to be a tool to generate search setups on the fly.  Having a formula like @code{SCORE = FILE-SCORE * 1.2 + QUERY-SCORE * 1.3 + GIT-AUTHOR * 2} would require the user to evaluate each piece of the equation when any change is made.
 
 A prior should assign a score to a document according to the following criteria:
 
@@ -764,16 +757,16 @@ You can create a text query prior by first pressing @kbd{P}
 will be covered in the next section.  Once you enter the query string,
 you can then further configure the prior.  Once created, the search processes will be created, the counts will be tallied, and then when every process of the search completes, the final score will be calculated.
 
-p-search uses the @strong{BM-25F} algorithm for scoring the text search.  Without going into the details, the @strong{BM-25F} algorith scores documents for each term based on two key components: @emph{term frequency}, and @emph{inverse document frequency}.  @emph{Term frequency} measures how often a term occurs while @emph{inverse document frequency} (IDF) measuers how much information a term provides by counting the number of documents the term occurs in.
+p-search uses the @strong{BM-25F} algorithm for scoring the text search.  Without going into the details, the @strong{BM-25F} algorithm scores documents for each term based on two key components: @emph{term frequency}, and @emph{inverse document frequency}.  @emph{Term frequency} measures how often a term occurs while @emph{inverse document frequency} (IDF) measures how much information a term provides by counting the number of documents the term occurs in.
 
-As a quick example, suppose the user seached for ``defun eggplant''.  Here we have two terms, @samp{defun} and @samp{eggplant}.  Since the term @samp{defun} would occur in almost every Elisp file, it's IDF would be very low, making it contribute practically nothing to the final score.  The term @samp{eggplant} on the other hand would be so rare, that any document containing it would have its score greatly increased.
+As a quick example, suppose the user searched for ``defun eggplant''.  Here we have two terms, @samp{defun} and @samp{eggplant}.  Since the term @samp{defun} would occur in almost every Elisp file, it's IDF would be very low, making it contribute practically nothing to the final score.  The term @samp{eggplant} on the other hand would be so rare, that any document containing it would have its score greatly increased.
 
 Since BM-25F scores are not a value between zero and one, the final score given to a document is the BM-25F score normalized between 0.5 and 0.7, with the highest scoring document getting a value of 0.7.  Documents that had no matches get a score of 0.3.  Remember, in p-search, evidence @emph{for} means getting a score greater than 0.5.  This is why we @emph{don't} normalize the BM-25F score between zero and one.
 
 The text search prior is in no way tied to specific search tools like
 @command{rg} or @command{grep}.  Instead, it delegates the searching
 to the candidate generator.  This way, the candidate generator can
-choose the best way to search the doucments it generates.  If the candidate generator has no specific way to seach specified, p-search will fall back to searching using Elisp (which can be slow for large number of documents).
+choose the best way to search the documents it generates.  If the candidate generator has no specific way to seach specified, p-search will fall back to searching using Elisp (which can be slow for large number of documents).
 
 @defopt p-search-default-search-tool
 This user option sets the default search tool selected when creating a text query prior.  It will try to use @command{rg} if it is available.
@@ -783,9 +776,9 @@ This user option sets the default search tool selected when creating a text quer
 @node Text Query Syntax
 @subsection Text Query Syntax
 
-The query syntax for p-seach does @emph{not} work the way a grep search would normally work.  The query string consists of @emph{terms} separated by spaces, and each term is queried individually, independent from the others.
+The query syntax for p-search does @emph{not} work the way a grep search would normally work.  The query string consists of @emph{terms} separated by spaces, and each term is queried individually, independent from the others.
 
-So for example, the query ``New York City'' contains three terms and will perform a separate seach for each one.  If you wanted to search the whole string, not broken apart, you'd wrap it in quotation marks.
+So for example, the query ``New York City'' contains three terms and will perform a separate search for each one.  If you wanted to search the whole string, not broken apart, you'd wrap it in quotation marks.
 
 @table @asis
 @item @samp{"term1 term2 ..."}
@@ -793,7 +786,7 @@ Search the terms as a whole, exactly as written.
 @item @samp{#"term"}
 Search term as a regular expression.
 @item @samp{term^}, @samp{term^3}
-Boost the importnance of term.  A number can be provided to give a
+Boost the importance of term.  A number can be provided to give a
 stronger boost.
 
 Note that after the text query is ran and scored, the score is
@@ -803,7 +796,7 @@ the other priors.  If you want to give more weight to the text query,
 use the @emph{importance} setting instead.
 
 @item @samp{(term1 term2 ...)~}
-Search for @samp{term1} and @samp{term2} occurring @emph{near} eachother.  To be considered @emph{near}, the terms need to occur within the number of lines specified by @code{p-search-default-near-line-length}.  Each term will reset the line counter, so for example, the query @samp{(foo bar baz)~} will with a line-length setting of 3 will match the following example:
+Search for @samp{term1} and @samp{term2} occurring @emph{near} each other.  To be considered @emph{near}, the terms need to occur within the number of lines specified by @code{p-search-default-near-line-length}.  Each term will reset the line counter, so for example, the query @samp{(foo bar baz)~} will with a line-length setting of 3 will match the following example:
 
 @example
 foo
@@ -854,7 +847,7 @@ on.  A mapping will define the fields it adds.  So for example, Denote
 files specify a particular format in which a title is located.  A
 mapping then could extract the Denote title and add it as a field.
 The mapping could also specify that this is a very important field and
-anything matching it shoudl be given extra weight.  Creating mappings with fields will be discussed in a different chapter.
+anything matching it should be given extra weight.  Creating mappings with fields will be discussed in a different chapter.
 
 Fields, when added, will be searched and weighted accordingly automatically as long as the mapping has added it.  If you want to search only a particular field, you can add it as the @samp{field} (i.e. @kbd{-f}) option in the text query prior.
 
@@ -876,20 +869,20 @@ The @strong{time of commit} prior assigns a score based on the time any commit i
 
 @table @asis
 @item @kbd{t} time scale
-The time scale value is used for specifying the parameters for the @emph{exponential distribution} used in generating scores.  Possible values are @code{:days}, @code{:weeks}, @code{:years}, and @code{:months}.  The distribution takes as input the absolute value of the time away frome the target.  A time perfectly matching the target time (i.e. difference of zero, @code{f(0)}) is given a score of 0.7 while a time infinitely away (i.e. @code{f(x) as x -> inf}) is 0.3.  The time scale parameter determines how fast this distribution approaches the asymptote.  A value of @code{:days} will mean that after ten or so days, the function will reach 0.3, while a value of @code{:years} means that only after 10+ years will the function reach its asymptote.
+The time scale value is used for specifying the parameters for the @emph{exponential distribution} used in generating scores.  Possible values are @code{:days}, @code{:weeks}, @code{:years}, and @code{:months}.  The distribution takes as input the absolute value of the time away from the target.  A time perfectly matching the target time (i.e. difference of zero, @code{f(0)}) is given a score of 0.7 while a time infinitely away (i.e. @code{f(x) as x -> inf}) is 0.3.  The time scale parameter determines how fast this distribution approaches the asymptote.  A value of @code{:days} will mean that after ten or so days, the function will reach 0.3, while a value of @code{:years} means that only after 10+ years will the function reach its asymptote.
 
 @item @kbd{d} target date
-The date you are want commits to be close to.  The commit coming closest to the target date is found, and the diffeerence in time is used as the input of the exponential distribution.
+The date you are want commits to be close to.  The commit coming closest to the target date is found, and the difference in time is used as the input of the exponential distribution.
 @end table
 
-The @strong{commit frequency} prior takes as input the number of commits to consider and gives a score such that the most committed file recieves a score of 0.7 while the least committed to recieves 0.5.  Files recieving no commits get a score of 0.3.
+The @strong{commit frequency} prior takes as input the number of commits to consider and gives a score such that the most committed file recieves a score of 0.7 while the least committed to recieves 0.5.  Files receiving no commits get a score of 0.3.
 
 @table @asis
 @item @kbd{n} last N commits to consider
 The number of commits to read from and count file commits.  This is needed as counting all commits may take a long time and may not be necessary or desired.
 @end table
 
-The @strong{commit author} prior takes as input the git author to look for, counts the ammount of commits by this author per-file, and scores these files on a linear scale from 0.5 to 0.7.  Files not committed to by this author are given a score of 0.3.
+The @strong{commit author} prior takes as input the git author to look for, counts the amount of commits by this author per-file, and scores these files on a linear scale from 0.5 to 0.7.  Files not committed to by this author are given a score of 0.3.
 
 @table @asis
 @item @kbd{a} Git Author
@@ -903,11 +896,11 @@ Note that all of these priors will work with more than one git repository in the
 
 p-search comes with a few filesystem related priors.  These are only selectable if a candidate document is known to be file.
 
-The @strong{modified-time} prior measures the time between a specified target and the modified time on the OS file, and uses it to calculate a score.  The workings of this prior function simmilar to the Git time-of-commit prior.
+The @strong{modified-time} prior measures the time between a specified target and the modified time on the OS file, and uses it to calculate a score.  The workings of this prior function similar to the Git time-of-commit prior.
 
 @table @asis
 @item @kbd{t} Time Scale
-This argument sets the scale of the exponential distribution to assign scores.  The available valuse are @code{:days}, @code{:weeks}, @code{:months}, @code{:years}.  Select the value where you believe the most important differentiation is located.
+This argument sets the scale of the exponential distribution to assign scores.  The available values are @code{:days}, @code{:weeks}, @code{:months}, @code{:years}.  Select the value where you believe the most important differentiation is located.
 
 @item @kbd{d} Target Date
 The date you are want modification time to be close to.  The difference from this time will be used to calculate the score.
@@ -935,7 +928,7 @@ Explain the search result or prior under the point.  The information will be dis
 
 When ran on a prior, you will see the probabilities that the prior has assigned to the various candidates.
 
-When ran on a candidate document, you will see information about the document including its fields and why it recieved the score it got.
+When ran on a candidate document, you will see information about the document including its fields and why it received the score it got.
 @end table
 
 @node Search Results
@@ -953,7 +946,7 @@ You can use @kbd{n} and @kbd{p} (@code{p-search-next-item} and
 @code{p-search-prev-item}) to navigate the entries in the search
 results.
 
-The following functions can also be used in in conjunction with the search results:
+The following functions can also be used in conjunction with the search results:
 
 @table @asis
 @item @kbd{@key{RET}} (@code{p-search-find-document})
@@ -964,7 +957,7 @@ window, moving to the line indicated in the preview section.  Each candidate typ
 @item @kbd{v} (@code{p-search-view-document})
 @kindex v
 @findex p-search-view-document
-This command behaves simmilar to @code{p-search-find-document}, except that the buffer it opens and navigates to is switched to read-only.
+This command behaves similar to @code{p-search-find-document}, except that the buffer it opens and navigates to is switched to read-only.
 @item @kbd{C-o} (@code{p-search-display-document})
 @kindex C-o
 @findex p-search-display-document

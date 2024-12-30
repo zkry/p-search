@@ -1,0 +1,18 @@
+Candidate Generators (1)
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (1)
+ M text query
+query-string: list
+importance: medium
+
+Search Results (5308)
+/Users/zacharyromero/dev/emacs/emacs/test/lisp/emacs-lisp/cl-seq-tests.el                    0.0002732071
+/Users/zacharyromero/dev/emacs/emacs/doc/lispref/lists.texi                                  0.0002731461
+/Users/zacharyromero/dev/emacs/emacs/lisp/org/org-list.el                                    0.0002730757
+/Users/zacharyromero/dev/emacs/emacs/lisp/progmodes/ebnf-otz.el                              0.0002729430
+/Users/zacharyromero/dev/emacs/emacs/lisp/emacs-lisp/backquote.el                            0.0002729170
