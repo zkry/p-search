@@ -1027,7 +1027,318 @@ Increase the preview size by one, or the amount provided by the prefix, and redi
 Increase the preview size by one, or the amount provided by the prefix, and redisplay the search results.
 @end table
 
-@c @node Extending p-search
-@c @chapter Extending p-search
+
+@node Saving Sessions
+@section Saving Sessions
+
+TODO
+
+@node Extending p-search
+@chapter Extending p-search
+
+This chapter will cover the details on how you can extend p-search to
+search what and how you want.  Writing Elisp, you'll be able to define
+new entities to search on, extract additional information from search
+candidates, and create new search criteria to search with.
+
+@node Creating Candidate Generators
+@section Creating Candidate Generators
+
+First we will cover how you can create your own candidate generator.
+By now you should hopefully have a good idea about what candidate
+generators are.
+
+In order for a candidate generator to be created, it needs to be added to the variable @code{p-search-candidate-generators}.  Items in this list are of type @code{p-search-candidate-generator-p}.  The @code{p-search-candidate-generator} is a cl-defstruct which you can create with the function @code{p-search-candidate-generator-create}.  So to add a new candidate generator, you will need to create the generator object and add it to the list of known generators.
+
+@defun p-search-candidate-generator-create
+Create a candidate generator with the keyword properties.  The following properties are available:
+
+@table @asis
+@item :id @var{symbol}
+The ID symbol of the candidate generator.  This should be the symbol that you store the candidate generator in.  This is required in order to create candidate generators from preset structures.
+@item :name @var{string}
+The name that the user will see when selecting a candidate generator to add.  This name will also appear in the p-search buffer when added.  An all-caps name has been the convention, but it's not important.
+@item :input-spec @var{spec-alist}
+An alist specification of the generators inputs.  Inputs are the required arguments, as opposed to options.  Each item in the alist will be prompted for on creation of a default is not specified.
+
+See ??? for a full description on input/options specifications.
+
+@item :options-spec @var{spec-alist}
+Similar to the @code{:input-spec} parameter, the @code{:options-spec} specifies the optional parameters that a user may specify.  See ??? for a full description on input/options specifications.
+
+@item :function @var{CG-function}
+This slot provides the main functionality for the candidate generator.  The function should accept one argument: the alist of arguments for inputs and options.  The arguments' keys will match that of the input and options spec. The function should return a list of @emph{document alists}.  This is required for the candidate generator to function.
+
+@item :lighter-function @var{fn}
+This should be a function taking in the combined input/options alist,
+and return a string giving a short description of what the candidate
+generator is to be displayed in various places.  For example, the
+@emph{FILESYSTEM} candidate generator returns the string ``FS:'' plus
+the directory being searched on.
+
+@item :term-frequency-function @var{tf-func}
+This function, when provided, should accept three parameters: the arguments of the candidate generator, the term being searched on, and the callback to call after the terms are counted.
+
+The arguments are the combined inputs/outputs, similar to the other functions.  The term is an Emacs regular expression form as data (see ???).  The callback should be called with one argument: a hashmap of document ID to term count.
+
+This is an optional argument and if this function isn't provided, p-search will search the contents using Elisp.  The main usage of this function is to give p-search a faster way to search rather than Elisp.
+
+@item :condenced-arg-display-function @var{func}
+This function can be defined in order to define a custom string to
+show when the candidate generator's section is folded.  The function should take one argument, a cons pair of candidate generator and its arguments, and should return a string to be displayed when the candidate generator is folded.
+@end table
+@end defun
+
+In summary, to make a new candidate generator, make a candidate generator object and store it in a @code{defconst}, then add it to the @code{p-search-candidate-generators} list.  The candidate generator you create should at a minimum have a name, id, input/options specs and a function to generate documents.
+
+
+@node Creating Documents
+@subsection Creating Documents
+
+A candidate generator needs a function to generate documents.
+Documents are just sets of key-value pairs.   This section will cover
+creating documents.
+
+There are only three properties that a candidate document must have in p-search: @code{content}, @code{title}, and @code{id}.  The ID of a document is special in that it is used to determine the action to run when a document is selected.  You generally shouldn't create these by hand but instead rely on the function @code{p-search-documentize}.  This function takes the documents ID and returns the full document using predefined rules.  You can define such rules via the @code{p-search-def-property} function.
+
+@defun p-search-def-property id-type property-symbol function
+
+This function defines property @var{property-symbol} on document type @var{id-type}, using the function @var{function} on the second element of the ID.
+@end defun
+
+@defun p-search-documentize doc-id
+Returns a document alist by finding all properties defined for @var{doc-id} and wrapping them in thunks to be lazily evaluated.  @var{doc-id} should be a list where the first element is the document's type, and the second element is the data which identifies the document, used as the argument to the property functions.
+@end defun
+
+For example, if we make the following definition of a document type called ``base'',
+
+@lisp
+(p-search-def-property 'base 'title #'car)
+(p-search-def-property 'base 'content #'cdr)
+@end lisp
+
+then calling @code{(p-search-documentize (base (cons "My Title" "my
+content...")))} will result in a document with @var{id} of @code{(base
+(cons "My Title" "my content..."))}, @var{title} of @code{"My Title"}
+and content of @code{"my content..."}.
+
+If we wanted to make a candidate generator for Wikipedia entries, we could make the following definition:
+
+@lisp
+(p-search-def-property
+  'wikipedia
+  'title
+  #'identity)
+(p-search-def-property
+  'wikipedia
+  'content
+  (lambda (wikipedia-entry-name)
+    (url-retrieve-synchronously
+      (concat "https://en.wikipedia.org/wiki/" wikipedia-entry-name))))
+
+;; We can now create wikipedia entries with the following
+(p-search-documentize '(wikipedia "Mountain_pigeon"))
+@result{}
+((id . (wikipedia "Mountain_pigeon"))
+ (title . "Mountain_pigeon")
+ (content . "<html>..."))
+@end lisp
+
+
+@defun p-search-def-function id-type function-symbol function
+Similar to @code{p-search-def-property}, this function defines a candidate result function for a given type.  This is how you define actions when selecting a search result.  For a file, you may want to call @code{find-file}, while for a buffer, you may want to call @code{display-buffer}.
+
+The function @code{p-search-goto-document} is the main one you should define.  For example, @samp{file} type documents have an ID in the form @code{(file @var{filename})}.  The function is defined as follows:
+
+@lisp
+(p-search-def-function 'file 'p-search-goto-document #'find-file-other-window)
+@end lisp
+
+Going off of the Wikipedia example above, we may want to define the @code{p-search-goto-document} as follows:
+
+@lisp
+(p-search-def-function 'wikipedia 'p-search-goto-document
+  (lambda (wikipedia-entry-name)
+    (browse-url (concat "https://en.wikipedia.org/wiki/" wikipedia-entry-name))))
+@end lisp
+@end defun
+
+
+@node Creating Mappings
+@section Creating Mappings
+
+A mapping is a way to add information to candidate documents, or generate multiple candidates from a single one.
+
+Like candidate generators, in order to create a mapping you should create a new mapping object and add it to the list @code{p-search-candidate-mappings}.
+
+@defun p-search-candidate-mapping-create
+
+Create a new mapping with the given keyword arguments.  The following properties are available:
+
+@table @asis
+@item :id @var{symbol}
+The ID symbol of the mapping.  This should be the symbol that you store the mapping in.  This is required in order to create mappings from preset structures.
+@item :required-property-list @var{prop-list}
+The list of properties that a document must have in order for the mapping to be used on it.  This should be a list of property symbols.  These are the properties that you define using @code{p-search-def-property}.
+@item :name @var{string}
+The name for the mapping that will be showed to the end user.
+@item :input-spec @var{spec-alist}
+The specification for the required inputs arguments.
+@item :options-spec @var{spec-alist}
+The specification for the options arguments.
+@item :function @var{mapping-function}
+The function which performs the mapping.  This function should take two arguments, the combined input/options arguments and the document to be mapped.  The function should return either the newly modified document, a list of documents, nil (meaning nothing could be done), or :remove (meaning the file document should be removed).
+@end table
+@end defun
+
+You shouldn't work with documents as Lisp objects, but rather use the following functions to interface with them:
+
+@defun p-search-document-property document prop-sym
+Return a specified property of the document.  Properties are defined
+with the @code{p-search-def-property} and are normally @emph{thunked}
+so as to not fetch all the results at once.  This function calls any thunk and returns the appropriate value.
+@end defun
+
+
+@defun p-search-document-extend document &optional new-id new-fields new-props
+Take an existing document and return a new document extended with various properties.  A new ID should normally be a list where the first element is the mapped document type, the second is the old ID and the third is the identifier.  For example, a ``narrowed'' document mapping could take the form @code{(narrow (file "~/Dowloads/file.txt") (1291 . 3012))} to mean ``take another document and narrow it to 1291 and 3012'' (such a mapping doesn't currently exist).
+
+The @var{new-fields} argument should be an alist of any new fields to be added to the document. The fields will be appended to the document and previously added fields will never be overwritten.
+
+The @var{new-props} argument should be a an alist of any new properties to give the document.  Properties given here, unlike fields, will overwrite the previous value.
+@end defun
+
+@node Input/Options Specification
+@section Input/Options Specification
+
+Input and option specifications are used in all of the main entities
+of p-search.  They are used to define what data a particular component
+needs.  A input/option specification is an alist where the car element is the argument symbol, and the cdr is the transient specification.  p-search being driven by transient, transient infix is needed for each argument type, in order for the system to know how to read and display such arguments.
+
+The following is a list of the available transient infixes to choose from.  The specification part is of the form @code{(infix-item &key kwargs)}.  Each type can take the arguments @code{:key}, @code{:description}, @code{:default-value}, and @code{:instruction-string}.
+
+@table @asis
+@item p-search-infix-toggle
+A on/off toggle.  It's value will be non-nil when on and nil if off.
+@item p-search-infix-choices
+Prompt the user for a selection out of a list of possible choices.  In
+addition to the standard arguments, the argument @code{:choices}
+should also be provided, which should be a list of possible choices or a function to call to get a list of possible choices.
+@item p-search-infix-date
+A date with time.  This infix uses org-mode's @code{org-read-date} function to get the user's selected date.  The value of this will be a string in the form @samp{%Y-%m-%d %H:%m}.
+@item p-search-infix-number
+A number.  This infix uses the @code{read-number} function obtain the selected number.
+@item p-search-infix-string
+A simple string.
+@item p-search-infix-regexp
+A regular expression string.
+@item p-search-infix-directory
+A directory.  This infix uses the @code{read-directory-name} function to read a user's selected directory.
+@item p-search-infix-memory
+An amount of memory.  This uses a specialized reader that can understand the various units of memory (e.g. KB, KiB).
+@end table
+
+The @code{:key} parameter should be the string of the transient key to press.  The @code{:description} parameter is the human-readable name of the item that will show up on various UI components.  The @code{:default-value} should be the default value that the parameter takes, or a function with no arguments that returns it.  If a default value is provided on an input, the user will not be prompted for the value.  The @code{:instruction-string} parameter is a string that will show up when prompting a user for the item, which should give more detailed instructions about what the field does or what is expected.
+
+The following are some examples of input/options specs:
+
+@lisp
+;;; example 1
+  '((n-commits . (p-search-infix-number
+                   :key "n"
+                   :description "Last N Commits to Consider"
+                   :default-value 20)))
+
+;;; example 2
+  `((time-scale . (p-search-infix-choices
+                    :key "t"
+                    :description "Time Scale"
+                    :instruction-string
+                    "The scale of time where you expecct the most differentiation to happen.
+E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
+     For \"This year vs last year vs three years ago\" choose :years."
+                    :choices ,(mapcar #'car p-search--time-scales)
+                    :default-value :months))
+     (target-date . (p-search-infix-date
+                     :key "d"
+                     :description "Target Date"
+                     :default-value ,(format-time-string "%Y-%m-%d %H:%m"))))
+
+;;; example 3
+   `((base-directory . (p-search-infix-directory
+                        :key "d"
+                        :description "Directories"
+                        :default-value (lambda () default-directory)))
+     (filename-regexp . (p-search-infix-regexp
+                         :key "f"
+                         :description "Filename Pattern"
+                         :default-value ".*"))
+     (search-tool . (p-search-infix-choices
+                     :key "t"
+                     :description "Search Tool"
+                     :choices (:grep :rg :ag)
+                     :default-value ,(or p-search-default-search-tool :grep))))
+@end lisp
+
+
+@node Creating Priors
+@section Creating Priors
+
+The third type of entities you may find yourself wanting to create are priors.  Creating a new prior type is similar to that of candidate generators and mappings: you will create a new prior template with @code{p-search-prior-template-create} and add it to the list @code{p-search-prior-templates}.
+
+@defun p-search-prior-template-create
+
+Create a new prior template with the given keyword arguments.  The following properties are available:
+
+@table @asis
+@item :id @var{symbol}
+The ID symbol of the prior template.  This should be the symbol that you store the prior template in.  This is required in order to create priors from preset structures.
+@item :group @var{string}
+The name of the transient menu group the prior should go in.  Example of groups are ``emacs'', ``filesystem'', and ``git''.
+@item transient-key-string @var{key-string}
+The transient keys which should be pressed to create the prior.  These keys will appear after that of the group's keys (e.g. if the group is ``filesystem'', it will have an @kbd{f} key to begin).
+@item :input-spec @var{spec-alist}
+The specification for the required inputs arguments.
+@item :options-spec @var{spec-alist}
+The specification for the options arguments.
+@item required-properties @var{required-props-list}
+A list of the required property symbols needed for the prior to work.  Recall that properties are defined via the @code{p-search-def-property} function (see ???).  If there are no documents with the requested properties, this prior will not be available.
+@item :initialize-function @var{mapping-function}
+The function which is ran when the prior is created, which should result in a score being assigned to each document.  This function takes one argument, the prior that the user created.  The function should either create a process that will assign scores to documents or directly assign scores in the function itself.
+@end table
+@end defun
+
+When creating the initialization function for a new prior type, the following functions will be helpful:
+
+@defun p-search-set-score prior doc-id p
+Set the score of @var{doc-id} to @var{p} of a given prior.  @strong{note:} in order for this function to work properly, you need to ensure your current buffer is that of the p-search session.  Calling this function in a temporary buffer or a process buffer won't work properly.
+
+You can set a default score for all documents not specified by passing in @code{:default} to @var{doc-id}.
+@end defun
+
+@defun p-search-candidates-with-properties @var{prop-list}
+Return a hashmap of document-id to document for each document in the system that has every property specified in @var{prop-list}.  You can use this in conjunction with the functions @code{maphash}, @code{p-search-document-property} (to get the properties you're interested in), and @code{p-search-set-score} to set the scores of the documents.
+@end defun
+
+@defun p-search-calculate
+Perform a re-calculation and re-display of the session buffer.  This should be called after you have set the score for every document you're interested in.  Otherwise, the user would have to refresh the buffer to see the score updates.
+@end defun
+
+@defun p-search-prior-arguments prior
+Return the input/option arguments a user provided to the prior as an alist.
+@end defun
+
+@defun p-search-unique-properties prop-id
+For every candidate document in the system, return all unique values of the property @var{prop-id}.
+@end defun
+
+@node The Preset Data Structure
+@section The Preset Data Structure
+
+
+
+@node Programatically Creating Sessions
+@section Programatically Creating Sessions
+
 
 @bye
