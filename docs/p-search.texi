@@ -1332,13 +1332,44 @@ Return the input/option arguments a user provided to the prior as an alist.
 For every candidate document in the system, return all unique values of the property @var{prop-id}.
 @end defun
 
-@node The Preset Data Structure
-@section The Preset Data Structure
 
+@node The Preset Data Structure and Programatically Creating Sessions
+@section The Preset Data Structure and Programatically Creating Sessions
 
+p-search supports creating sessions from data, as opposed to being manually created by users.  @emph{Preset plists} are the data structures that support this functionality.  It should be possible to reproduce any p-search session with a preset plist.  A preset plist is defined by the following structure:
 
-@node Programatically Creating Sessions
-@section Programatically Creating Sessions
+@itemize @asis
+@item :candidate-generator @var{generator-obj-symbol} :args @var{arg-alist}
+You can reproduce a candidate generator with a plist containing the
+two key-value pairs with @code{:candidate-generator} and @code{:args}.
+The candidate generator should be the variable which the candidate generator is bound to and the arg-alist should be all the input/option arguments (you're only required to define items in the input-spec that don't have defaults).
+@item :candidate-mapping @var{mapping-obj-sym} :args @var{arg-alist}
+Similar to candidate generators, you can define a mapping with the keys @code{:candidate-mapping} and @code{:args}.
+@item :prior-template @var{template-obj-sym} :args @var{arg-list}
+Again, similar to the other two types, you can define a prior preset with the keys @code{:prior-template} and @code{:args}.
+@item :group @var{list-of-preset-elts}
+You can define a preset with more than one element using the @code{:group} key with a value of a list of preset items, as defined here.
+@end itemize
+
+The following is an example of a preset plist with multiple items in it.
+
+@lisp
+(:group ((:candidate-generator p-search-candidate-generator-filesystem :args ((base-directory . "/Users/zacharyromero/dev/emacs/emacs/") (filename-regexp . ".*") (search-tool . :rg) (use-git-ignore . on)))
+         (:prior-template p-search-prior-query :args ((query-string . "list") (importance . medium)))
+         (:prior-template p-search-prior-query :args ((query-string . "cons") (importance . medium)))
+         (:prior-template p-search-prior-git-author :args ((git-author . Richard\ M.\ Stallman) (importance . medium)))
+         (:prior-template p-search-prior-title :args ((title . ".c") (importance . medium)))))
+@end lisp
+
+Remember, in a p-search session you can run the command
+@code{p-search-show-session-preset} to view the current session as a
+preset plist.
+
+Once you have the preset plist, you can pass it as the first argument to the @code{p-search-setup-buffer} function to create a session with that preset.  You can also set the variable @code{p-search-default-command-behavior} to a preset to configure p-search to create a session of your choosing (see Starting a session ???).
+
+@defun p-search-setup-buffer &optional preset-plist
+Start a p-search session. If a preset plist is provided, the session will be created with the preset instantiated.
+@end defun
 
 
 @bye
