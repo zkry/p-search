@@ -208,7 +208,7 @@ In any case, it's my hope that p-search assisted you on your journey.
 @node Installation
 @chapter Installation
 
-p-search is currently not published on any Emacs package manager and will have to be installed from source.  The only external dependency is the @code{heap} package which is available on GNU ELPA.
+p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.  The only external dependency is the @code{heap} package which is available on GNU ELPA.
 
 
 @node Installing from Quelpa
@@ -220,6 +220,13 @@ Quelpa is a tool to install Emacs packages easily from local or remote sources. 
 (quelpa '(p-search :repo "zkry/p-search" :fetcher github))
 @end lisp
 
+@node Installing with Straight
+
+Using straight, the package can be installed as follows.
+
+@lisp
+(use-package p-search :straight (:host github :repo "zkry/p-search"))
+@end lisp
 
 @node Recommended Tooling
 @section Recommended Tooling
@@ -270,7 +277,7 @@ Enter ``list'' and press @key{RET}.  Press @kbd{c} to create the
 prior.  The options which can be entered will be explained in a future
 section.
 
-Queries in p-search are @strong{not} like the text passed into a tool like @command{grep}.  p-search will break apart what you enter here and perform different searches for each query part.  The details for the query mechanism can be found in ?????.
+Queries in p-search are @strong{not} like the text passed into a tool like @command{grep}.  p-search will break apart what you enter here and perform different searches for each query part.  @xref{Text Query Syntax} for more details on the query mechanism.
 
 With the query created, your should see a new item under @samp{Priors
 (1)} indicating your new query.  The @samp{text query} prior will have
@@ -379,7 +386,7 @@ initialized with).  It can take the following values:
 @table @asis
 @item @code{t}
 Use the default behavior.  If the current @code{default-directory} is
-a project (see ???), initialize the session with a filesystem
+a project (@pxref{Projects,,,emacs,GNU Emacs manual}), initialize the session with a filesystem
 candidate generator on the project's root.  Otherwise initialize the
 session in the current @code{default-directory}.  The default behavior
 is subject to change.
@@ -388,10 +395,10 @@ is subject to change.
 Always initialize the session empty with no candidate generators.
 
 @item a cons cell, @samp{(candidate-generator . arguments)}
-Initialize the session with the candidate generator (see @code{p-search-candidate-generator} ???), provided with arguments. E.g. @code{(cons p-search-candidate-generator-filesystem '((base-directory . "~/dev/emacs")))}
+Initialize the session with the candidate generator (@xref{Creating Candidate Generators}), provided with arguments. E.g. @code{(cons p-search-candidate-generator-filesystem '((base-directory . "~/dev/emacs")))}
 
 @item a preset plist
-If a @emph{preset} plist is provided, initialize the session with the provided preset.  Presets are a way of defining p-search sessions with data. See ???
+If a @emph{preset} plist is provided, initialize the session with the provided preset.  Presets are a way of defining p-search sessions with data, @ref{The Preset Data Structure and Programatically Creating Sessions}.
 
 @item a function
 Call the provided function to obtain the session's initial candidate generator.  The function should take no arguments and return either a cons cell or preset plist as described above.
@@ -454,9 +461,9 @@ The documents that candidate generators provide are essentially sets
 of key-value pairs.  It is the various properties on the document that
 determines the type of operations which can be performed.  For
 example, if you are searching for Elisp function symbols, you won't be
-able to search by Git Author. The inner workings of candidate
+able to search by Git Author.  The inner workings of candidate
 generators and how to create them will be explained in the section on
-writing extensions ???.
+writing extensions, @ref{Creating Candidate Generators}.
 
 @node Creating and Editing Candidate Generators
 @subsection Creating and Editing Candidate Generators
@@ -499,7 +506,7 @@ creating a candidate generator, you will usually call
 @code{add-to-list} to add the desired candidate generator.
 
 Usually the package that creates the candidate generator should be
-responsible for adding it to this variable.  See ??? for more
+responsible for adding it to this variable.  @xref{Creating Priors} more
 information on creating priors.
 @end defopt
 
@@ -621,7 +628,7 @@ more intelligent grep however, you will likely not need mappings.
 
 It is also likely that a pre-existing mapping will not suit your needs
 and would will have to create a new one.  This is explained a later
-chapter (???).
+chapter (@pxref{Creating Mappings}).
 
 @node Creating and Editing Mappings
 @subsection Creating and Editing Mappings
@@ -1061,10 +1068,10 @@ The name that the user will see when selecting a candidate generator to add.  Th
 @item :input-spec @var{spec-alist}
 An alist specification of the generators inputs.  Inputs are the required arguments, as opposed to options.  Each item in the alist will be prompted for on creation of a default is not specified.
 
-See ??? for a full description on input/options specifications.
+@xref{Input/Options Specification} for a full description on input/options specifications.
 
 @item :options-spec @var{spec-alist}
-Similar to the @code{:input-spec} parameter, the @code{:options-spec} specifies the optional parameters that a user may specify.  See ??? for a full description on input/options specifications.
+Similar to the @code{:input-spec} parameter, the @code{:options-spec} specifies the optional parameters that a user may specify.  @xref{Input/Options Specification} for a full description on input/options specifications.
 
 @item :function @var{CG-function}
 This slot provides the main functionality for the candidate generator.  The function should accept one argument: the alist of arguments for inputs and options.  The arguments' keys will match that of the input and options spec. The function should return a list of @emph{document alists}.  This is required for the candidate generator to function.
@@ -1079,7 +1086,7 @@ the directory being searched on.
 @item :term-frequency-function @var{tf-func}
 This function, when provided, should accept three parameters: the arguments of the candidate generator, the term being searched on, and the callback to call after the terms are counted.
 
-The arguments are the combined inputs/outputs, similar to the other functions.  The term is an Emacs regular expression form as data (see ???).  The callback should be called with one argument: a hashmap of document ID to term count.
+The arguments are the combined inputs/outputs, similar to the other functions.  The term is an Emacs regular expression form as data (@pxref{Regular Expressions,,,elisp,GNU Emacs Lisp Reference Manual}).  The callback should be called with one argument: a hashmap of document ID to term count.
 
 This is an optional argument and if this function isn't provided, p-search will search the contents using Elisp.  The main usage of this function is to give p-search a faster way to search rather than Elisp.
 
@@ -1295,14 +1302,14 @@ Create a new prior template with the given keyword arguments.  The following pro
 The ID symbol of the prior template.  This should be the symbol that you store the prior template in.  This is required in order to create priors from preset structures.
 @item :group @var{string}
 The name of the transient menu group the prior should go in.  Example of groups are ``emacs'', ``filesystem'', and ``git''.
-@item transient-key-string @var{key-string}
+@item :transient-key-string @var{key-string}
 The transient keys which should be pressed to create the prior.  These keys will appear after that of the group's keys (e.g. if the group is ``filesystem'', it will have an @kbd{f} key to begin).
 @item :input-spec @var{spec-alist}
 The specification for the required inputs arguments.
 @item :options-spec @var{spec-alist}
 The specification for the options arguments.
-@item required-properties @var{required-props-list}
-A list of the required property symbols needed for the prior to work.  Recall that properties are defined via the @code{p-search-def-property} function (see ???).  If there are no documents with the requested properties, this prior will not be available.
+@item :required-properties @var{required-props-list}
+A list of the required property symbols needed for the prior to work.  Recall that properties are defined via the @code{p-search-def-property} function (@pxref{Creating Documents}).  If there are no documents with the requested properties, this prior will not be available.
 @item :initialize-function @var{mapping-function}
 The function which is ran when the prior is created, which should result in a score being assigned to each document.  This function takes one argument, the prior that the user created.  The function should either create a process that will assign scores to documents or directly assign scores in the function itself.
 @end table
@@ -1365,11 +1372,10 @@ Remember, in a p-search session you can run the command
 @code{p-search-show-session-preset} to view the current session as a
 preset plist.
 
-Once you have the preset plist, you can pass it as the first argument to the @code{p-search-setup-buffer} function to create a session with that preset.  You can also set the variable @code{p-search-default-command-behavior} to a preset to configure p-search to create a session of your choosing (see Starting a session ???).
+Once you have the preset plist, you can pass it as the first argument to the @code{p-search-setup-buffer} function to create a session with that preset.  You can also set the variable @code{p-search-default-command-behavior} to a preset to configure p-search to create a session of your choosing (@pxref{Starting a session}).
 
 @defun p-search-setup-buffer &optional preset-plist
 Start a p-search session. If a preset plist is provided, the session will be created with the preset instantiated.
 @end defun
-
 
 @bye

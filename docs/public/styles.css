@@ -1,0 +1,51 @@
+@font-face {
+    font-family: 'Caveat';
+    src: url('/fonts/Caveat-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'IBM Plex Serif';
+    src: url('/fonts/IBMPlexSerif-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+
+body {
+    font-family: "IBM Plex Serif", serif;
+}
+
+section {
+    max-width: 900px;
+    margin: auto;
+}
+
+.annotated-figure {
+    display: flex;
+    flex-direction: row-reverse;
+    min-width: 1200px;
+    max-width: 1200px;
+    margin: auto;
+    margin-bottom: 50px;
+}
+
+.annotations {
+    width: 200px;
+    position: relative;
+    margin-right: 7px;
+}
+
+.title-heading {
+    font-family: "Caveat", serif;
+    font-weight: normal;
+    font-size: 3rem;
+}
+
+.demo-image {
+    border-style: solid;
+    border-width: 1px;
+    border-color: black;
+    width: 900px;
+}
