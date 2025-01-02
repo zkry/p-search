@@ -221,6 +221,7 @@ Quelpa is a tool to install Emacs packages easily from local or remote sources. 
 @end lisp
 
 @node Installing with Straight
+@section Installing with Straight
 
 Using straight, the package can be installed as follows.
 
