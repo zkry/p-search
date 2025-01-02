@@ -1,0 +1,2018 @@
+This is p-search.info, produced by texi2any version 7.1.1 from
+p-search.texi.
+
+     Copyright (C) 2024 Zachary Romero <zacromero@posteo.com>
+
+     You can redistribute this document and/or modify it under the terms
+     of the GNU General Public License as published by the Free Software
+     Foundation, either version 3 of the License, or (at your option)
+     any later version.
+
+     This document is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     General Public License for more details.
+INFO-DIR-SECTION Emacs
+START-INFO-DIR-ENTRY
+* p-search: (p-search).         Local search engine in Emacs.
+END-INFO-DIR-ENTRY
+
+
+File: p-search.info,  Node: Top,  Next: Introduction,  Up: (dir)
+
+p-search User Manual
+********************
+
+p-search is a local search engine for Emacs with the goals of being
+configurable and customizable to assist you in your daily needs.
+
+   This manual is for p-search version 0.1.0.
+
+     Copyright (C) 2024 Zachary Romero <zacromero@posteo.com>
+
+     You can redistribute this document and/or modify it under the terms
+     of the GNU General Public License as published by the Free Software
+     Foundation, either version 3 of the License, or (at your option)
+     any later version.
+
+     This document is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     General Public License for more details.
+
+* Menu:
+
+* Introduction::
+* Installation::
+* Getting Started::
+* The p-search Interface::
+* Extending p-search::
+
+ -- The Detailed Node Listing --
+
+Introduction
+
+* The Search Candidates::
+* Candidate Mappings::
+* Asserting Probabilities::
+* Searching and Making Observations::
+
+Installation
+
+* Installing from Quelpa::
+* Installing with Straight::
+* Recommended Tooling::
+
+Getting Started
+
+* Creating the p-search session::
+* Adding Search Criteria::
+* Refining our Search::
+* Final Results::
+
+The p-search Interface
+
+* Starting a session::
+* The p-search session buffer::
+* Candidate Generators::
+* Mappings::
+* Priors::
+* Search Results::
+* Saving Sessions::
+
+Candidate Generators
+
+* Creating and Editing Candidate Generators::
+* Inputs and Options::
+* Common Candidate Generators: FILESYSTEM::
+* Common Candidate Generators: BUFFERS::
+* Common Candidate Generators: FUNCTION-SYMBOL::
+* Common Candidate Generators: INFO::
+
+Mappings
+
+* Creating and Editing Mappings::
+
+Priors
+
+* Creating and Editing Priors::
+* Scoring::
+* Importance and Complement Options::
+* Text Queries::
+* Text Query Syntax::
+* Fields::
+* Instruction Strings::
+* Git-related Priors::
+* Filesystem-related Priors::
+* Troubleshooting Priors::
+
+Search Results
+
+* Navigating and Viewing Search Results::
+* Making Observations::
+* Search Result Preview::
+
+Extending p-search
+
+* Creating Candidate Generators::
+* Creating Mappings::
+* Input/Options Specification::
+* Creating Priors::
+* The Preset Data Structure and Programatically Creating Sessions::
+
+Creating Candidate Generators
+
+* Creating Documents::
+
+
+File: p-search.info,  Node: Introduction,  Next: Installation,  Prev: Top,  Up: Top
+
+1 Introduction
+**************
+
+p-search is a search engine written in Emacs Lisp with the design goals
+of being as costomizable and configurable as possible, a hallmark of the
+Emacs ecosystem.  By "Search engine," I mean a program that
+systematically organizes _things_ to search, and coordinates _queries_,
+combining their results.
+
+   Before becomming enthralled by the minutiae of p-search we should
+first go over the rationale behind this package.  To do so, we must
+consider what it means to search.
+
+   There's a certain dance associated with the act of searching.  It
+begins, as it must, in the mind.  A particular state is envisioned: your
+lost keys in your hand, a software feature implemented, or understanding
+the workings of a certain software component.  Your mind then maps out
+the entire set of actions leading to said state: you find your keys
+under your bed, or you find them in your pants pocket, or you ask your
+spouse and the keys are handed to you.  Again in your mind, each outcome
+is given a probability of occurring.
+
+   You then proceed from one action to another, starting from the most
+likely, and proceeding to the unexpected.  From glancing at the kitchen
+table and checking your pants pockets to checking the garbage can in the
+case that your toddler threw the keys away.  Each unsucessful
+observation updates the map in your mind: upon removing the cushons from
+the sofa to find your keys and finding nothing, your probability that
+the keys are on the sofa drops, though not to zero, as the keys may have
+gone unnoticed.
+
+   Your search takes you frome a state of uncertainty to a resolution.
+Eventually you'll reach your desired end state, or as many searches
+unfortunaetly conclude, you'll end up with unexpected new hypothesis:
+you actually dropped your keys going on your run, that function you're
+looking for was never written and you'll have to write it, or your
+camera drone was seized by authorities and your best hope now is for the
+whole incident to be forgotten.
+
+   Let's now take a closer look at each step in the search process, and
+how p-search attempts to capture it in code.
+
+* Menu:
+
+* The Search Candidates::
+* Candidate Mappings::
+* Asserting Probabilities::
+* Searching and Making Observations::
+
+
+File: p-search.info,  Node: The Search Candidates,  Next: Candidate Mappings,  Up: Introduction
+
+1.1 The Search Candidates
+=========================
+
+The first part of the search process is defining what is being searched.
+If you're searching for a file, it's usually bound by a subdirectory.
+If you're looking for a physical object, it's usually bound by some
+area, outside of which you're either certain of its absence, or you're
+unable or unwilling to search in.
+
+   p-search starts off using something called "candidate generators,"
+which allow the user to enumerate the things being searched.  For a
+program like Emacs, the most commonly used generator would be the
+"filesystem" generator, which generates candidates from a subdirectory.
+
+   A candidate in p-search is defined as something with key-value
+attributes.  A filesystem candidate could have a filename, file content,
+modification date, size, etc.  An Emacs buffer candidate, for example,
+you want to search your open buffers, could have a content, name, and
+Emacs buffer object.  A physical location candidate could have a
+latitude and longitude.
+
+   In p-search, the properties of a candidate dictate how you can search
+said entity.  If the search candidate has text content, then you can
+perform a text-search on it.  If the search candidate has a
+latitude/longitude, you can perform a distance search.  If a candidate
+has a git-root property, then you can perform a search by git authors.
+
+
+File: p-search.info,  Node: Candidate Mappings,  Next: Asserting Probabilities,  Prev: The Search Candidates,  Up: Introduction
+
+1.2 Candidate Mappings
+======================
+
+Unfortunately, many searches can't be reduced to a search on an
+operating system's file system.  As a simple example, suppose you write
+all of your notes in one large org-mode file.  The document may have
+thousands of sections in it.  A filesystem search obviously won't help
+you here as the candidate you want, while derived from a OS file, isn't
+the file itself, but rather a section of the file.  Or suppose you use
+Denote for managing your notes and do want individual files, but you
+want to be able to search on the file's title alone.
+
+   There are many cases where you'll want to add search criteria to an
+already existing search candidate and "mappings" in p-search allow you
+to do this.  A mapping in p-search is essentially a function that takes
+a document (defined by key-value properties) and returns an expanded
+document, with perhaps new properties and fields to search on.  This in
+turn allows for a high level composability between various components,
+allowing you to mix and match what particular details you're interested
+in searching on.
+
+
+File: p-search.info,  Node: Asserting Probabilities,  Next: Searching and Making Observations,  Prev: Candidate Mappings,  Up: Introduction
+
+1.3 Asserting Probabilities
+===========================
+
+A search begins in the place most likely to have the positive result.
+If you dropped your keys while jogging, you would assign a much higher
+probability to the area on your route rather than the paths you didn't
+tread.  If you're uncertain about where you ran, perhaps you passed
+through a wooded area with no clear trail, then your probability will be
+diffused, diluted among all possible routes.  And because of this, you
+will probably put off searching in this area last, since you're the
+least likely to be successful when searching in this area.
+
+   In p-search you will be assigning probabilities to the candidates
+you're searching on, though it has to be in a much more constrained way.
+As mentioned earlier, each candidate has different properties, and these
+properties are used to determine which types of functions can be used to
+assign probabilities.  In p-search, these are called "priors," since,
+prior to actually searching, you are asserting what you believe to be
+important.
+
+   If for example you're looking for a particular function, you'll
+conjure in your mind words which you believe the function will contain.
+You can then perform a text query in p-search which will assign higher
+probabilities to files containing these words.  If you believe a file
+was modified at a certain time, you can assert such a prior, and the
+closer a file was modified to that time, the higher a probability is
+given to it.  As mentioned in Candidate Mappings ??LINK, additional
+fields can be extracted from candidates like a title or author.  These
+fields can too become the target of a search.
+
+
+File: p-search.info,  Node: Searching and Making Observations,  Prev: Asserting Probabilities,  Up: Introduction
+
+1.4 Searching and Making Observations
+=====================================
+
+After adding a number of priors, you'll then proceed to peruse the
+search results.  p-search orders the results so the most probable
+documents are at the top.  After performing a search, if you believe the
+viewed document doesn't contain the results you want, you can mark the
+file as such, lowering its probability.
+
+   Just like when looking for things and you end up searching the same
+location more than once, even after marking a p-search result as
+irrelevant, the file may still come up again, even before other files
+that have never been looked at.  If all the priors you've applied point
+to a certain file, even after making an observation, it may still very
+well have a high probability.
+
+   You may notice that the results coming back aren't relevant.  If you
+can find what these have in common, for example, them being in a test
+directory, or being related to another sense of an ambiguous term, you
+can add more priors to further refine the results.
+
+   And thus your search comes to an end.  You will have hopefully found
+that which you set out after.  If you find the search session you
+created useful, p-search allows you to save it for use again.  Maybe you
+have a new idea for a prior function that you want to implement in
+Elisp.  Or you can kill the session and erase from your mind the wild
+goose chase you were set upon.
+
+   In any case, it's my hope that p-search assisted you on your journey.
+
+
+File: p-search.info,  Node: Installation,  Next: Getting Started,  Prev: Introduction,  Up: Top
+
+2 Installation
+**************
+
+p-search is currently not published on any Emacs package manager, though
+it is in the works.  It will have to be installed from source for the
+time being.  The only external dependency is the ‘heap’ package which is
+available on GNU ELPA.
+
+* Menu:
+
+* Installing from Quelpa::
+* Installing with Straight::
+* Recommended Tooling::
+
+
+File: p-search.info,  Node: Installing from Quelpa,  Next: Installing with Straight,  Up: Installation
+
+2.1 Installing from Quelpa
+==========================
+
+Quelpa is a tool to install Emacs packages easily from local or remote
+sources.  With Quelpa installed, you can add the following line in your
+configuration file to install p-search.
+
+     (quelpa '(p-search :repo "zkry/p-search" :fetcher github))
+
+
+File: p-search.info,  Node: Installing with Straight,  Next: Recommended Tooling,  Prev: Installing from Quelpa,  Up: Installation
+
+2.2 Installing with Straight
+============================
+
+Using straight, the package can be installed as follows.
+
+     (use-package p-search :straight (:host github :repo "zkry/p-search"))
+
+
+File: p-search.info,  Node: Recommended Tooling,  Prev: Installing with Straight,  Up: Installation
+
+2.3 Recommended Tooling
+=======================
+
+While p-search can function without any external commands, if you intend
+to search OS files often, it is recommended you install ‘ripgrep’, a
+tool simmilar to ‘grep’ but which runs much faster.
+
+
+File: p-search.info,  Node: Getting Started,  Next: The p-search Interface,  Prev: Installation,  Up: Top
+
+3 Getting Started
+*****************
+
+This chapter will cover a simple end-to-end workflow with p-search to
+get you familiar with the program.  This tutorial will use the Emacs
+source code to demonstrate its features.
+
+* Menu:
+
+* Creating the p-search session::
+* Adding Search Criteria::
+* Refining our Search::
+* Final Results::
+
+
+File: p-search.info,  Node: Creating the p-search session,  Next: Adding Search Criteria,  Up: Getting Started
+
+3.1 Creating the p-search session
+=================================
+
+You can start a p-search session with ‘M-x p-search’.  By default, this
+will start a session set up to search files either in the project's (see
+project.el) directory, or if no project exists, the current directory.
+For this reason, be careful not to start a p-search session from a
+directory with an excessive amount of files, like your home directory.
+
+ [image src="getting-started-1.png" text="Candidate Generators (1) ➊
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (0) ➋
+No priors currently being applied.
+Press \"P\" to add new search criteria.
+
+Search Results (5308) ➌
+/Users/zacharyromero/dev/emacs/emacs/test/src/xml-tests.el            0.0001883949
+ 1 ;;; xml-tests.el --- Test suite for libxml parsing. -*- lexical-binding: t -*-
+ 2
+ 3 ;; Copyright (C) 2014-2024 Free Software Foundation, Inc.
+ 4
+ 5 ;; Author: Ulf Jasper <ulf.jasper@web.de>
+ 6 ;; Keywords:       internal
+ 7 ;; Human-Keywords: internal
+ 8
+ 9 ;; This file is part of GNU Emacs.
+10" ]
+
+
+   − ➊ The list of candidate generators; here is one generator
+     specifying we are searching for files on the OS filesystem in the
+     subdirectory ‘/Users/zacharyromero/dev/emacs/emacs/’.
+
+   − ➋ The priors.  There are no priors here.  Priors are used to
+     specify your search criteria.  Text queries are an example of a
+     prior.
+
+   − ➌ The search results.  There are 5308 search results in this
+     example.  Search results are displayed with their title, their
+     probability, and a sample of their contents
+
+
+File: p-search.info,  Node: Adding Search Criteria,  Next: Refining our Search,  Prev: Creating the p-search session,  Up: Getting Started
+
+3.2 Adding Search Criteria
+==========================
+
+With the session created we can now add search criteria.  Let's add a
+prior now.  Suppose we are interested in understanding better how lists
+are implemented in Emacs.  We can query for the term "list" by first
+pressing ‘P’ (‘p-search-add-prior’) and then ‘q’ (for "text query").
+You will now be prompted for a query term.  Enter "list" and press
+<RET>.  Press ‘c’ to create the prior.  The options which can be entered
+will be explained in a future section.
+
+   Queries in p-search are *not* like the text passed into a tool like
+‘grep’.  p-search will break apart what you enter here and perform
+different searches for each query part.  *Note Text Query Syntax:: for
+more details on the query mechanism.
+
+   With the query created, your should see a new item under ‘Priors (1)’
+indicating your new query.  The ‘text query’ prior will have the text
+"loading" next to it as the command runs in the background.  If you are
+using ‘grep’ and don't have ripgrep (‘rg’) installed, this search on a
+directory as large as Emacs can take around a minute to complete.
+
+   After the commands complete, the "loading" text will go away and the
+items in ‘Search Results’ should update.  The results are now as
+follows, along with my impressions on the search results:
+
+ [image src="getting-started-2.png" text="Candidate Generators (1)
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (1)
+ M text query
+query-string: list
+importance: medium
+
+Search Results (5308)
+/Users/zacharyromero/dev/emacs/emacs/test/lisp/emacs-lisp/cl-seq-tests.el                    0.0002732071
+/Users/zacharyromero/dev/emacs/emacs/doc/lispref/lists.texi                                  0.0002731461
+/Users/zacharyromero/dev/emacs/emacs/lisp/org/org-list.el                                    0.0002730757
+/Users/zacharyromero/dev/emacs/emacs/lisp/progmodes/ebnf-otz.el                              0.0002729430
+/Users/zacharyromero/dev/emacs/emacs/lisp/emacs-lisp/backquote.el                            0.0002729170" ]
+
+
+   • ‘.../emacs/test/lisp/emacs-lisp/cl-seq-tests.el’ Thoughts: I didn't
+     want to read tests, but ‘cl-seq’ could be an interesting place to
+     look if I was interested in some functions on top of lists.
+
+   • ‘.../emacs/doc/lispref/lists.texi’ Thoughts: Interesting, there's a
+     "lists" section of documentation.  I was looking for code but maybe
+     I'll take a look at this some other time.
+
+   • ‘.../emacs/lisp/emacs-lisp/tabulated-list.el’ Thoughts: Not what I
+     was interested in.  This probably comes from an ambiguity in the
+     term "list."
+
+   • ‘.../emacs/lisp/progmodes/ebnf-otz.el’ Thoughts: I have literally
+     no idea what this is about.  I'll have to read the source for this.
+
+   • ‘.../emacs/lisp/org/org-list.el’ Thoughts: OK, another ambiguity.
+     I was interested in the internals
+
+   So the results I got back were related to lists but this isn't what I
+wanted.  Let's refine our search now.
+
+
+File: p-search.info,  Node: Refining our Search,  Next: Final Results,  Prev: Adding Search Criteria,  Up: Getting Started
+
+3.3 Refining our Search
+=======================
+
+First, with the term "list" being ambiguous, I want to add a second
+term, "cons" which may help disambiguate the query as I know lists in
+Emacs are composed of cons cells.  To do this, put the point over the
+‘text query’ prior and press ‘e’ to edit it.  You can modify all the
+properties of the prior, but we're only interested in its query term so
+we press ‘q’ to edit the query term.  Enter the text "list cons" <RET>
+‘e’ to have it search both.
+
+   Next, since we're concerned about internals, let's add another prior
+matching only ‘.c’ files.  To do this, we press ‘P’
+(‘p-search-add-prior’) and then ‘h’ (for "title heading").  Enter the
+text ‘.c’, then <RET> and ‘c’ to create the prior.  You should notice
+the results now becoming only C files.
+
+   Lastly, you know that something so fundamental like the lists in
+Emacs lisp probably has the big names working on it.  Let's create
+another prior for boosting the scores of files written by Richard
+Stallman.  Press ‘P’, then ‘g a’ (for "git author"), then select
+‘Richard M. Stallman’ from the selections.  Wait for this prior to run
+and let's look at our final results.
+
+ [image src="getting-started-3.png" text="Candidate Generators (1)
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (4)
+ M text query
+query-string: list
+importance: medium
+ M text query
+query-string: cons
+importance: medium
+ M author
+git-author: Richard M. Stallman
+importance: medium
+ M title heading
+title: .c
+importance: medium" ]
+
+
+
+File: p-search.info,  Node: Final Results,  Prev: Refining our Search,  Up: Getting Started
+
+3.4 Final Results
+=================
+
+The results now look even more relevant from the first time.  It seems
+the irrelevant results now are due to the functions ‘list’ and ‘cons’
+being called so much.
+
+ [image src="getting-started-4.png" text="Search Results (5308)
+/Users/zacharyromero/dev/emacs/emacs/src/minibuf.c                                           0.0007736245
+/Users/zacharyromero/dev/emacs/emacs/src/alloc.c                                             0.0007639760
+/Users/zacharyromero/dev/emacs/emacs/src/keymap.c                                            0.0007465666
+/Users/zacharyromero/dev/emacs/emacs/src/undo.c                                              0.0007405919
+/Users/zacharyromero/dev/emacs/emacs/src/data.c                                              0.0007404723" ]
+
+
+   • ‘.../emacs/src/minibuf.c’
+   • ‘.../emacs/src/alloc.c’
+   • ‘.../emacs/src/keymap.c’
+   • ‘.../emacs/src/process.c’
+   • ‘.../emacs/src/data.c’
+
+   Two of the results in the session seem particularly relevant:
+‘emacs/src/data.c’ and ‘emacs/src/alloc.c’.
+
+   You can play around with the search results by removing various
+priors (with ‘k’, ‘p-search-kill-entity-at-point’) and seeing how the
+affect the results.
+
+   The rest of the manual will go into the usage and workings of the
+various systems and how to configure them.
+
+
+File: p-search.info,  Node: The p-search Interface,  Next: Extending p-search,  Prev: Getting Started,  Up: Top
+
+4 The p-search Interface
+************************
+
+* Menu:
+
+* Starting a session::
+* The p-search session buffer::
+* Candidate Generators::
+* Mappings::
+* Priors::
+* Search Results::
+* Saving Sessions::
+
+
+File: p-search.info,  Node: Starting a session,  Next: The p-search session buffer,  Up: The p-search Interface
+
+4.1 Starting a session
+======================
+
+ -- Command: p-search
+     This command creates a new p-search session and displays its
+     buffer.  The default session that is created is specified by the
+     variable ‘p-search-default-command-behavior’.
+
+     If called with a prefix argument ‘C-u’, it will create an empty
+     session regardless of how ‘p-search-default-command-behavior’ is
+     defined.
+
+ -- User Option: p-search-default-command-behavior
+     This variable's value determines the default behavior when running
+     ‘p-search’ (i.e.  which candidate generators should the session be
+     initialized with).  It can take the following values:
+
+     ‘t’
+          Use the default behavior.  If the current ‘default-directory’
+          is a project (*note (emacs)Projects::), initialize the session
+          with a filesystem candidate generator on the project's root.
+          Otherwise initialize the session in the current
+          ‘default-directory’.  The default behavior is subject to
+          change.
+
+     ‘nil’
+          Always initialize the session empty with no candidate
+          generators.
+
+     a cons cell, ‘(candidate-generator . arguments)’
+          Initialize the session with the candidate generator (*Note
+          Creating Candidate Generators::), provided with arguments.
+          E.g.  ‘(cons p-search-candidate-generator-filesystem
+          '((base-directory . "~/dev/emacs")))’
+
+     a preset plist
+          If a _preset_ plist is provided, initialize the session with
+          the provided preset.  Presets are a way of defining p-search
+          sessions with data, *note The Preset Data Structure and
+          Programatically Creating Sessions::.
+
+     a function
+          Call the provided function to obtain the session's initial
+          candidate generator.  The function should take no arguments
+          and return either a cons cell or preset plist as described
+          above.
+
+   You can utilize dir-local variables to have different setups in
+different directories.  The following is an example of a dir-local entry
+to setup this variable using a _preset_ plist.
+
+     ((p-search-mode .
+       ((p-search-default-command-behavior .
+         (:candidate-generator p-search-candidate-generator-filesystem
+          :args ((base-directory .
+                   (lambda ()
+                     (expand-file-name
+                       (project-root (project-current)))))))))))
+
+
+File: p-search.info,  Node: The p-search session buffer,  Next: Candidate Generators,  Prev: Starting a session,  Up: The p-search Interface
+
+4.2 The p-search session buffer
+===============================
+
+You will see the p-search session buffer after a session starts.  This
+buffer is noted by it's four main sections: candidate generators,
+mappings, priors, and search results.  The later sections will cover
+these areas in more depth.
+
+   To move about the buffer, there are the usual movement keys bound
+(‘C-p’, ‘C-n’, ‘C-b’, ‘C-f’) as well as the following commands
+
+‘n’ (‘p-search-next-item’)
+     Move to the next _entity_, be it candidate generator, mapping,
+     prior, or search result.
+
+‘p’ (‘p-search-prev-item’)
+     Move to the previous _entity_.
+
+   The buffer is displayed in togglable sections.  You can toggle a
+section's folding with <TAB>.
+
+‘<TAB>’ (‘p-search-toggle-section’)
+     Toggle the folding of the element at the current point.
+
+
+File: p-search.info,  Node: Candidate Generators,  Next: Mappings,  Prev: The p-search session buffer,  Up: The p-search Interface
+
+4.3 Candidate Generators
+========================
+
+Candidate generators are the p-search entities that enumerate the
+elements of the search.  Unlike tools like grep, p-search requires
+everything that will be searched to be enumerated upfront.  This is
+because p-search is not inherently tied to the running of any specific
+tool and so a starting point needs to be established.
+
+   The documents that candidate generators provide are essentially sets
+of key-value pairs.  It is the various properties on the document that
+determines the type of operations which can be performed.  For example,
+if you are searching for Elisp function symbols, you won't be able to
+search by Git Author.  The inner workings of candidate generators and
+how to create them will be explained in the section on writing
+extensions, *note Creating Candidate Generators::.
+
+* Menu:
+
+* Creating and Editing Candidate Generators::
+* Inputs and Options::
+* Common Candidate Generators: FILESYSTEM::
+* Common Candidate Generators: BUFFERS::
+* Common Candidate Generators: FUNCTION-SYMBOL::
+* Common Candidate Generators: INFO::
+
+
+File: p-search.info,  Node: Creating and Editing Candidate Generators,  Next: Inputs and Options,  Up: Candidate Generators
+
+4.3.1 Creating and Editing Candidate Generators
+-----------------------------------------------
+
+You can create a candidate generator with the command
+‘p-search-add-candidate-generator’ (‘C’).  After following the creation
+process the candidate generator will be added to the session.  The order
+that the candidate generators are added is insignificant.  Duplicate
+candidates added by candidate generators are ignored.
+
+‘C’ (‘p-search-add-candidate-generator’)
+     Initialize the addition process of a candidate generator.  The
+     initialization process has two steps: first you must select the
+     candidate generator that you want to add.  The candidate generators
+     available to be added are defined by the items in the variable
+     ‘p-search-candidate-generators’.  After selecting the candidate you
+     want to create, you will be prompted with a transient menu to set
+     it up.  Once the candidate generator is configured to your liking,
+     you can press ‘c’ to finish the creation process.  The in-progress
+     candidate generator will show up in the buffer with the text
+     "loading".
+
+‘e’ (‘p-search-edit-dwim’)
+     This command edits the entity at the point, which can be candidate
+     generators, mappings, or priors.  When executed, the transient menu
+     used to create the entity will reappear.  You can make any
+     adjustments you want, and then press ‘e’ to finish the editing.
+
+‘k’ (‘p-search-kill-entity-at-point’)
+     This command removes the entity at the point, be it a candidate
+     generator, mapping, or prior.  After the removal, the entire
+     calculation process restarts.
+
+ -- User Option: p-search-candidate-generators
+     This variable stores a list of the candidate generators
+     (‘p-search-candidate-generator-p’) known to p-search.  When
+     creating a candidate generator, you will usually call ‘add-to-list’
+     to add the desired candidate generator.
+
+     Usually the package that creates the candidate generator should be
+     responsible for adding it to this variable.  *Note Creating
+     Priors:: more information on creating priors.
+
+
+File: p-search.info,  Node: Inputs and Options,  Next: Common Candidate Generators: FILESYSTEM,  Prev: Creating and Editing Candidate Generators,  Up: Candidate Generators
+
+4.3.2 Inputs and Options
+------------------------
+
+Each entity (i.e.  candidate generator, mapping, prior) in p-search can
+have a number of configuration arguments.  These are divided into two
+types: inputs and options.  Inputs are arguments that *must* be defined
+for the entity to function properly while options are optional and set
+up modified behavior.  You will notice the two type of arguments as two
+sections in the transient menu.  Some inputs (i.e.  required arguments)
+will have defaults.  If a default is not provided however, you will
+always be prompted for its value for it not to be blank.
+
+
+File: p-search.info,  Node: Common Candidate Generators: FILESYSTEM,  Next: Common Candidate Generators: BUFFERS,  Prev: Inputs and Options,  Up: Candidate Generators
+
+4.3.3 Common Candidate Generators: FILESYSTEM
+---------------------------------------------
+
+The remainder of the candidate generator section will cover the
+candidate generators that come packaged in p-search.  The most prominent
+one is the filesystem candidate generator.  p-search defaults to
+creating this in a variety of situations.  The candidate generator makes
+a document for each file in a directory.  You will be prompted for the
+following arguments when creating a filesystem candidate generator:
+
+‘d’ Directory
+     The directory from which all candidates will be produced.
+
+‘f’ Filename Pattern
+     A regular expression that all candidate files must match.  Use ".*"
+     to match all files.
+
+‘t’ Search Tool
+     The CLI tool used to perform the term frequency search.  At the
+     moment, the filesystem candidate generator supports the tools
+     ripgrep (recommended), ag, and grep.  These tools will be used when
+     creating a "text query" prior.
+
+‘-i’ Ignore Pattern
+     A regular expression which can be provided to specify files not to
+     match.
+
+‘-g’ Git ls-files
+     Use the command ‘git ls-files’ to enumerate the candidates.  If
+     your directory is a Git repository, it is *strongly* recommended
+     that you turn this setting on to ignore files not committed to git.
+     Having this option set to false would result in p-search attempting
+     to search all vendored directories like node_modules, which could
+     make the search very slow.
+
+   Note how required inputs in the transient menu are letters while the
+options all begin with a dash.
+
+
+File: p-search.info,  Node: Common Candidate Generators: BUFFERS,  Next: Common Candidate Generators: FUNCTION-SYMBOL,  Prev: Common Candidate Generators: FILESYSTEM,  Up: Candidate Generators
+
+4.3.4 Common Candidate Generators: BUFFERS
+------------------------------------------
+
+If you wanted to search all of your open buffers, you could create a
+"BUFFERS" candidate generator (the all caps naming for candidate
+generators is an arbitrary convention).  This has no associated
+configuration options.  Every buffer in your emacs session will then
+become a search candidate.
+
+
+File: p-search.info,  Node: Common Candidate Generators: FUNCTION-SYMBOL,  Next: Common Candidate Generators: INFO,  Prev: Common Candidate Generators: BUFFERS,  Up: Candidate Generators
+
+4.3.5 Common Candidate Generators: FUNCTION-SYMBOL
+--------------------------------------------------
+
+The function symbol candidate generator can be used to search function
+symbols along with their documentation.  When being created, you can
+provide it with the following options:
+
+‘s’ Symbol Name Regex
+     A regular expression which the symbol's name must match in order
+     for it to be considered a candidate.  For example, if you wanted to
+     search org functions, you could use the regular expression "^org".
+
+‘-c’ Is Command?
+     When set to true, the candidate generator will only make documents
+     for symbols that are defined as commands (i.e.  with
+     ‘(interactive)’).
+
+‘-m’ Major Mode
+     Search for commands as if you were in the selected major mode and
+     ran ‘M-X’ (‘execute-extended-command-for-buffer’) in a buffer of
+     that mode.
+
+
+File: p-search.info,  Node: Common Candidate Generators: INFO,  Prev: Common Candidate Generators: FUNCTION-SYMBOL,  Up: Candidate Generators
+
+4.3.6 Common Candidate Generators: INFO
+---------------------------------------
+
+p-search also provides a candidate generator to search info files.  Once
+you select an info file, it will break it up into its constituent nodes
+which can be searched on.
+
+‘i’ Info Node
+     The name of the info file to search.  The possible info files are
+     taken from the variable ‘Info-directory-list’.
+
+   If you wanted to search multiple info files at the same time, you can
+just create two candidate generators with the two info nodes.
+
+
+File: p-search.info,  Node: Mappings,  Next: Priors,  Prev: Candidate Generators,  Up: The p-search Interface
+
+4.4 Mappings
+============
+
+Mappings in p-search serve the purpose of modifying documents created by
+candidate generators.  Mappings can be used in a number of situations:
+
+   • They can be used to extract data from the content as special
+     fields.  For example, extracting an author or publication date from
+     a document's front matter.
+   • They can be used as filters.  For example, filtering files that are
+     considered Denote notes.
+   • They can be used to split a document into smaller sub documents.
+     For example, they can split a source file by function definitions.
+   • They can replace the document entirely with a more detailed
+     representation.  For example, a mapping could replace a PDF file's
+     binary contents with a markdown representation of the PDF.
+
+   The more specialized you want to create your search engine, the more
+likely you will need to use mappings.  If you are using p-search as a
+more intelligent grep however, you will likely not need mappings.
+
+   It is also likely that a pre-existing mapping will not suit your
+needs and would will have to create a new one.  This is explained a
+later chapter (*note Creating Mappings::).
+
+* Menu:
+
+* Creating and Editing Mappings::
+
+
+File: p-search.info,  Node: Creating and Editing Mappings,  Up: Mappings
+
+4.4.1 Creating and Editing Mappings
+-----------------------------------
+
+Similar to candidate generators, the list of known candidate mappings is
+stored in the variable ‘p-search-candidate-mappings’.  Your p-search
+session may or may not have this list populated.  You can press ‘M’ to
+add a mapping.
+
+‘M’ (‘p-search-add-mapping’)
+     Initiate the process of adding a candidate generator.  You will
+     first be prompted for a candidate mapping to add.  The available
+     mappings are retrieved from ‘p-search-candidate-mappings’.  Each
+     mapping is defined to require certain document properties in order
+     to function.  For example, some mappings only work on operating
+     system files and wouldn't make sense to run on an info manual node.
+     Only the mappings which have document's that satisfy their
+     requirements can be created.
+
+     After selecting the prior you want, you will the proceed to
+     configure the mapping as you would candidate generators.
+
+   Mappings can be edited and killed simmilar to how candidate
+generators are, via ‘e’ (‘p-search-edit-dwim’) and ‘k’
+(‘p-search-kill-entity-at-point’) respectively.
+
+   A mapping works simmilar to the map function in the functional
+programming paradigm.  Each mapping has a function which takes in the
+candidate document (which is a set of key-value pairs), and returns one
+or more deriving documents, nil meaning nothing can be done, or
+‘:remove’, which explicitly removes a document.  Every mapping can be
+created with the option ‘-f’ (‘filter’).  When on, a mapping that
+doesn't do anything to a document will remove the document.
+
+
+File: p-search.info,  Node: Priors,  Next: Search Results,  Prev: Mappings,  Up: The p-search Interface
+
+4.5 Priors
+==========
+
+Priors are the entities in p-search that score documents according to
+some criteria.  Some priors may look for the occurrence of specific
+strings while others are more broad, perhaps assigning a score based on
+when the file was last modified.  The name "prior" comes from the fact
+that these are the assertions you make a priori, before looking at the
+results, and are meant to quantitatively reflect you believes via a
+probability (value between 0 and 1).
+
+   When you're trying to find something with p-search, try to think
+beyond the particular string you want to search for.  Think of
+everything you believe about the file and try to reflect it via a prior.
+If a prior doesn't exist for the criteria you want, feel free to open an
+issue, or you can even try your hand at creating one yourself as
+explained in a later chapter.
+
+* Menu:
+
+* Creating and Editing Priors::
+* Scoring::
+* Importance and Complement Options::
+* Text Queries::
+* Text Query Syntax::
+* Fields::
+* Instruction Strings::
+* Git-related Priors::
+* Filesystem-related Priors::
+* Troubleshooting Priors::
+
+
+File: p-search.info,  Node: Creating and Editing Priors,  Next: Scoring,  Up: Priors
+
+4.5.1 Creating and Editing Priors
+---------------------------------
+
+Creating priors follows a similar patter to creating candidate
+generators and mappings.  You can create a prior by pressing ‘P’
+(‘p-search-add-prior’).  Like the creation process for the other
+entities, you will go through two steps: selecting and configuring.
+
+‘P’ (‘p-search-add-prior’)
+     Initiate the process of adding a prior.  You will first be shown a
+     list of the priors you can add via a transient menu.  After
+     selecting the prior you want to add, you will then be prompted to
+     configure it.  Press ‘c’ to finalize the creation process.
+
+   As with the other entities, you can edit a prior with ‘e’
+(‘p-search-edit-dwim’) and kill a prior via ‘k’
+(‘p-search-kill-entity-at-point’).
+
+   Priors can either calculate the scores with Elisp or by an external
+process.  Depending on how many candidates exist, the time to compute
+the scores can vary greatly.  When a prior's scoring mechanism
+completes, the buffer will re-display with the newly calculated scores.
+
+
+File: p-search.info,  Node: Scoring,  Next: Importance and Complement Options,  Prev: Creating and Editing Priors,  Up: Priors
+
+4.5.2 Scoring
+-------------
+
+Scoring in p-search is simple:
+
+   • Each prior will assign a probability score between zero and one to
+     every candidate document.
+   • The final score is the product of all prior's probabilities.
+   • A normalized score is displayed to the user so that all
+     probabilities add to one.
+
+   Other search systems employ a scoring system that incorporates
+additive elements as well as multiplicative.  The problem with such an
+approach for p-search is that it ruins composability.  p-search is meant
+to be a tool to generate search setups on the fly.  Having a formula
+like ‘SCORE = FILE-SCORE * 1.2 + QUERY-SCORE * 1.3 + GIT-AUTHOR * 2’
+would require the user to evaluate each piece of the equation when any
+change is made.
+
+   A prior should assign a score to a document according to the
+following criteria:
+
+   • Evidence _for_ a document should be indicated with a probability
+     greater than 0.5.  The stronger evidence, the closer to 1.0.
+   • Evidence _against_ a document should be indicated with a
+     probability lower than 0.5.  The stronger evidence against, the
+     closer to 0.0.
+   • Scores of zero or one should not be given in general.
+
+
+File: p-search.info,  Node: Importance and Complement Options,  Next: Text Queries,  Prev: Scoring,  Up: Priors
+
+4.5.3 Importance and Complement Options
+---------------------------------------
+
+Every prior has two options which can be set, along with it's particular
+inputs and options: ‘-c’ for complement and ‘-i’ for importance.
+
+   When the _complement_ flag is on, the probability for a document that
+a prior generates will be the complement of its normal value.  So for
+example, a text-search query which matches a document and would normally
+give a high score of perhaps 0.7, when the _complement_ flag is on,
+would return a low score, like 0.3.  The complement option essentially
+allows you to turn any prior into its opposite: you *don't* want a
+document to contain a string, you *don't* want documents authored by a
+particular author, you *don't* want documents created near a certain
+time.
+
+   The _importance_ option is for specifying how strong you want to
+assert a prior.  p-search as a number of pre-defined importance levels:
+‘none’, ‘low’, ‘medium’, ‘high’, ‘critical’, and ‘filter’.  The
+importance level _modifies_ the score a document would normally give.
+The following chat shows how the scores are modified:
+
+Importance  Against                          Supporting
+---------------------------------------------------------------------------
+Prior       0.3                              0.7
+Score
+‘none’      0.5                              0.5
+‘low’       0.44                             0.57
+‘medium’    0.3                              0.7
+‘high’      0.11                             0.91
+‘critical’  0.001                            0.999
+‘filter’    0.0                              1.0
+
+   Set the importance for a prior to determine how much you want it to
+affect the final score.
+
+
+File: p-search.info,  Node: Text Queries,  Next: Text Query Syntax,  Prev: Importance and Complement Options,  Up: Priors
+
+4.5.4 Text Queries
+------------------
+
+Perhaps the most prominent prior type in p-search is the text query.
+Most p-search sessions will involve the text query prior.  Text queries
+behave the same as other priors: they return a score between 0 and 1 for
+every document.  There is a lot of machinery and mechanisms behind the
+implemention of text queries though.
+
+   You can create a text query prior by first pressing ‘P’
+(‘p-search-add-prior’) then ‘q’.  You will be prompted for a _query
+string_.  This query string has a special syntax, which will be covered
+in the next section.  Once you enter the query string, you can then
+further configure the prior.  Once created, the search processes will be
+created, the counts will be tallied, and then when every process of the
+search completes, the final score will be calculated.
+
+   p-search uses the *BM-25F* algorithm for scoring the text search.
+Without going into the details, the *BM-25F* algorithm scores documents
+for each term based on two key components: _term frequency_, and
+_inverse document frequency_.  _Term frequency_ measures how often a
+term occurs while _inverse document frequency_ (IDF) measures how much
+information a term provides by counting the number of documents the term
+occurs in.
+
+   As a quick example, suppose the user searched for "defun eggplant".
+Here we have two terms, ‘defun’ and ‘eggplant’.  Since the term ‘defun’
+would occur in almost every Elisp file, it's IDF would be very low,
+making it contribute practically nothing to the final score.  The term
+‘eggplant’ on the other hand would be so rare, that any document
+containing it would have its score greatly increased.
+
+   Since BM-25F scores are not a value between zero and one, the final
+score given to a document is the BM-25F score normalized between 0.5 and
+0.7, with the highest scoring document getting a value of 0.7.
+Documents that had no matches get a score of 0.3.  Remember, in
+p-search, evidence _for_ means getting a score greater than 0.5.  This
+is why we _don't_ normalize the BM-25F score between zero and one.
+
+   The text search prior is in no way tied to specific search tools like
+‘rg’ or ‘grep’.  Instead, it delegates the searching to the candidate
+generator.  This way, the candidate generator can choose the best way to
+search the documents it generates.  If the candidate generator has no
+specific way to seach specified, p-search will fall back to searching
+using Elisp (which can be slow for large number of documents).
+
+ -- User Option: p-search-default-search-tool
+     This user option sets the default search tool selected when
+     creating a text query prior.  It will try to use ‘rg’ if it is
+     available.
+
+
+File: p-search.info,  Node: Text Query Syntax,  Next: Fields,  Prev: Text Queries,  Up: Priors
+
+4.5.5 Text Query Syntax
+-----------------------
+
+The query syntax for p-search does _not_ work the way a grep search
+would normally work.  The query string consists of _terms_ separated by
+spaces, and each term is queried individually, independent from the
+others.
+
+   So for example, the query "New York City" contains three terms and
+will perform a separate search for each one.  If you wanted to search
+the whole string, not broken apart, you'd wrap it in quotation marks.
+
+‘"term1 term2 ..."’
+     Search the terms as a whole, exactly as written.
+‘#"term"’
+     Search term as a regular expression.
+‘term^’, ‘term^3’
+     Boost the importance of term.  A number can be provided to give a
+     stronger boost.
+
+     Note that after the text query is ran and scored, the score is
+     normalized to be between 0.5 and 0.7.  So, simply changing a text
+     query from ‘foo’ to ‘foo^10’ won't make the query outweigh the
+     other priors.  If you want to give more weight to the text query,
+     use the _importance_ setting instead.
+
+‘(term1 term2 ...)~’
+     Search for ‘term1’ and ‘term2’ occurring _near_ each other.  To be
+     considered _near_, the terms need to occur within the number of
+     lines specified by ‘p-search-default-near-line-length’.  Each term
+     will reset the line counter, so for example, the query ‘(foo bar
+     baz)~’ will with a line-length setting of 3 will match the
+     following example:
+
+          foo
+
+          bar
+
+          bar
+
+          baz
+
+‘fooBarBaz’, ‘foo-bar-baz’, ‘foo_bar_baz’
+     p-search automatically breaks compound terms and performs a number
+     of searches related to them.  While the particular rules may
+     change, and customization options may be added, the following is
+     what is currently done:
+
+     The query term is broken at non-word chars and lower to upper case
+     changes.  So for example, ‘fooBar-baz’ is broken up as ‘foo’,
+     ‘bar’, and ‘baz’.  The following queries are then formed:
+
+        • The original query, case insensitive (e.g.  ‘foobar-baz’).
+        • The constituent terms joined without spacing (e.g.
+          ‘foobarbaz’).  This is given 0.7 the weight of the original
+          query.
+        • The constituent terms joined with an underscore (e.g.
+          ‘foo_bar_baz’).  This is given 0.7 the weight of the original
+          query.
+        • The constituent terms joined with a dash (e.g.
+          ‘foo-bar-baz’).  This is given 0.7 the weight of the original
+          query.
+        • Each constituent term is searched individually, given 0.3 the
+          weight of the original query (e.g.  ‘foo’, ‘bar’, ‘baz’).
+
+ -- User Option: p-search-default-near-line-length
+     This user option controls what is meant by the "nearness" query
+     operator ‘~’.  This variable specifies the maximum amount of lines
+     that can occur between the constituent terms.
+
+ -- User Option: p-search-default-boost-amount
+     This user option controls the default boost amount when the boost
+     operator (i.e.  ‘^’) is used without an amount.
+
+
+File: p-search.info,  Node: Fields,  Next: Instruction Strings,  Prev: Text Query Syntax,  Up: Priors
+
+4.5.6 Fields
+------------
+
+The previous sections covered the general querying mechanism.  p-search
+also supports field-based searches.  Normally fields are added by a
+particular _mapping_ to the format you are searching on.  A mapping will
+define the fields it adds.  So for example, Denote files specify a
+particular format in which a title is located.  A mapping then could
+extract the Denote title and add it as a field.  The mapping could also
+specify that this is a very important field and anything matching it
+should be given extra weight.  Creating mappings with fields will be
+discussed in a different chapter.
+
+   Fields, when added, will be searched and weighted accordingly
+automatically as long as the mapping has added it.  If you want to
+search only a particular field, you can add it as the ‘field’ (i.e.
+‘-f’) option in the text query prior.
+
+
+File: p-search.info,  Node: Instruction Strings,  Next: Git-related Priors,  Prev: Fields,  Up: Priors
+
+4.5.7 Instruction Strings
+-------------------------
+
+Some options in the system come with an instruction string which
+describes in more detail what input a particular input or option
+argument expects.  If you find this distracting or would like to disable
+it, you can do so with the following user option.
+
+ -- User Option: p-search-enable-instructions
+     When non-nil, display any defined instruction string for any input
+     or option argument, whether it be on a candidate generator,
+     mapping, or prior.
+
+
+File: p-search.info,  Node: Git-related Priors,  Next: Filesystem-related Priors,  Prev: Instruction Strings,  Up: Priors
+
+4.5.8 Git-related Priors
+------------------------
+
+p-search comes with a number of predefined priors for working on git
+repositories which will be covered in this section.  These will only be
+available to select if there is a candidate document known to be in a
+git root.
+
+   The *time of commit* prior assigns a score based on the time any
+commit is found from a specified target time.  It can be configured as
+follows:
+
+‘t’ time scale
+     The time scale value is used for specifying the parameters for the
+     _exponential distribution_ used in generating scores.  Possible
+     values are ‘:days’, ‘:weeks’, ‘:years’, and ‘:months’.  The
+     distribution takes as input the absolute value of the time away
+     from the target.  A time perfectly matching the target time (i.e.
+     difference of zero, ‘f(0)’) is given a score of 0.7 while a time
+     infinitely away (i.e.  ‘f(x) as x -> inf’) is 0.3.  The time scale
+     parameter determines how fast this distribution approaches the
+     asymptote.  A value of ‘:days’ will mean that after ten or so days,
+     the function will reach 0.3, while a value of ‘:years’ means that
+     only after 10+ years will the function reach its asymptote.
+
+‘d’ target date
+     The date you are want commits to be close to.  The commit coming
+     closest to the target date is found, and the difference in time is
+     used as the input of the exponential distribution.
+
+   The *commit frequency* prior takes as input the number of commits to
+consider and gives a score such that the most committed file recieves a
+score of 0.7 while the least committed to recieves 0.5.  Files receiving
+no commits get a score of 0.3.
+
+‘n’ last N commits to consider
+     The number of commits to read from and count file commits.  This is
+     needed as counting all commits may take a long time and may not be
+     necessary or desired.
+
+   The *commit author* prior takes as input the git author to look for,
+counts the amount of commits by this author per-file, and scores these
+files on a linear scale from 0.5 to 0.7.  Files not committed to by this
+author are given a score of 0.3.
+
+‘a’ Git Author
+     The author of git commits to look for.  The available selections
+     are obtained by running ‘git log --all --format='%aN' | sort -u’
+     for every git root of the current candidates.
+
+   Note that all of these priors will work with more than one git
+repository in the candidate generators.
+
+
+File: p-search.info,  Node: Filesystem-related Priors,  Next: Troubleshooting Priors,  Prev: Git-related Priors,  Up: Priors
+
+4.5.9 Filesystem-related Priors
+-------------------------------
+
+p-search comes with a few filesystem related priors.  These are only
+selectable if a candidate document is known to be file.
+
+   The *modified-time* prior measures the time between a specified
+target and the modified time on the OS file, and uses it to calculate a
+score.  The workings of this prior function similar to the Git
+time-of-commit prior.
+
+‘t’ Time Scale
+     This argument sets the scale of the exponential distribution to
+     assign scores.  The available values are ‘:days’, ‘:weeks’,
+     ‘:months’, ‘:years’.  Select the value where you believe the most
+     important differentiation is located.
+
+‘d’ Target Date
+     The date you are want modification time to be close to.  The
+     difference from this time will be used to calculate the score.
+
+   The *subdirectory* prior will let you select a file directory and any
+candidate in that directory will get a score boost.
+
+‘d’ Directory
+     The target directory which you believe the search result to be
+     contained in.
+
+
+File: p-search.info,  Node: Troubleshooting Priors,  Prev: Filesystem-related Priors,  Up: Priors
+
+4.5.10 Troubleshooting Priors
+-----------------------------
+
+With a system as complex as p-search, you are bound to run into some
+expected behavior, whether it be a candidate you think is missing or a
+score that doesn't makes sense.  The _explain_ mechanism allows you to
+view information about a prior to give you a better clue as to what data
+is inside p-search.
+
+‘x’ (‘p-search-explain-dwim’)
+     Explain the search result or prior under the point.  The
+     information will be displayed in a separate buffer.
+
+     When ran on a prior, you will see the probabilities that the prior
+     has assigned to the various candidates.
+
+     When ran on a candidate document, you will see information about
+     the document including its fields and why it received the score it
+     got.
+
+
+File: p-search.info,  Node: Search Results,  Next: Saving Sessions,  Prev: Priors,  Up: The p-search Interface
+
+4.6 Search Results
+==================
+
+As soon as you set up a candidate generator, search results will begin
+to appear.  The search results are _always_ ordered from most to least
+probable.  Once you set up your priors you will hopefully obtain results
+more likely to be relevant towards the top.  If the results seem to you
+to be not relevant, try to think if there's a common attribute of these
+documents and try to create a new prior to re-rank this.  For example,
+you may get testing code ranked very high despite you looking for
+implementation code.  In this case you should create a new prior to
+lower the probability of test files.
+
+   When browsing files you have several commands at your disposal to aid
+you.  This section will go over navigating the search results section.
+
+* Menu:
+
+* Navigating and Viewing Search Results::
+* Making Observations::
+* Search Result Preview::
+
+
+File: p-search.info,  Node: Navigating and Viewing Search Results,  Next: Making Observations,  Up: Search Results
+
+4.6.1 Navigating and Viewing Search Results
+-------------------------------------------
+
+You can use ‘n’ and ‘p’ (‘p-search-next-item’ and ‘p-search-prev-item’)
+to navigate the entries in the search results.
+
+   The following functions can also be used in conjunction with the
+search results:
+
+‘<RET>’ (‘p-search-find-document’)
+     This command navigates to the document under the point in the other
+     window, moving to the line indicated in the preview section.  Each
+     candidate type may have its own way of finding the document to
+     display.  Info nodes for example use Emacs' Info package to
+     navigate to the corresponding node.
+‘v’ (‘p-search-view-document’)
+     This command behaves similar to ‘p-search-find-document’, except
+     that the buffer it opens and navigates to is switched to read-only.
+‘C-o’ (‘p-search-display-document’)
+     Open the document under the point in the other window but keep the
+     selected window that of the p-search session.
+‘<’ (‘p-search-prev-results-page’)
+     Show the previous search results page if your on a page other than
+     the first.
+‘>’ (‘p-search-next-results-page’)
+     Show the next page of search results.
+‘x’ (‘p-search-explain-dwim’)
+     Show the explanation of the search result under the point,
+     displaying document metadata and probability calculation details.
+
+
+File: p-search.info,  Node: Making Observations,  Next: Search Result Preview,  Prev: Navigating and Viewing Search Results,  Up: Search Results
+
+4.6.2 Making Observations
+-------------------------
+
+To close the loop on the searching experience, you can make observations
+to inform the system that you have observed a document and are more
+confident that what you are looking for isn't there.
+
+   Making an observation lowers the probability for any document you
+mark as observed.
+
+‘o’ (‘p-search-observe’)
+     Make an _observation_ on the document under the point, lowering its
+     probability.  The amount by which it is stored in the variable
+     ‘p-search-default-observation-level’.
+
+     Calling this with a prefix argument ‘C-u’ will prompt you for a
+     probability to multiply the current score by.
+
+   Ideally, an observation should lower the probability of a document by
+how sure you are your observation wasn't flawed.  For example, if you
+spent a few minutes going over a simple few line file and are absolutely
+sure that what you're looking for isn't there, then you'd want to
+multiply the file's probability by something very low, like 0.00001.  On
+the other hand, if you just glanced over a large document and suppose
+that what you're looking for isn't there, then a higher value to
+multiply by would be better.
+
+   After making observations, files that you've seen before will
+re-appear, especially if your priors gave it a high probability.
+
+
+File: p-search.info,  Node: Search Result Preview,  Prev: Making Observations,  Up: Search Results
+
+4.6.3 Search Result Preview
+---------------------------
+
+p-search provides a mechanism for customizing the search result preview
+(i.e.  the lines that show you what was matched).
+
+ -- User Option: p-search-default-document-preview-size
+     The default amount of lines to show in the preview section.  This
+     value can be changed on a session basis.
+
+ -- User Option: p-search-default-preview-function
+     The preview function to use to display a search results preview
+     section.  The current built in preview functions are
+     ‘p-search-preview-from-hints-best-section’ which finds the single
+     contiguous section with the best sore,
+     ‘p-search-preview-from-hints-top-score'’ which picks individual
+     lines resulting in the top score, and
+     ‘p-search-preview-from-hints-first-n'’ which just displays the
+     document's beginning.
+
+   There are also commands available to you to change the size of the
+preview window if you find it too limiting.
+
+‘+’ (‘p-search-increase-preview-size’)
+     Increase the preview size by one, or the amount provided by the
+     prefix, and redisplay the search results.
+‘-’ (‘p-search-decrease-preview-size’)
+     Increase the preview size by one, or the amount provided by the
+     prefix, and redisplay the search results.
+
+
+File: p-search.info,  Node: Saving Sessions,  Prev: Search Results,  Up: The p-search Interface
+
+4.7 Saving Sessions
+===================
+
+TODO
+
+
+File: p-search.info,  Node: Extending p-search,  Prev: The p-search Interface,  Up: Top
+
+5 Extending p-search
+********************
+
+This chapter will cover the details on how you can extend p-search to
+search what and how you want.  Writing Elisp, you'll be able to define
+new entities to search on, extract additional information from search
+candidates, and create new search criteria to search with.
+
+* Menu:
+
+* Creating Candidate Generators::
+* Creating Mappings::
+* Input/Options Specification::
+* Creating Priors::
+* The Preset Data Structure and Programatically Creating Sessions::
+
+
+File: p-search.info,  Node: Creating Candidate Generators,  Next: Creating Mappings,  Up: Extending p-search
+
+5.1 Creating Candidate Generators
+=================================
+
+First we will cover how you can create your own candidate generator.  By
+now you should hopefully have a good idea about what candidate
+generators are.
+
+   In order for a candidate generator to be created, it needs to be
+added to the variable ‘p-search-candidate-generators’.  Items in this
+list are of type ‘p-search-candidate-generator-p’.  The
+‘p-search-candidate-generator’ is a cl-defstruct which you can create
+with the function ‘p-search-candidate-generator-create’.  So to add a
+new candidate generator, you will need to create the generator object
+and add it to the list of known generators.
+
+ -- Function: p-search-candidate-generator-create
+     Create a candidate generator with the keyword properties.  The
+     following properties are available:
+
+     :id SYMBOL
+          The ID symbol of the candidate generator.  This should be the
+          symbol that you store the candidate generator in.  This is
+          required in order to create candidate generators from preset
+          structures.
+     :name STRING
+          The name that the user will see when selecting a candidate
+          generator to add.  This name will also appear in the p-search
+          buffer when added.  An all-caps name has been the convention,
+          but it's not important.
+     :input-spec SPEC-ALIST
+          An alist specification of the generators inputs.  Inputs are
+          the required arguments, as opposed to options.  Each item in
+          the alist will be prompted for on creation of a default is not
+          specified.
+
+          *Note Input/Options Specification:: for a full description on
+          input/options specifications.
+
+     :options-spec SPEC-ALIST
+          Similar to the ‘:input-spec’ parameter, the ‘:options-spec’
+          specifies the optional parameters that a user may specify.
+          *Note Input/Options Specification:: for a full description on
+          input/options specifications.
+
+     :function CG-FUNCTION
+          This slot provides the main functionality for the candidate
+          generator.  The function should accept one argument: the alist
+          of arguments for inputs and options.  The arguments' keys will
+          match that of the input and options spec.  The function should
+          return a list of _document alists_.  This is required for the
+          candidate generator to function.
+
+     :lighter-function FN
+          This should be a function taking in the combined input/options
+          alist, and return a string giving a short description of what
+          the candidate generator is to be displayed in various places.
+          For example, the _FILESYSTEM_ candidate generator returns the
+          string "FS:" plus the directory being searched on.
+
+     :term-frequency-function TF-FUNC
+          This function, when provided, should accept three parameters:
+          the arguments of the candidate generator, the term being
+          searched on, and the callback to call after the terms are
+          counted.
+
+          The arguments are the combined inputs/outputs, similar to the
+          other functions.  The term is an Emacs regular expression form
+          as data (*note (elisp)Regular Expressions::).  The callback
+          should be called with one argument: a hashmap of document ID
+          to term count.
+
+          This is an optional argument and if this function isn't
+          provided, p-search will search the contents using Elisp.  The
+          main usage of this function is to give p-search a faster way
+          to search rather than Elisp.
+
+     :condenced-arg-display-function FUNC
+          This function can be defined in order to define a custom
+          string to show when the candidate generator's section is
+          folded.  The function should take one argument, a cons pair of
+          candidate generator and its arguments, and should return a
+          string to be displayed when the candidate generator is folded.
+
+   In summary, to make a new candidate generator, make a candidate
+generator object and store it in a ‘defconst’, then add it to the
+‘p-search-candidate-generators’ list.  The candidate generator you
+create should at a minimum have a name, id, input/options specs and a
+function to generate documents.
+
+* Menu:
+
+* Creating Documents::
+
+
+File: p-search.info,  Node: Creating Documents,  Up: Creating Candidate Generators
+
+5.1.1 Creating Documents
+------------------------
+
+A candidate generator needs a function to generate documents.  Documents
+are just sets of key-value pairs.  This section will cover creating
+documents.
+
+   There are only three properties that a candidate document must have
+in p-search: ‘content’, ‘title’, and ‘id’.  The ID of a document is
+special in that it is used to determine the action to run when a
+document is selected.  You generally shouldn't create these by hand but
+instead rely on the function ‘p-search-documentize’.  This function
+takes the documents ID and returns the full document using predefined
+rules.  You can define such rules via the ‘p-search-def-property’
+function.
+
+ -- Function: p-search-def-property id-type property-symbol function
+
+     This function defines property PROPERTY-SYMBOL on document type
+     ID-TYPE, using the function FUNCTION on the second element of the
+     ID.
+
+ -- Function: p-search-documentize doc-id
+     Returns a document alist by finding all properties defined for
+     DOC-ID and wrapping them in thunks to be lazily evaluated.  DOC-ID
+     should be a list where the first element is the document's type,
+     and the second element is the data which identifies the document,
+     used as the argument to the property functions.
+
+   For example, if we make the following definition of a document type
+called "base",
+
+     (p-search-def-property 'base 'title #'car)
+     (p-search-def-property 'base 'content #'cdr)
+
+   then calling ‘(p-search-documentize (base (cons "My Title" "my
+content...")))’ will result in a document with ID of ‘(base (cons "My
+Title" "my content..."))’, TITLE of ‘"My Title"’ and content of ‘"my
+content..."’.
+
+   If we wanted to make a candidate generator for Wikipedia entries, we
+could make the following definition:
+
+     (p-search-def-property
+       'wikipedia
+       'title
+       #'identity)
+     (p-search-def-property
+       'wikipedia
+       'content
+       (lambda (wikipedia-entry-name)
+         (url-retrieve-synchronously
+           (concat "https://en.wikipedia.org/wiki/" wikipedia-entry-name))))
+
+     ;; We can now create wikipedia entries with the following
+     (p-search-documentize '(wikipedia "Mountain_pigeon"))
+     ⇒
+     ((id . (wikipedia "Mountain_pigeon"))
+      (title . "Mountain_pigeon")
+      (content . "<html>..."))
+
+ -- Function: p-search-def-function id-type function-symbol function
+     Similar to ‘p-search-def-property’, this function defines a
+     candidate result function for a given type.  This is how you define
+     actions when selecting a search result.  For a file, you may want
+     to call ‘find-file’, while for a buffer, you may want to call
+     ‘display-buffer’.
+
+     The function ‘p-search-goto-document’ is the main one you should
+     define.  For example, ‘file’ type documents have an ID in the form
+     ‘(file FILENAME)’.  The function is defined as follows:
+
+          (p-search-def-function 'file 'p-search-goto-document #'find-file-other-window)
+
+     Going off of the Wikipedia example above, we may want to define the
+     ‘p-search-goto-document’ as follows:
+
+          (p-search-def-function 'wikipedia 'p-search-goto-document
+            (lambda (wikipedia-entry-name)
+              (browse-url (concat "https://en.wikipedia.org/wiki/" wikipedia-entry-name))))
+
+
+File: p-search.info,  Node: Creating Mappings,  Next: Input/Options Specification,  Prev: Creating Candidate Generators,  Up: Extending p-search
+
+5.2 Creating Mappings
+=====================
+
+A mapping is a way to add information to candidate documents, or
+generate multiple candidates from a single one.
+
+   Like candidate generators, in order to create a mapping you should
+create a new mapping object and add it to the list
+‘p-search-candidate-mappings’.
+
+ -- Function: p-search-candidate-mapping-create
+
+     Create a new mapping with the given keyword arguments.  The
+     following properties are available:
+
+     :id SYMBOL
+          The ID symbol of the mapping.  This should be the symbol that
+          you store the mapping in.  This is required in order to create
+          mappings from preset structures.
+     :required-property-list PROP-LIST
+          The list of properties that a document must have in order for
+          the mapping to be used on it.  This should be a list of
+          property symbols.  These are the properties that you define
+          using ‘p-search-def-property’.
+     :name STRING
+          The name for the mapping that will be showed to the end user.
+     :input-spec SPEC-ALIST
+          The specification for the required inputs arguments.
+     :options-spec SPEC-ALIST
+          The specification for the options arguments.
+     :function MAPPING-FUNCTION
+          The function which performs the mapping.  This function should
+          take two arguments, the combined input/options arguments and
+          the document to be mapped.  The function should return either
+          the newly modified document, a list of documents, nil (meaning
+          nothing could be done), or :remove (meaning the file document
+          should be removed).
+
+   You shouldn't work with documents as Lisp objects, but rather use the
+following functions to interface with them:
+
+ -- Function: p-search-document-property document prop-sym
+     Return a specified property of the document.  Properties are
+     defined with the ‘p-search-def-property’ and are normally _thunked_
+     so as to not fetch all the results at once.  This function calls
+     any thunk and returns the appropriate value.
+
+ -- Function: p-search-document-extend document &optional new-id
+          new-fields new-props
+     Take an existing document and return a new document extended with
+     various properties.  A new ID should normally be a list where the
+     first element is the mapped document type, the second is the old ID
+     and the third is the identifier.  For example, a "narrowed"
+     document mapping could take the form ‘(narrow (file
+     "~/Dowloads/file.txt") (1291 . 3012))’ to mean "take another
+     document and narrow it to 1291 and 3012" (such a mapping doesn't
+     currently exist).
+
+     The NEW-FIELDS argument should be an alist of any new fields to be
+     added to the document.  The fields will be appended to the document
+     and previously added fields will never be overwritten.
+
+     The NEW-PROPS argument should be a an alist of any new properties
+     to give the document.  Properties given here, unlike fields, will
+     overwrite the previous value.
+
+
+File: p-search.info,  Node: Input/Options Specification,  Next: Creating Priors,  Prev: Creating Mappings,  Up: Extending p-search
+
+5.3 Input/Options Specification
+===============================
+
+Input and option specifications are used in all of the main entities of
+p-search.  They are used to define what data a particular component
+needs.  A input/option specification is an alist where the car element
+is the argument symbol, and the cdr is the transient specification.
+p-search being driven by transient, transient infix is needed for each
+argument type, in order for the system to know how to read and display
+such arguments.
+
+   The following is a list of the available transient infixes to choose
+from.  The specification part is of the form ‘(infix-item &key kwargs)’.
+Each type can take the arguments ‘:key’, ‘:description’,
+‘:default-value’, and ‘:instruction-string’.
+
+p-search-infix-toggle
+     A on/off toggle.  It's value will be non-nil when on and nil if
+     off.
+p-search-infix-choices
+     Prompt the user for a selection out of a list of possible choices.
+     In addition to the standard arguments, the argument ‘:choices’
+     should also be provided, which should be a list of possible choices
+     or a function to call to get a list of possible choices.
+p-search-infix-date
+     A date with time.  This infix uses org-mode's ‘org-read-date’
+     function to get the user's selected date.  The value of this will
+     be a string in the form ‘%Y-%m-%d %H:%m’.
+p-search-infix-number
+     A number.  This infix uses the ‘read-number’ function obtain the
+     selected number.
+p-search-infix-string
+     A simple string.
+p-search-infix-regexp
+     A regular expression string.
+p-search-infix-directory
+     A directory.  This infix uses the ‘read-directory-name’ function to
+     read a user's selected directory.
+p-search-infix-memory
+     An amount of memory.  This uses a specialized reader that can
+     understand the various units of memory (e.g.  KB, KiB).
+
+   The ‘:key’ parameter should be the string of the transient key to
+press.  The ‘:description’ parameter is the human-readable name of the
+item that will show up on various UI components.  The ‘:default-value’
+should be the default value that the parameter takes, or a function with
+no arguments that returns it.  If a default value is provided on an
+input, the user will not be prompted for the value.  The
+‘:instruction-string’ parameter is a string that will show up when
+prompting a user for the item, which should give more detailed
+instructions about what the field does or what is expected.
+
+   The following are some examples of input/options specs:
+
+     ;;; example 1
+       '((n-commits . (p-search-infix-number
+                        :key "n"
+                        :description "Last N Commits to Consider"
+                        :default-value 20)))
+
+     ;;; example 2
+       `((time-scale . (p-search-infix-choices
+                         :key "t"
+                         :description "Time Scale"
+                         :instruction-string
+                         "The scale of time where you expecct the most differentiation to happen.
+     E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
+          For \"This year vs last year vs three years ago\" choose :years."
+                         :choices ,(mapcar #'car p-search--time-scales)
+                         :default-value :months))
+          (target-date . (p-search-infix-date
+                          :key "d"
+                          :description "Target Date"
+                          :default-value ,(format-time-string "%Y-%m-%d %H:%m"))))
+
+     ;;; example 3
+        `((base-directory . (p-search-infix-directory
+                             :key "d"
+                             :description "Directories"
+                             :default-value (lambda () default-directory)))
+          (filename-regexp . (p-search-infix-regexp
+                              :key "f"
+                              :description "Filename Pattern"
+                              :default-value ".*"))
+          (search-tool . (p-search-infix-choices
+                          :key "t"
+                          :description "Search Tool"
+                          :choices (:grep :rg :ag)
+                          :default-value ,(or p-search-default-search-tool :grep))))
+
+
+File: p-search.info,  Node: Creating Priors,  Next: The Preset Data Structure and Programatically Creating Sessions,  Prev: Input/Options Specification,  Up: Extending p-search
+
+5.4 Creating Priors
+===================
+
+The third type of entities you may find yourself wanting to create are
+priors.  Creating a new prior type is similar to that of candidate
+generators and mappings: you will create a new prior template with
+‘p-search-prior-template-create’ and add it to the list
+‘p-search-prior-templates’.
+
+ -- Function: p-search-prior-template-create
+
+     Create a new prior template with the given keyword arguments.  The
+     following properties are available:
+
+     :id SYMBOL
+          The ID symbol of the prior template.  This should be the
+          symbol that you store the prior template in.  This is required
+          in order to create priors from preset structures.
+     :group STRING
+          The name of the transient menu group the prior should go in.
+          Example of groups are "emacs", "filesystem", and "git".
+     :transient-key-string KEY-STRING
+          The transient keys which should be pressed to create the
+          prior.  These keys will appear after that of the group's keys
+          (e.g.  if the group is "filesystem", it will have an ‘f’ key
+          to begin).
+     :input-spec SPEC-ALIST
+          The specification for the required inputs arguments.
+     :options-spec SPEC-ALIST
+          The specification for the options arguments.
+     :required-properties REQUIRED-PROPS-LIST
+          A list of the required property symbols needed for the prior
+          to work.  Recall that properties are defined via the
+          ‘p-search-def-property’ function (*note Creating Documents::).
+          If there are no documents with the requested properties, this
+          prior will not be available.
+     :initialize-function MAPPING-FUNCTION
+          The function which is ran when the prior is created, which
+          should result in a score being assigned to each document.
+          This function takes one argument, the prior that the user
+          created.  The function should either create a process that
+          will assign scores to documents or directly assign scores in
+          the function itself.
+
+   When creating the initialization function for a new prior type, the
+following functions will be helpful:
+
+ -- Function: p-search-set-score prior doc-id p
+     Set the score of DOC-ID to P of a given prior.  *note:* in order
+     for this function to work properly, you need to ensure your current
+     buffer is that of the p-search session.  Calling this function in a
+     temporary buffer or a process buffer won't work properly.
+
+     You can set a default score for all documents not specified by
+     passing in ‘:default’ to DOC-ID.
+
+ -- Function: p-search-candidates-with-properties PROP-LIST
+     Return a hashmap of document-id to document for each document in
+     the system that has every property specified in PROP-LIST.  You can
+     use this in conjunction with the functions ‘maphash’,
+     ‘p-search-document-property’ (to get the properties you're
+     interested in), and ‘p-search-set-score’ to set the scores of the
+     documents.
+
+ -- Function: p-search-calculate
+     Perform a re-calculation and re-display of the session buffer.
+     This should be called after you have set the score for every
+     document you're interested in.  Otherwise, the user would have to
+     refresh the buffer to see the score updates.
+
+ -- Function: p-search-prior-arguments prior
+     Return the input/option arguments a user provided to the prior as
+     an alist.
+
+ -- Function: p-search-unique-properties prop-id
+     For every candidate document in the system, return all unique
+     values of the property PROP-ID.
+
+
+File: p-search.info,  Node: The Preset Data Structure and Programatically Creating Sessions,  Prev: Creating Priors,  Up: Extending p-search
+
+5.5 The Preset Data Structure and Programatically Creating Sessions
+===================================================================
+
+p-search supports creating sessions from data, as opposed to being
+manually created by users.  _Preset plists_ are the data structures that
+support this functionality.  It should be possible to reproduce any
+p-search session with a preset plist.  A preset plist is defined by the
+following structure:
+
+     :candidate-generator GENERATOR-OBJ-SYMBOL :args ARG-ALIST You can
+     reproduce a candidate generator with a plist containing the two
+     key-value pairs with ‘:candidate-generator’ and ‘:args’.  The
+     candidate generator should be the variable which the candidate
+     generator is bound to and the arg-alist should be all the
+     input/option arguments (you're only required to define items in the
+     input-spec that don't have defaults).
+     :candidate-mapping MAPPING-OBJ-SYM :args ARG-ALIST Similar to
+     candidate generators, you can define a mapping with the keys
+     ‘:candidate-mapping’ and ‘:args’.
+     :prior-template TEMPLATE-OBJ-SYM :args ARG-LIST Again, similar to
+     the other two types, you can define a prior preset with the keys
+     ‘:prior-template’ and ‘:args’.
+     :group LIST-OF-PRESET-ELTS You can define a preset with more than
+     one element using the ‘:group’ key with a value of a list of preset
+     items, as defined here.
+
+   The following is an example of a preset plist with multiple items in
+it.
+
+     (:group ((:candidate-generator p-search-candidate-generator-filesystem :args ((base-directory . "/Users/zacharyromero/dev/emacs/emacs/") (filename-regexp . ".*") (search-tool . :rg) (use-git-ignore . on)))
+              (:prior-template p-search-prior-query :args ((query-string . "list") (importance . medium)))
+              (:prior-template p-search-prior-query :args ((query-string . "cons") (importance . medium)))
+              (:prior-template p-search-prior-git-author :args ((git-author . Richard\ M.\ Stallman) (importance . medium)))
+              (:prior-template p-search-prior-title :args ((title . ".c") (importance . medium)))))
+
+   Remember, in a p-search session you can run the command
+‘p-search-show-session-preset’ to view the current session as a preset
+plist.
+
+   Once you have the preset plist, you can pass it as the first argument
+to the ‘p-search-setup-buffer’ function to create a session with that
+preset.  You can also set the variable
+‘p-search-default-command-behavior’ to a preset to configure p-search to
+create a session of your choosing (*note Starting a session::).
+
+ -- Function: p-search-setup-buffer &optional preset-plist
+     Start a p-search session.  If a preset plist is provided, the
+     session will be created with the preset instantiated.
+
+
+
+Tag Table:
+Node: Top764
+Node: Introduction3193
+Node: The Search Candidates5529
+Node: Candidate Mappings6990
+Node: Asserting Probabilities8226
+Node: Searching and Making Observations10022
+Node: Installation11632
+Node: Installing from Quelpa12096
+Node: Installing with Straight12506
+Node: Recommended Tooling12833
+Node: Getting Started13188
+Node: Creating the p-search session13628
+Node: Adding Search Criteria15419
+Node: Refining our Search18698
+Node: Final Results20478
+Node: The p-search Interface21960
+Node: Starting a session22279
+Node: The p-search session buffer24886
+Node: Candidate Generators25889
+Node: Creating and Editing Candidate Generators27122
+Node: Inputs and Options29407
+Node: Common Candidate Generators: FILESYSTEM30188
+Node: Common Candidate Generators: BUFFERS31966
+Node: Common Candidate Generators: FUNCTION-SYMBOL32544
+Node: Common Candidate Generators: INFO33624
+Node: Mappings34304
+Node: Creating and Editing Mappings35648
+Node: Priors37389
+Node: Creating and Editing Priors38596
+Node: Scoring39773
+Node: Importance and Complement Options41110
+Node: Text Queries42981
+Node: Text Query Syntax45834
+Node: Fields49095
+Node: Instruction Strings50068
+Node: Git-related Priors50689
+Node: Filesystem-related Priors53301
+Node: Troubleshooting Priors54516
+Node: Search Results55412
+Node: Navigating and Viewing Search Results56414
+Node: Making Observations57948
+Node: Search Result Preview59430
+Node: Saving Sessions60841
+Node: Extending p-search60987
+Node: Creating Candidate Generators61578
+Node: Creating Documents66091
+Node: Creating Mappings69566
+Node: Input/Options Specification72794
+Node: Creating Priors77217
+Node: The Preset Data Structure and Programatically Creating Sessions81054
+
+End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:

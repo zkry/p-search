@@ -1,0 +1,23 @@
+Candidate Generators (1) ➊
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (0) ➋
+No priors currently being applied.
+Press "P" to add new search criteria.
+
+Search Results (5308) ➌
+/Users/zacharyromero/dev/emacs/emacs/test/src/xml-tests.el            0.0001883949
+ 1 ;;; xml-tests.el --- Test suite for libxml parsing. -*- lexical-binding: t -*-
+ 2
+ 3 ;; Copyright (C) 2014-2024 Free Software Foundation, Inc.
+ 4
+ 5 ;; Author: Ulf Jasper <ulf.jasper@web.de>
+ 6 ;; Keywords:       internal
+ 7 ;; Human-Keywords: internal
+ 8
+ 9 ;; This file is part of GNU Emacs.
+10

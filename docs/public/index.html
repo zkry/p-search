@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+  <!-- Created by GNU Texinfo 7.1.1, https://www.gnu.org/software/texinfo/ -->
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <!-- Copyright (C) 2024 Zachary Romero <zacromero@posteo.com>
+
+         You can redistribute this document and/or modify it under the terms
+         of the GNU General Public License as published by the Free Software
+         Foundation, either version 3 of the License, or (at your option) any
+         later version.
+
+         This document is distributed in the hope that it will be useful,
+         but WITHOUT ANY WARRANTY; without even the implied warranty of
+         MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+         General Public License for more details. -->
+    <title>p-search</title>
+
+    <meta name="description" content="Top (p-search User Manual)" />
+    <meta name="keywords" content="Top (p-search User Manual)" />
+    <meta name="resource-type" content="document" />
+    <meta name="distribution" content="global" />
+    <meta name="Generator" content="texi2any" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; font-src 'self' https://fonts.gstatic.com/; style-src 'self' https://fonts.googleapis.com/ 'unsafe-inline';"
+    />
+    <link rel="stylesheet" type="text/css" href="styles.css" />
+  </head>
+
+  <body lang="en">
+    <div class="main-content">
+      <section>
+        <h1 class="title-heading">p-search</h1>
+        <p>
+          p-search is a local search engine in Emacs designed with the goals of
+          being configurable and customizable.
+        </p>
+        <p>
+          <a href="documentation/">documentation</a>,
+          <a href="documentation/Installation.html">installation</a>
+        </p>
+        <p>
+          <a href="https://github.com/zkry/p-search">source code on GitHub</a>
+        </p>
+      </section>
+      <h2 style="max-width: 900px; margin: auto; padding: 20px">
+        Visual Tour of p-search
+      </h2>
+
+      <figure class="annotated-figure">
+        <img
+          class="demo-image"
+          src="demo-screenshot.png"
+          alt="demo screenshot of p-seach, demonstrating creating searching a file in the emacs source code with query terms 'native compilation', written by Andrea Corallo, with high commit count, and C files"
+        />
+        <div class="annotations">
+          <figcaption>
+            Modular components to specify <em>candidate documents</em>.
+          </figcaption>
+          <figcaption style="top: 120px; position: absolute">
+            Express and combine a variety of
+            <em>search criteria</em> representing your prior beliefs.
+          </figcaption>
+          <figcaption style="top: 290px; position: absolute">
+            Browse search results systematically, staring with those that best
+            matched your criteria.
+            <br />
+            <br />
+            The preview shows you the <em>best matching</em> section of the
+            document.
+          </figcaption>
+        </div>
+      </figure>
+      <figure class="annotated-figure">
+        <img
+          class="demo-image"
+          src="demo-screenshot-2.png"
+          alt="demo screenshot of p-seach, demonstrating that p-seach can be used to search Info nodes"
+        />
+        <div class="annotations">
+          <figcaption>
+            p-seach is fully customizable. Here, we're not searching files, but
+            rather all the Info nodes of "emacs" and "elisp".
+          </figcaption>
+        </div>
+      </figure>
+      <figure class="annotated-figure">
+        <img
+          class="demo-image"
+          src="demo-screenshot-3.png"
+          alt="demo screenshot of p-seach, demonstrating p-seach used to search Denote notes."
+        />
+        <div class="annotations">
+          <figcaption>
+            With a little Elisp, fields for specific file formats can be
+            extracted.
+          </figcaption>
+          <figcaption style="top: 110px; position: absolute">
+            Here we are creating a <em>mapping</em> to extract Denote-related
+            fields from our candidates.
+          </figcaption>
+          <figcaption style="top: 200px; position: absolute">
+            And then proceed to search on Denote keywords.
+          </figcaption>
+        </div>
+      </figure>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+Candidate Generators (1)
+FILESYSTEM (5308)
+base-directory: /Users/zacharyromero/dev/emacs/emacs/
+filename-regexp: .*
+search-tool: :rg
+use-git-ignore: on
+
+Priors (4)
+ M text query
+query-string: list
+importance: medium
+ M text query
+query-string: cons
+importance: medium
+ M author
+git-author: Richard M. Stallman
+importance: medium
+ M title heading
+title: .c
+importance: medium

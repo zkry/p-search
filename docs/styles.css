@@ -1,0 +1,38 @@
+html {
+    background-color: #e7e7e7;
+    font-size: 16px;
+}
+
+
+body {
+    padding: .5em 2em 1em 2em;
+    border: .1em solid #c0c0c0;
+    width: 90%;
+    margin: 0 auto;
+    background-color: white;
+    line-height: 1.4;
+}
+
+h5, h6, dt {
+    color: #222;
+}
+
+h1, h2, h3, h4, h5, h6, strong, dt, th {
+    font-weight: bold;
+}
+
+pre[class^="example"], pre[class^="lisp"] {
+    background: #f9f6ed;
+}
+
+pre[class*="example"], pre[class*="lisp"], pre[class^="display"], pre.verbatim, div[class*="example"], table.cartouche {
+    border-radius: .3em;
+}
+
+div[class^="example"] pre, div[class^="lisp"] pre, div[class^="display"] pre {
+    margin: 0;
+}
+
+pre[class^="example"], pre[class^="lisp"], pre[class^="display"] {
+    padding: 1em 2.5%;
+}
