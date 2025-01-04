@@ -1379,4 +1379,176 @@ Once you have the preset plist, you can pass it as the first argument to the @co
 Start a p-search session. If a preset plist is provided, the session will be created with the preset instantiated.
 @end defun
 
+
+@node Examples of Extending p-search
+@chapter Examples of Extending p-search
+
+This chapter will go over writing a number of extensions in p-search
+which will hopefully aide you in making any extension you would want in p-search.  We'll Start with candidate generators and proceed to mappings and priors.  If anything is unclear, please open an issue.
+
+@node Candidate Generator Examples
+@section Candidate Generator Examples
+
+First we will cover creating candidate generators.  Recall that a
+candidate genrator in p-search is just a
+@code{p-search-candidate-generator-p} object in the list
+@code{p-search-candidate-generators}.
+
+@node A Candidate Generator with Hard-coded Items
+@subsection A Candidate Generator with Hard-coded Items
+
+For our first example, let's consider a candiate generator that
+returns a list of pre-defined candidates.  We first create our candidate-generator object.
+
+@lisp
+(p-search-candidate-generator-create
+   :id 'p-search-candidate-generator-test
+   :name "TEST"
+   :input-spec '()
+   :options-spec '()
+   :function
+   (lambda (_args)
+     (list (p-search-documentize `(base ("Document 1" . "ABC\nDEF")))
+           (p-search-documentize `(base ("Document 2" . "GHI\nJKL")))
+           (p-search-documentize `(base ("Document 3" . "MNO\nPQR")))))
+   :lighter-function
+   (lambda (_args)
+     "test"))
+@end lisp
+
+Here we're creating a candidate generator that returns a list of three documents.  Recall that @code{p-search-documentize} is set up to know how to create documents of arying types with the @code{p-search-def-property} function, and the @code{base} type creates a document with title being the @code{car} and content being the @code{cdr}.  If we wanted to generate candidates of type ``file,'' then we could make the following change:
+
+@lisp
+(p-search-candidate-generator-create
+   :id 'p-search-candidate-generator-test
+   :name "TEST"
+   :input-spec '()
+   :options-spec '()
+   :function
+   (lambda (_args)
+     (list (p-search-documentize `(file "/path/to/file/1"))
+           (p-search-documentize `(file "/path/to/file/2"))
+           (p-search-documentize `(file "/path/to/file/3"))))
+   :lighter-function
+   (lambda (_args)
+     "test"))
+@end lisp
+
+This would create documents of type ``file'' which would have additional file-related properties.
+
+@node Defining Custom Properties
+@subsection Defining Custom Properties
+
+Let's suppose you want to search on a new type of entity.  If the think you're searching for has a one-to-one relation with a file, you may just want to use the file candidate type.  If what your searching for can be derived from a preexisting type, like a section of a file, you may want to create a mapping, not a new candidate generator.
+
+Here are some examples of where a new candidate generator may make sense:
+
+@itemize
+@item
+You are searching URLs. A new candidate type of @samp{url} could exist with functions to fetch the URL for the contents, extract the HTML's title tag for the title, etc.
+@item
+You are searching colors.  Like for example, you want to find named colors simmilar to a certain color.
+@item
+You are searching physical coordinates.  A candidate generator could generate discrete squares of coordinates.
+@item
+You are searching for something located in a database. In this case the ID of the search candidate could coorspond to a primary key in the database and you could have code to extract rows creating the document.
+@item
+You are searching packages  in some package repository. In this case, the ID of the search candidate would be the package's identifier.
+@end itemize
+
+For our example in this section, suppose you have an inventory of books that you would like to search on stored in an sqlite database.  You would like to incorporate this data into p-search.  Let's suppose for our example, that your database is setup as follows:
+
+@lisp
+(defconst my-database (sqlite-open "~/test.sqlite"))
+
+(sqlite-execute my-database "CREATE TABLE books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    genre TEXT,
+    summary TEXT,
+    published_year INTEGER,
+    price REAL
+);")
+
+(let* ((books '(("To Kill a Mockingbird" "Harper Lee" "Fiction" "This classic novel, ..." 1960 10.99)
+                ("1984" "George Orwell" "Dystopian" "Set in a dystopian future, ..." 1949 8.99)
+                ("Invisible Cities" "Italo Calvino" "Fiction" "In this poetic and imaginative novel, ..." 1972 13.99)
+                ("The Brothers Karamazov" "Fyodor Dostoevsky" "Philosophical Fiction" "This philosophical novel follows the lives..." 1880 14.99))))
+  (sqlite-execute zr/database "DELETE FROM books")
+  (dolist (row books)
+    (sqlite-execute zr/database "INSERT INTO books (title, author, genre, summary, published_year, price)
+VALUES (?, ?, ?, ?, ?, ?)"
+                    row)))
+@end lisp
+
+Since the targets of our search are entries in this database, let's define our unique candidate type as @code{book-shop-item} and the unique identifier as a list of the database and row ID, for example @code{(book-shop-item (#<sqlite obj...> 11))}.  We need to include the sqlite database object as we're not able to fetch the ID alone.
+
+Let's define these properties now:
+
+@lisp
+(defun get-book-title (doc-id)
+  "Return the row's title column as content."
+  (pcase-let ((`(,db ,row-id) doc-id))
+    (caar (sqlite-select db "SELECT title FROM books WHERE id = ?" (list row-id)))))
+
+(defun get-book-content (doc-id)
+  ;;; To be done
+  "Return the row's summary as content."
+  (pcase-let ((`(,db ,row-id) doc-id))
+    (with-temp-buffer
+      (insert (caar (sqlite-select db "SELECT summary FROM books WHERE id = ?" (list row-id))))
+      (fill-paragraph)
+      (buffer-string))))
+
+(defun get-book-fields (doc-id)
+  "Extract book fields fields from DOC-ID."
+  (pcase-let* ((`(,db ,row-id) doc-id)
+               (`((,author ,genre))
+                (sqlite-select db "SELECT author, genre FROM books WHERE id = ?" (list row-id))))
+    `((author . ,author)
+      (genre . ,genre))))
+
+(p-search-def-property 'book-shop-item 'title #'get-book-title)
+(p-search-def-property 'book-shop-item 'content #'get-book-content)
+(p-search-def-property 'book-shop-item 'fields #'get-book-fields)
+@end lisp
+
+Here we define the required title and content properties, as well as
+include the fields property, which will be useful to us if we want to
+search on specific fields.
+
+With the properties defined we can now create the candidate generator object and add it to our list of avalable generators.
+
+@lisp
+(defconst book-candidate-generator
+  (p-search-candidate-generator-create
+   :name "My Bookshop"
+   :input-spec '((db-file-name . (p-search-infix-file :key "d"
+                                                      :description "Database File")))
+   :options-spec '()
+   :function
+   (lambda (args)
+     (let* ((db-file-name (alist-get 'db-file-name args))
+            (sqlite-db (sqlite-open db-file-name))
+            (books (sqlite-select sqlite-db "SELECT id FROM books"))
+            (docs))
+       (pcase-dolist (`(,book-id) books)
+         (push (p-search-documentize `(book-shop-item (,sqlite-db ,book-id))) docs))
+       docs))
+   :lighter-function
+   (lambda (_args) "Books")))
+
+(add-to-list
+ 'p-search-candidate-generators
+  book-candidate-generator)
+@end lisp
+
+Our candidate generator has one input argument, the file name of the database which is needed to find the database.  We then read the file, create our sqlite database object, qurey the @samp{books} table and create a document for each row.
+
+This example is merely for demo purposes and has disadvantages to quering the books from sqlite directly.  Using p-search is bound to be slower.  Even with that said, there are unique advantages of p-search: it is easy to search on multiple databases at once, the interface may be easier to search with (no need for writing SQL), and the searching algorithm will be smarter, using BM25F.
+
+Another caveat is that if the entire contents of these books was included, this too would greatly slow down p-search.
+
+
 @bye
