@@ -4,9 +4,7 @@
   information retrievial and Bayesian search theory to assist a user
   in finding documents.
 
-  Documentation
-
-  https://p-search.org/documentation/
+  Documentation: https://p-search.org/documentation/
 
   [[./documents/screenshot.png]]
 
