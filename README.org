@@ -4,18 +4,15 @@
   information retrievial and Bayesian search theory to assist a user
   in finding documents.
 
-  Boolean searches (i.e. the document contains the word "X"), while
-  simple and useful, ofthen don't match the prior beliefs of the
-  searcher concerning where the relevant files are.  Often times the
-  searcher has specific ideas as to where the document is located.
-  Like what type of file it is, who authored the document, when the
-  document was created.  The searcher often times isn't fully
-  confident as to how the seach terms appear or whether they appear at
-  all.
+  Documentation
+
+  https://p-search.org/documentation/
 
   [[./documents/screenshot.png]]
 
 * Installation
+
+  https://p-search.org/documentation/Installation.html
 
   Until p-search is available on ELPA/MELPA, you will have to install
   this package manually.  The only dependency of p-search is [[https://elpa.gnu.org/devel/heap.html][heap]].
@@ -38,11 +35,13 @@
 
 * Usage
 
+  https://p-search.org/documentation/Getting-Started.html
+
   A search session can be initiated with the =p-search= command.  The
   command will set up the session to search for files either in the
   projects directory (see [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html][project.el]]) if a project exists or the
   current directory. Execute =p-search= with the prefix ~C-u~
-  to instantiate an empty session (TODO).
+  to instantiate an empty session.
 
 ** The p-search buffer
 
@@ -179,12 +178,6 @@
    will display an explanation of the result, showing why it was
    given the score it got.
 
-
-*** p-search-peruse-mode
-
-    =p-search-peruse-mode= is an experimental global minor mode, that
-    when active, will track the percentage of files that you viewed.
-    The view percentage will be updated in the search results section.
 
 ** Saving Sessions
 
