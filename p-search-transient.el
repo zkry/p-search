@@ -153,8 +153,13 @@ objects `default-value' slot."
 (transient-define-infix p-search-infix-directory ()
   :class p-search--directory)
 
-;; (transient-define-infix p-search-infix-file ()
-;;   :class p-search--file)
+
+(defclass p-search--file (p-search--option)
+  ((reader :initform (lambda (prompt init _hist)
+                       (read-file-name prompt nil nil nil init)))))
+
+(transient-define-infix p-search-infix-file ()
+  :class p-search--file)
 
 (defclass p-search--regexp (p-search--option)
   ((reader :initform #'read-regexp)
