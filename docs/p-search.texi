@@ -131,7 +131,7 @@ have thousands of sections in it.  A filesystem search obviously won't
 help you here as the candidate you want, while derived from a OS file,
 isn't the file itself, but rather a section of the file.  Or suppose
 you use Denote for managing your notes and do want individual files,
-but you want to be able to search on the file's title alone.
+but you want to be able to search on the file's name alone.
 
 There are many cases where you'll want to add search criteria to an
 already existing search candidate and ``mappings'' in p-search allow
@@ -170,7 +170,7 @@ assign higher probabilities to files containing these words.  If you
 believe a file was modified at a certain time, you can assert such a
 prior, and the closer a file was modified to that time, the higher a
 probability is given to it. As mentioned in Candidate Mappings ??LINK,
-additional fields can be extracted from candidates like a title or
+additional fields can be extracted from candidates like a name or
 author.  These fields can too become the target of a search.
 
 
@@ -262,7 +262,7 @@ like your home directory.
  ➋ The priors. There are no priors here. Priors are used to specify your search criteria.  Text queries are an example of a prior.
 
 @item
- ➌ The search results.  There are 5308 search results in this example.  Search results are displayed with their title, their probability, and a sample of their contents
+➌ The search results.  There are 5308 search results in this example.  Search results are displayed with their name, their probability, and a sample of their contents
 
 @end itemize
 
@@ -325,7 +325,7 @@ text ``list cons'' @key{RET} @kbd{e} to have it search both.
 
 Next, since we're concerned about internals, let's add another prior
 matching only @samp{.c} files.  To do this, we press @kbd{P}
-(@code{p-search-add-prior}) and then @kbd{h} (for ``title heading'').
+(@code{p-search-add-prior}) and then @kbd{h} (for ``name heading'').
 Enter the text @samp{.c}, then @key{RET} and @kbd{c} to create the
 prior.  You should notice the results now becoming only C files.
 
@@ -1107,7 +1107,7 @@ A candidate generator needs a function to generate documents.
 Documents are just sets of key-value pairs.   This section will cover
 creating documents.
 
-There are only three properties that a candidate document must have in p-search: @code{content}, @code{title}, and @code{id}.  The ID of a document is special in that it is used to determine the action to run when a document is selected.  You generally shouldn't create these by hand but instead rely on the function @code{p-search-documentize}.  This function takes the documents ID and returns the full document using predefined rules.  You can define such rules via the @code{p-search-def-property} function.
+There are only three properties that a candidate document must have in p-search: @code{content}, @code{name}, and @code{id}.  The ID of a document is special in that it is used to determine the action to run when a document is selected.  You generally shouldn't create these by hand but instead rely on the function @code{p-search-documentize}.  This function takes the documents ID and returns the full document using predefined rules.  You can define such rules via the @code{p-search-def-property} function.
 
 @defun p-search-def-property id-type property-symbol function
 
@@ -1121,7 +1121,7 @@ Returns a document alist by finding all properties defined for @var{doc-id} and 
 For example, if we make the following definition of a document type called ``base'',
 
 @lisp
-(p-search-def-property 'base 'title #'car)
+(p-search-def-property 'base name #'car)
 (p-search-def-property 'base 'content #'cdr)
 @end lisp
 
@@ -1135,7 +1135,7 @@ If we wanted to make a candidate generator for Wikipedia entries, we could make 
 @lisp
 (p-search-def-property
   'wikipedia
-  'title
+  'name
   #'identity)
 (p-search-def-property
   'wikipedia
@@ -1148,7 +1148,7 @@ If we wanted to make a candidate generator for Wikipedia entries, we could make 
 (p-search-documentize '(wikipedia "Mountain_pigeon"))
 @result{}
 ((id . (wikipedia "Mountain_pigeon"))
- (title . "Mountain_pigeon")
+ (name . "Mountain_pigeon")
  (content . "<html>..."))
 @end lisp
 
@@ -1366,7 +1366,7 @@ The following is an example of a preset plist with multiple items in it.
          (:prior-template p-search-prior-query :args ((query-string . "list") (importance . medium)))
          (:prior-template p-search-prior-query :args ((query-string . "cons") (importance . medium)))
          (:prior-template p-search-prior-git-author :args ((git-author . Richard\ M.\ Stallman) (importance . medium)))
-         (:prior-template p-search-prior-title :args ((title . ".c") (importance . medium)))))
+         (:prior-template p-search-prior-name :args ((name . ".c") (importance . medium)))))
 @end lisp
 
 Remember, in a p-search session you can run the command
@@ -1416,7 +1416,7 @@ returns a list of pre-defined candidates.  We first create our candidate-generat
      "test"))
 @end lisp
 
-Here we're creating a candidate generator that returns a list of three documents.  Recall that @code{p-search-documentize} is set up to know how to create documents of arying types with the @code{p-search-def-property} function, and the @code{base} type creates a document with title being the @code{car} and content being the @code{cdr}.  If we wanted to generate candidates of type ``file,'' then we could make the following change:
+Here we're creating a candidate generator that returns a list of three documents.  Recall that @code{p-search-documentize} is set up to know how to create documents of arying types with the @code{p-search-def-property} function, and the @code{base} type creates a document with name being the @code{car} and content being the @code{cdr}.  If we wanted to generate candidates of type ``file,'' then we could make the following change:
 
 @lisp
 (p-search-candidate-generator-create
@@ -1509,12 +1509,12 @@ Let's define these properties now:
     `((author . ,author)
       (genre . ,genre))))
 
-(p-search-def-property 'book-shop-item 'title #'get-book-title)
+(p-search-def-property 'book-shop-item 'name #'get-book-title)
 (p-search-def-property 'book-shop-item 'content #'get-book-content)
 (p-search-def-property 'book-shop-item 'fields #'get-book-fields)
 @end lisp
 
-Here we define the required title and content properties, as well as
+Here we define the required name and content properties, as well as
 include the fields property, which will be useful to us if we want to
 search on specific fields.
 

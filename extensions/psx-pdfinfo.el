@@ -39,14 +39,9 @@
 
 (require 'p-search)
 
-(p-search-def-field 'pdf-title 'text :weight 3)
 (p-search-def-field 'pdf-subject 'text :weight 3)
-(p-search-def-field 'pdf-producer 'text :weight 3)
-(p-search-def-field 'pdf-keywords 'text :weight 3)
-(p-search-def-field 'pdf-author 'text :weight 3)
 (p-search-def-field 'pdf-creator 'text :weight 3)
 (p-search-def-field 'pdf-producer 'text :weight 3)
-(p-search-def-field 'pdf-creationdate 'text :weight 3)
 (p-search-def-field 'pdf-moddate 'text :weight 3)
 (p-search-def-field 'pdf-pages 'text :weight 3)
 (p-search-def-field 'pdf-pagesize 'category)
@@ -78,21 +73,21 @@
         (unless (string-empty-p (cdr field))
           (pcase (car field)
             ("Title"
-             (add-to-list 'fields (cons 'pdf-title (cdr field))))
+             (add-to-list 'fields (cons 'title (cdr field))))
+            ("Keywords"
+             (add-to-list 'fields (cons 'keywords (cdr field))))
+            ("Author"
+             (add-to-list 'fields (cons 'author (cdr field))))
+            ("CreationDate"
+             (add-to-list 'fields (cons 'creation-date (cdr field))))
+            ("ModDate"
+             (add-to-list 'fields (cons 'modification-date (cdr field))))
             ("Subject"
              (add-to-list 'fields (cons 'pdf-subject (cdr field))))
-            ("Keywords"
-             (add-to-list 'fields (cons 'pdf-keywords (cdr field))))
-            ("Author"
-             (add-to-list 'fields (cons 'pdf-author (cdr field))))
             ("Creator"
              (add-to-list 'fields (cons 'pdf-creator (cdr field))))
             ("Producer"
              (add-to-list 'fields (cons 'pdf-producer (cdr field))))
-            ("CreationDate"
-             (add-to-list 'fields (cons 'pdf-creationdate (cdr field))))
-            ("ModDate"
-             (add-to-list 'fields (cons 'pdf-moddate (cdr field))))
             ("Pages"
              (add-to-list 'fields (cons 'pdf-pages (cdr field))))
             ("Page size"
