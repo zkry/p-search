@@ -42,7 +42,6 @@
 (p-search-def-field 'pdf-subject 'text :weight 3)
 (p-search-def-field 'pdf-creator 'text :weight 3)
 (p-search-def-field 'pdf-producer 'text :weight 3)
-(p-search-def-field 'pdf-moddate 'text :weight 3)
 (p-search-def-field 'pdf-pages 'text :weight 3)
 (p-search-def-field 'pdf-pagesize 'category)
 

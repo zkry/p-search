@@ -211,7 +211,7 @@ Key is of the type (cons type-symbol properties-p-list)")
 (defvar p-search-current-active-session-buffer nil
   "Buffer of most recent viewed p-search session.")
 
-(defvar p-search--relevant-prior-templates-cache (make-hash-table :test #'equal)
+(defvar-local p-search--relevant-prior-templates-cache (make-hash-table :test #'equal)
   "Variable containing a chache of computed relevant prior templates.
 
 Available prior templates are computed by iterating through the
@@ -1498,6 +1498,56 @@ Called with user supplied ARGS for the prior."
      :result-hint-function #'p-search--text-search-hint
      :transient-key-string "qu")))
 
+(defun p-search-prior-selected-category-options (&rest _)
+  "Prompt the user to select an available category.  Then return all values of category."
+  ;; TODO: speed up by having CG and mapping directly say what fields they expose.
+  (let* ((field->vals (make-hash-table :test #'equal)))
+    (maphash
+     (lambda (doc-id _)
+       (let* ((fields (p-search-document-property doc-id 'fields)))
+         (pcase-dolist (`(,field-id ,vals) fields)
+           (when (and (eql (car (p-search-get-field field-id)) 'category)
+                      (not (memq field-id fields)))
+             (when (not (listp vals))
+               (setq vals (list vals)))
+             (let ((prev-val (gethash field-id field->vals)))
+               (puthash field-id (cl-union prev-val vals) field->vals))))))
+     (p-search-candidates))
+    (let* ((selected-category (completing-read "Category: " (hash-table-keys field->vals)))
+           (category-values (gethash (intern selected-category) field->vals))
+           (selected-value (completing-read "Value: " category-values)))
+      (list selected-category selected-value))))
+
+(defconst p-search-prior-category
+  (p-search-prior-template-create
+   :id 'p-search-prior-category
+   :group ""
+   :name "category"
+   :required-properties '(fields)
+   :input-spec '((category-selection . (p-search-infix-custom
+                                        :key "s"
+                                        :description "Category Selection"
+                                        :reader p-search-prior-selected-category-options)))
+   :options-spec '()
+   :initialize-function #'p-search-prior-category-initialization-function
+   :transient-key-string "ca"))
+
+(defun p-search-prior-category-initialization-function (prior)
+  (let* ((args (p-search-prior-arguments prior))
+         (selection (alist-get 'category-selection args))
+         (category-id (intern (car selection)))
+         (category-val (cadr selection)))
+    (maphash
+     (lambda (doc-id _)
+       (let ((fields (p-search-document-property doc-id 'fields)))
+         (when-let ((fvals (alist-get category-id fields)))
+           (when (not (listp fvals))
+             (setq fvals (list fvals)))
+           (when (member category-val fvals)
+             (p-search-set-score prior doc-id p-search-score-yes)))))
+     (p-search-candidates))
+    (p-search-set-score prior :default p-search-score-no)))
+
 ;;; Git Priors
 
 (defun p-search--available-git-authors ()
@@ -2457,7 +2507,9 @@ This function will also start any process or thread described by TEMPLATE."
     (cons
      transient-type
      (cl-loop for (key value) on spec-props by 'cddr
-              append (list key (if (functionp value) (funcall value) value))))))
+              append (list key (if (and (functionp value) (not (eql key :reader)))
+                                   (funcall value)
+                                 value))))))
 
 (defun p-search-read-default-spec-value (name+spec)
   ;; TODO - resolve this code with the one in p-search-transient
@@ -2470,13 +2522,16 @@ This function will also start any process or thread described by TEMPLATE."
         (let* ((prompt (if (and instruction-string p-search-enable-instructions)
                            (format "%s\n%s: " instruction-string (or description name))
                          (format "%s: " (or description name)))) ;; Input prompt
-               (reader (oref (get (car spec) 'transient--suffix) :reader)))
+               (reader (or (oref (get (car spec) 'transient--suffix) :reader)
+                           (plist-get (cdr spec) :reader))))
           (if reader
               (funcall reader prompt nil nil)
             (cond
              ;; TODO - rething how this is done
              ((p-search--choices-p (get (car spec) 'transient--suffix))
               (let* ((choices (plist-get (cdr spec) :choices)))
+                (when (functionp choices)
+                  (setq choices (funcall choices)))
                 (intern (completing-read prompt choices nil t))))))))))
 
 (defun p-search-dispatch-add-prior (template)
@@ -2503,7 +2558,7 @@ This function will also start any process or thread described by TEMPLATE."
               ("-i" "importance"
                p-search-infix-choices
                :choices ,p-search-importance-levels
-               :init-choice medium
+               :default-value medium
                :option-symbol importance)]
              ["Actions"
               ("c" "create"
@@ -2540,7 +2595,7 @@ This function will also start any process or thread described by TEMPLATE."
               ("-i" "importance"
                p-search-infix-choices
                :choices ,p-search-importance-levels
-               :init-choice ,(alist-get 'importance args)
+               :default-value ,(alist-get 'importance args)
                :option-symbol importance)]
              ["Actions"
               ("e" "edit"
@@ -4254,10 +4309,12 @@ controlled by the custom variable
 
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-buffers)
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-filesystem)
+
 (add-to-list 'p-search-prior-templates p-search-prior-major-mode)
 (add-to-list 'p-search-prior-templates p-search-prior-subdirectory)
 (add-to-list 'p-search-prior-templates p-search-prior-mtime-recency)
 (add-to-list 'p-search-prior-templates p-search-prior-query)
+(add-to-list 'p-search-prior-templates p-search-prior-category)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-time)
