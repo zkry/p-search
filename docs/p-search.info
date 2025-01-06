@@ -102,6 +102,7 @@ Priors
 * Text Queries::
 * Text Query Syntax::
 * Fields::
+* Searching Category::
 * Instruction Strings::
 * Git-related Priors::
 * Filesystem-related Priors::
@@ -229,7 +230,7 @@ thousands of sections in it.  A filesystem search obviously won't help
 you here as the candidate you want, while derived from a OS file, isn't
 the file itself, but rather a section of the file.  Or suppose you use
 Denote for managing your notes and do want individual files, but you
-want to be able to search on the file's title alone.
+want to be able to search on the file's name alone.
 
    There are many cases where you'll want to add search criteria to an
 already existing search candidate and "mappings" in p-search allow you
@@ -270,7 +271,7 @@ probabilities to files containing these words.  If you believe a file
 was modified at a certain time, you can assert such a prior, and the
 closer a file was modified to that time, the higher a probability is
 given to it.  As mentioned in Candidate Mappings ??LINK, additional
-fields can be extracted from candidates like a title or author.  These
+fields can be extracted from candidates like a name or author.  These
 fields can too become the target of a search.
 
 
@@ -418,7 +419,7 @@ Search Results (5308) ➌
      prior.
 
    − ➌ The search results.  There are 5308 search results in this
-     example.  Search results are displayed with their title, their
+     example.  Search results are displayed with their name, their
      probability, and a sample of their contents
 
 
@@ -507,7 +508,7 @@ we press ‘q’ to edit the query term.  Enter the text "list cons" <RET>
 
    Next, since we're concerned about internals, let's add another prior
 matching only ‘.c’ files.  To do this, we press ‘P’
-(‘p-search-add-prior’) and then ‘h’ (for "title heading").  Enter the
+(‘p-search-add-prior’) and then ‘h’ (for "name heading").  Enter the
 text ‘.c’, then <RET> and ‘c’ to create the prior.  You should notice
 the results now becoming only C files.
 
@@ -960,6 +961,7 @@ explained in a later chapter.
 * Text Queries::
 * Text Query Syntax::
 * Fields::
+* Searching Category::
 * Instruction Strings::
 * Git-related Priors::
 * Filesystem-related Priors::
@@ -1194,7 +1196,7 @@ the whole string, not broken apart, you'd wrap it in quotation marks.
      operator (i.e.  ‘^’) is used without an amount.
 
 
-File: p-search.info,  Node: Fields,  Next: Instruction Strings,  Prev: Text Query Syntax,  Up: Priors
+File: p-search.info,  Node: Fields,  Next: Searching Category,  Prev: Text Query Syntax,  Up: Priors
 
 4.5.6 Fields
 ------------
@@ -1215,9 +1217,26 @@ search only a particular field, you can add it as the ‘field’ (i.e.
 ‘-f’) option in the text query prior.
 
 
-File: p-search.info,  Node: Instruction Strings,  Next: Git-related Priors,  Prev: Fields,  Up: Priors
+File: p-search.info,  Node: Searching Category,  Next: Instruction Strings,  Prev: Fields,  Up: Priors
 
-4.5.7 Instruction Strings
+4.5.7 Searching Category
+------------------------
+
+In order to query by category field, your documents must have such
+fields set.  This is usually done by mappings.  For example, a
+Denote-related mapping might extract keywords and add those as
+categories.  You can then proceed to add a category query by pressing
+‘P’ (‘p-search-add-prior’) then ‘c’.
+
+   You will be prompted to select a category field that your document
+has (e.g.  "keywords"), then from all of the available values you'll
+select the one you want to query for.  Finish by creating your prior and
+then the documents will be re-scored.
+
+
+File: p-search.info,  Node: Instruction Strings,  Next: Git-related Priors,  Prev: Searching Category,  Up: Priors
+
+4.5.8 Instruction Strings
 -------------------------
 
 Some options in the system come with an instruction string which
@@ -1233,7 +1252,7 @@ it, you can do so with the following user option.
 
 File: p-search.info,  Node: Git-related Priors,  Next: Filesystem-related Priors,  Prev: Instruction Strings,  Up: Priors
 
-4.5.8 Git-related Priors
+4.5.9 Git-related Priors
 ------------------------
 
 p-search comes with a number of predefined priors for working on git
@@ -1289,8 +1308,8 @@ repository in the candidate generators.
 
 File: p-search.info,  Node: Filesystem-related Priors,  Next: Troubleshooting Priors,  Prev: Git-related Priors,  Up: Priors
 
-4.5.9 Filesystem-related Priors
--------------------------------
+4.5.10 Filesystem-related Priors
+--------------------------------
 
 p-search comes with a few filesystem related priors.  These are only
 selectable if a candidate document is known to be file.
@@ -1320,7 +1339,7 @@ candidate in that directory will get a score boost.
 
 File: p-search.info,  Node: Troubleshooting Priors,  Prev: Filesystem-related Priors,  Up: Priors
 
-4.5.10 Troubleshooting Priors
+4.5.11 Troubleshooting Priors
 -----------------------------
 
 With a system as complex as p-search, you are bound to run into some
@@ -1598,7 +1617,7 @@ are just sets of key-value pairs.  This section will cover creating
 documents.
 
    There are only three properties that a candidate document must have
-in p-search: ‘content’, ‘title’, and ‘id’.  The ID of a document is
+in p-search: ‘content’, ‘name’, and ‘id’.  The ID of a document is
 special in that it is used to determine the action to run when a
 document is selected.  You generally shouldn't create these by hand but
 instead rely on the function ‘p-search-documentize’.  This function
@@ -1622,7 +1641,7 @@ function.
    For example, if we make the following definition of a document type
 called "base",
 
-     (p-search-def-property 'base 'title #'car)
+     (p-search-def-property 'base name #'car)
      (p-search-def-property 'base 'content #'cdr)
 
    then calling ‘(p-search-documentize (base (cons "My Title" "my
@@ -1635,7 +1654,7 @@ could make the following definition:
 
      (p-search-def-property
        'wikipedia
-       'title
+       'name
        #'identity)
      (p-search-def-property
        'wikipedia
@@ -1648,7 +1667,7 @@ could make the following definition:
      (p-search-documentize '(wikipedia "Mountain_pigeon"))
      ⇒
      ((id . (wikipedia "Mountain_pigeon"))
-      (title . "Mountain_pigeon")
+      (name . "Mountain_pigeon")
       (content . "<html>..."))
 
  -- Function: p-search-def-function id-type function-symbol function
@@ -1711,6 +1730,23 @@ create a new mapping object and add it to the list
           the newly modified document, a list of documents, nil (meaning
           nothing could be done), or :remove (meaning the file document
           should be removed).
+
+ -- Function: p-search-def-field id-symbol type-symbol &rest
+          properties-plist
+     Defined a new field type in p-search.  Before fields are added to
+     documetns, they should be defined with this function in order to
+     denote their type.  The ‘id-symbol’ should be a unique identifier
+     for the field type.  ‘type-symbol’ should be either ‘'text’,
+     ‘'category’, or ‘'date’.  If the type is text, then the ‘:weight’
+     property can be added as a numeric weight to be given to text that
+     matches that field.  The count of a match is multiplied by the
+     weight.
+
+     Currently, the following fields are predefined and you can add them
+     in your mapping without defining them: ‘title’ (text), ‘author’
+     (text), ‘keywords’ (category), ‘creation-date’ (category),
+     ‘modification-date’ (date), ‘language’ (category), ‘file-type’
+     (category).
 
    You shouldn't work with documents as Lisp objects, but rather use the
 following functions to interface with them:
@@ -1950,7 +1986,7 @@ it.
               (:prior-template p-search-prior-query :args ((query-string . "list") (importance . medium)))
               (:prior-template p-search-prior-query :args ((query-string . "cons") (importance . medium)))
               (:prior-template p-search-prior-git-author :args ((git-author . Richard\ M.\ Stallman) (importance . medium)))
-              (:prior-template p-search-prior-title :args ((title . ".c") (importance . medium)))))
+              (:prior-template p-search-prior-name :args ((name . ".c") (importance . medium)))))
 
    Remember, in a p-search session you can run the command
 ‘p-search-show-session-preset’ to view the current session as a preset
@@ -2024,7 +2060,7 @@ candidate-generator object.
    Here we're creating a candidate generator that returns a list of
 three documents.  Recall that ‘p-search-documentize’ is set up to know
 how to create documents of arying types with the ‘p-search-def-property’
-function, and the ‘base’ type creates a document with title being the
+function, and the ‘base’ type creates a document with name being the
 ‘car’ and content being the ‘cdr’.  If we wanted to generate candidates
 of type "file," then we could make the following change:
 
@@ -2132,11 +2168,11 @@ database object as we're not able to fetch the ID alone.
          `((author . ,author)
            (genre . ,genre))))
 
-     (p-search-def-property 'book-shop-item 'title #'get-book-title)
+     (p-search-def-property 'book-shop-item 'name #'get-book-title)
      (p-search-def-property 'book-shop-item 'content #'get-book-content)
      (p-search-def-property 'book-shop-item 'fields #'get-book-fields)
 
-   Here we define the required title and content properties, as well as
+   Here we define the required name and content properties, as well as
 include the fields property, which will be useful to us if we want to
 search on specific fields.
 
@@ -2184,59 +2220,60 @@ included, this too would greatly slow down p-search.
 
 Tag Table:
 Node: Top764
-Node: Introduction3404
-Node: The Search Candidates5740
-Node: Candidate Mappings7201
-Node: Asserting Probabilities8437
-Node: Searching and Making Observations10233
-Node: Installation11843
-Node: Installing from Quelpa12307
-Node: Installing with Straight12717
-Node: Recommended Tooling13044
-Node: Getting Started13399
-Node: Creating the p-search session13839
-Node: Adding Search Criteria15630
-Node: Refining our Search18909
-Node: Final Results20689
-Node: The p-search Interface22171
-Node: Starting a session22490
-Node: The p-search session buffer25097
-Node: Candidate Generators26100
-Node: Creating and Editing Candidate Generators27333
-Node: Inputs and Options29618
-Node: Common Candidate Generators: FILESYSTEM30399
-Node: Common Candidate Generators: BUFFERS32177
-Node: Common Candidate Generators: FUNCTION-SYMBOL32755
-Node: Common Candidate Generators: INFO33835
-Node: Mappings34515
-Node: Creating and Editing Mappings35859
-Node: Priors37600
-Node: Creating and Editing Priors38807
-Node: Scoring39984
-Node: Importance and Complement Options41321
-Node: Text Queries43192
-Node: Text Query Syntax46045
-Node: Fields49306
-Node: Instruction Strings50279
-Node: Git-related Priors50900
-Node: Filesystem-related Priors53512
-Node: Troubleshooting Priors54727
-Node: Search Results55623
-Node: Navigating and Viewing Search Results56625
-Node: Making Observations58159
-Node: Search Result Preview59641
-Node: Saving Sessions61052
-Node: Extending p-search61198
-Node: Creating Candidate Generators61828
-Node: Creating Documents66341
-Node: Creating Mappings69816
-Node: Input/Options Specification73044
-Node: Creating Priors77467
-Node: The Preset Data Structure and Programatically Creating Sessions81304
-Node: Examples of Extending p-search84276
-Node: Candidate Generator Examples84759
-Node: A Candidate Generator with Hard-coded Items85213
-Node: Defining Custom Properties87115
+Node: Introduction3427
+Node: The Search Candidates5763
+Node: Candidate Mappings7224
+Node: Asserting Probabilities8459
+Node: Searching and Making Observations10254
+Node: Installation11864
+Node: Installing from Quelpa12328
+Node: Installing with Straight12738
+Node: Recommended Tooling13065
+Node: Getting Started13420
+Node: Creating the p-search session13860
+Node: Adding Search Criteria15650
+Node: Refining our Search18929
+Node: Final Results20708
+Node: The p-search Interface22190
+Node: Starting a session22509
+Node: The p-search session buffer25116
+Node: Candidate Generators26119
+Node: Creating and Editing Candidate Generators27352
+Node: Inputs and Options29637
+Node: Common Candidate Generators: FILESYSTEM30418
+Node: Common Candidate Generators: BUFFERS32196
+Node: Common Candidate Generators: FUNCTION-SYMBOL32774
+Node: Common Candidate Generators: INFO33854
+Node: Mappings34534
+Node: Creating and Editing Mappings35878
+Node: Priors37619
+Node: Creating and Editing Priors38849
+Node: Scoring40026
+Node: Importance and Complement Options41363
+Node: Text Queries43234
+Node: Text Query Syntax46087
+Node: Fields49348
+Node: Searching Category50320
+Node: Instruction Strings51041
+Node: Git-related Priors51674
+Node: Filesystem-related Priors54286
+Node: Troubleshooting Priors55503
+Node: Search Results56399
+Node: Navigating and Viewing Search Results57401
+Node: Making Observations58935
+Node: Search Result Preview60417
+Node: Saving Sessions61828
+Node: Extending p-search61974
+Node: Creating Candidate Generators62604
+Node: Creating Documents67117
+Node: Creating Mappings70587
+Node: Input/Options Specification74750
+Node: Creating Priors79173
+Node: The Preset Data Structure and Programatically Creating Sessions83010
+Node: Examples of Extending p-search85980
+Node: Candidate Generator Examples86463
+Node: A Candidate Generator with Hard-coded Items86917
+Node: Defining Custom Properties88818
 
 End Tag Table
 

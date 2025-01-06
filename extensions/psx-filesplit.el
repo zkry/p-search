@@ -46,9 +46,9 @@
    :name "File Split"
    :required-property-list '()
    :input-spec '((split-size . (p-search-infix-number
-                                                   :key "n"
-                                                   :description "Split by N lines"
-                                                   :default-value 20)))
+                                :key "n"
+                                :description "Split by N lines"
+                                :default-value 20)))
    :options-spec '()
    :function #'psx-filesplit-function))
 

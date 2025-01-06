@@ -859,6 +859,13 @@ anything matching it should be given extra weight.  Creating mappings with field
 
 Fields, when added, will be searched and weighted accordingly automatically as long as the mapping has added it.  If you want to search only a particular field, you can add it as the @samp{field} (i.e. @kbd{-f}) option in the text query prior.
 
+@node Searching Category
+@subsection Searching Category
+
+In order to query by category field, your documents must have such fields set.  This is usually done by mappings.  For example, a Denote-related mapping might extract keywords and add those as categories.  You can then proceed to add a category query by pressing @kbd{P} (@code{p-search-add-prior}) then @kbd{c}.
+
+You will be prompted to select a category field that your document has (e.g. ``keywords''), then from all of the available values you'll select the one you want to query for.  Finish by creating your prior and then the documents will be re-scored.
+
 @node Instruction Strings
 @subsection Instruction Strings
 
@@ -1197,6 +1204,13 @@ The specification for the options arguments.
 @item :function @var{mapping-function}
 The function which performs the mapping.  This function should take two arguments, the combined input/options arguments and the document to be mapped.  The function should return either the newly modified document, a list of documents, nil (meaning nothing could be done), or :remove (meaning the file document should be removed).
 @end table
+@end defun
+
+@defun p-search-def-field id-symbol type-symbol &rest properties-plist
+Defined a new field type in p-search.  Before fields are added to documetns, they should be defined with this function in order to denote their type.  The @code{id-symbol} should be a unique identifier for the field type.  @code{type-symbol} should be either @code{'text}, @code{'category}, or @code{'date}.  If the type is text, then the @code{:weight} property can be added as a numeric weight to be given to text that matches that field.  The count of a match is multiplied by the weight.
+
+Currently, the following fields are predefined and you can add them in your mapping without defining them: @code{title} (text), @code{author} (text), @code{keywords} (category), @code{creation-date} (category), @code{modification-date} (date), @code{language} (category), @code{file-type} (category).
+
 @end defun
 
 You shouldn't work with documents as Lisp objects, but rather use the following functions to interface with them:
