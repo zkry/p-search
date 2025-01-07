@@ -211,7 +211,7 @@ Key is of the type (cons type-symbol properties-p-list)")
 (defvar p-search-current-active-session-buffer nil
   "Buffer of most recent viewed p-search session.")
 
-(defvar p-search--relevant-prior-templates-cache (make-hash-table :test #'equal)
+(defvar-local p-search--relevant-prior-templates-cache (make-hash-table :test #'equal)
   "Variable containing a chache of computed relevant prior templates.
 
 Available prior templates are computed by iterating through the
@@ -680,7 +680,7 @@ A term regex is noted for marking boundary characters."
 ;; A document in p-search is an alist of information retrieval (IR) properties.
 ;; An example of a document is as follows:
 ;;
-;; ((id . (book . "123")) (title . "Othello") (content . "...."))
+;; ((id . (book . "123")) (name . "Othello") (content . "...."))
 ;;
 ;; The documentizer exists in order to provide a standard interface to
 ;; create documents of a given type, and to allow the interface to be
@@ -754,17 +754,17 @@ The definition is returned in the form of (cons type properties-p-list)."
   (let* ((content (p-search-document-property doc-id 'content)))
     (length content))) ;; TODO - take into account multibyte
 
-(p-search-def-property 'base 'title #'car)
+(p-search-def-property 'base 'name #'car)
 (p-search-def-property 'base 'content #'cdr)
 
-(p-search-def-property 'buffer 'title #'buffer-name)
+(p-search-def-property 'buffer 'name #'buffer-name)
 (p-search-def-property 'buffer 'file-name #'buffer-file-name)
 (p-search-def-property 'buffer 'content (lambda (buf) (with-current-buffer buf (buffer-string))))
 (p-search-def-property 'buffer 'buffer #'identity)
 (p-search-def-function 'buffer 'p-search-goto-document #'display-buffer)
 (p-search-def-function 'buffer 'p-search-buffer #'identity)
 
-(p-search-def-property 'file 'title #'identity)
+(p-search-def-property 'file 'name #'identity)
 (p-search-def-property 'file 'content #'p-search--file-text)
 (p-search-def-property 'file 'file-name #'identity)
 (p-search-def-property 'file 'size #'p-search--file-size)
@@ -773,6 +773,15 @@ The definition is returned in the form of (cons type properties-p-list)."
 (p-search-def-function 'file 'p-search-buffer #'get-file-buffer)
 
 (p-search-def-property :default 'size #'p-search--size-from-content)
+
+;; predefined set of fields
+(p-search-def-field 'title 'text :weight 3)
+(p-search-def-field 'author 'text :weight 3)
+(p-search-def-field 'keywords 'category)
+(p-search-def-field 'creation-date 'date)
+(p-search-def-field 'modification-date 'date)
+(p-search-def-field 'language 'category)
+(p-search-def-field 'file-type 'category)
 
 
 ;;; Prior API
@@ -1239,49 +1248,27 @@ of the term frequency counts."
 
 ;;; Generic priors
 
-(defconst p-search-prior-title
+(defconst p-search-prior-name
   (p-search-prior-template-create
-   :id 'p-search-prior-title
+   :id 'p-search-prior-name
    :group ""
-   :name "title heading"
-   :required-properties '(title)
-   :input-spec '((title . (p-search-infix-string
-                           :key "t"
-                           :description "Document's Title")))
+   :name "name heading"
+   :required-properties '(name)
+   :input-spec '((name . (p-search-infix-string
+                           :key "n"
+                           :description "Document's Name")))
    :initialize-function
    (lambda (prior)
      (let* ((args (p-search-prior-arguments prior))
-            (title (alist-get 'title args))
-            (documents (p-search-candidates-with-properties '(title))))
+            (name (alist-get 'name args))
+            (documents (p-search-candidates-with-properties '(name))))
        (maphash
         (lambda (_ document)
-          (let* ((doc-title (p-search-document-property document 'title)))
-            (when (string-search title doc-title)
+          (let* ((doc-name (p-search-document-property document 'name)))
+            (when (string-search name doc-name)
               (p-search-set-score prior document p-search-score-yes))))
         documents)))
    :transient-key-string "he"))
-
-(defconst p-search-prior-suffix
-  (p-search-prior-template-create
-   :id 'p-search-prior-suffix
-   :group ""
-   :name "suffix of title"
-   :required-properties '(title)
-   :input-spec '((suffix . (p-search-infix-string
-                            :key "s"
-                            :description "suffix")))
-   :initialize-function
-   (lambda (prior)
-     (let* ((args (p-search-prior-arguments prior))
-            (suffix (alist-get 'suffir args))
-            (documents (p-search-candidates-with-properties '(title))))
-       (maphash
-        (lambda (_ document)
-          (let* ((doc-title (p-search-document-property document 'title)))
-            (when (string-suffix-p suffix doc-title)
-              (p-search-set-score prior document p-search-score-yes))))
-        documents)))
-   :transient-key-string "su"))
 
 ;;; Buffer priors
 
@@ -1510,6 +1497,56 @@ Called with user supplied ARGS for the prior."
      :initialize-function #'p-search--prior-query-initialize-function
      :result-hint-function #'p-search--text-search-hint
      :transient-key-string "qu")))
+
+(defun p-search-prior-selected-category-options (&rest _)
+  "Prompt the user to select an available category.  Then return all values of category."
+  ;; TODO: speed up by having CG and mapping directly say what fields they expose.
+  (let* ((field->vals (make-hash-table :test #'equal)))
+    (maphash
+     (lambda (doc-id _)
+       (let* ((fields (p-search-document-property doc-id 'fields)))
+         (pcase-dolist (`(,field-id ,vals) fields)
+           (when (and (eql (car (p-search-get-field field-id)) 'category)
+                      (not (memq field-id fields)))
+             (when (not (listp vals))
+               (setq vals (list vals)))
+             (let ((prev-val (gethash field-id field->vals)))
+               (puthash field-id (cl-union prev-val vals) field->vals))))))
+     (p-search-candidates))
+    (let* ((selected-category (completing-read "Category: " (hash-table-keys field->vals)))
+           (category-values (gethash (intern selected-category) field->vals))
+           (selected-value (completing-read "Value: " category-values)))
+      (list selected-category selected-value))))
+
+(defconst p-search-prior-category
+  (p-search-prior-template-create
+   :id 'p-search-prior-category
+   :group ""
+   :name "category"
+   :required-properties '(fields)
+   :input-spec '((category-selection . (p-search-infix-custom
+                                        :key "s"
+                                        :description "Category Selection"
+                                        :reader p-search-prior-selected-category-options)))
+   :options-spec '()
+   :initialize-function #'p-search-prior-category-initialization-function
+   :transient-key-string "ca"))
+
+(defun p-search-prior-category-initialization-function (prior)
+  (let* ((args (p-search-prior-arguments prior))
+         (selection (alist-get 'category-selection args))
+         (category-id (intern (car selection)))
+         (category-val (cadr selection)))
+    (maphash
+     (lambda (doc-id _)
+       (let ((fields (p-search-document-property doc-id 'fields)))
+         (when-let ((fvals (alist-get category-id fields)))
+           (when (not (listp fvals))
+             (setq fvals (list fvals)))
+           (when (member category-val fvals)
+             (p-search-set-score prior doc-id p-search-score-yes)))))
+     (p-search-candidates))
+    (p-search-set-score prior :default p-search-score-no)))
 
 ;;; Git Priors
 
@@ -1872,7 +1909,7 @@ This function will error if any candidate generator of prior-template doesn't ha
 ;; Recall from previous sections that each document is composed of a
 ;; set of fields.  Buffer documents may have the :buffer field, while
 ;; filesystem documents may have the :file-name field.  The two fields
-;; common to all documents are :content and :title.  p-search defaults
+;; common to all documents are :content and :name.  p-search defaults
 ;; to reading the :content field and performing a search using Elisp
 ;; for the term.  While not performant, it is the fallback used.
 ;;
@@ -2470,7 +2507,9 @@ This function will also start any process or thread described by TEMPLATE."
     (cons
      transient-type
      (cl-loop for (key value) on spec-props by 'cddr
-              append (list key (if (functionp value) (funcall value) value))))))
+              append (list key (if (and (functionp value) (not (eql key :reader)))
+                                   (funcall value)
+                                 value))))))
 
 (defun p-search-read-default-spec-value (name+spec)
   ;; TODO - resolve this code with the one in p-search-transient
@@ -2483,13 +2522,16 @@ This function will also start any process or thread described by TEMPLATE."
         (let* ((prompt (if (and instruction-string p-search-enable-instructions)
                            (format "%s\n%s: " instruction-string (or description name))
                          (format "%s: " (or description name)))) ;; Input prompt
-               (reader (oref (get (car spec) 'transient--suffix) :reader)))
+               (reader (or (oref (get (car spec) 'transient--suffix) :reader)
+                           (plist-get (cdr spec) :reader))))
           (if reader
               (funcall reader prompt nil nil)
             (cond
              ;; TODO - rething how this is done
              ((p-search--choices-p (get (car spec) 'transient--suffix))
               (let* ((choices (plist-get (cdr spec) :choices)))
+                (when (functionp choices)
+                  (setq choices (funcall choices)))
                 (intern (completing-read prompt choices nil t))))))))))
 
 (defun p-search-dispatch-add-prior (template)
@@ -2516,7 +2558,7 @@ This function will also start any process or thread described by TEMPLATE."
               ("-i" "importance"
                p-search-infix-choices
                :choices ,p-search-importance-levels
-               :init-choice medium
+               :default-value medium
                :option-symbol importance)]
              ["Actions"
               ("c" "create"
@@ -2553,7 +2595,7 @@ This function will also start any process or thread described by TEMPLATE."
               ("-i" "importance"
                p-search-infix-choices
                :choices ,p-search-importance-levels
-               :init-choice ,(alist-get 'importance args)
+               :default-value ,(alist-get 'importance args)
                :option-symbol importance)]
              ["Actions"
               ("e" "edit"
@@ -3452,10 +3494,10 @@ mapping as this data is needed to retrieve the document count."
         (when (= (length top-results) 0)
           (insert (propertize "No results exist.  Add a candidate generator with \"c\"\nto provide the candidates to search from." 'face 'shadow))) ;; TODO "c" to keybinding face
         (pcase-dolist (`(,document ,p) top-results)
-          (let* ((doc-title (p-search-document-property document 'title))
+          (let* ((doc-name (p-search-document-property document 'name))
                  (heading-line-1 (concat
-                                  (substring (propertize (or doc-title "???") 'face 'p-search-header-line-key)
-                                             (max (- (length doc-title) (cadr page-dims))
+                                  (substring (propertize (or doc-name "???") 'face 'p-search-header-line-key)
+                                             (max (- (length doc-name) (cadr page-dims))
                                                   0))))
                  (view-percentage (p-search-peruse-percentage document))
                  (view-percentage-text
@@ -3473,7 +3515,7 @@ mapping as this data is needed to retrieve the document count."
             ;; TODO: figure out what to do with too long names
             (p-search-add-section `((heading . ,heading-line)
                                     (props . (p-search-result ,document))
-                                    (key . ,doc-title))
+                                    (key . ,doc-name))
               (let* ((preview (p-search-document-preview document)))
                 (insert preview)))))))))
 
@@ -3623,12 +3665,12 @@ If PRESET is non-nil, set up session with PRESET."
     (let* ((top-results (p-search-top-results))
            (i 1))
       (pcase-dolist (`(,document ,_p) top-results)
-        (let* ((doc-title (p-search-document-property document 'title))
+        (let* ((doc-name (p-search-document-property document 'name))
                (doc-preview (p-search-document-preview document)))
           (widget-create 'push-button
                          :notify (lambda (&rest ignore)
                                    (p-search-run-document-function document 'p-search-goto-document))
-                         doc-title)
+                         doc-name)
           (widget-insert "\n" doc-preview "\n"))
         (when (and (= (mod i 10) 0) (< i p-search-top-n))
           (widget-insert "\n" (format "------------------------- Page %d -------------------------" (1+ (/ i 10))) "\n\n"))
@@ -3676,14 +3718,14 @@ If PRESET is non-nil, set up session with PRESET."
   "Display the calculation explanation of RESULT-ID."
   (let* ((buf (get-buffer-create (format "*result-explain-%s" result-id)))
          (candidates-by-generator p-search-candidates-by-generator)
-         (title (p-search-document-property result-id 'title))
+         (name (p-search-document-property result-id 'name))
          (fields (p-search-document-property result-id 'fields))
          (observations p-search-observations)
          (marginal-p p-search-marginal)
          (priors p-search-priors))
     (with-current-buffer buf
       (erase-buffer)
-      (insert (format "Document Title: %s\n\n" title))
+      (insert (format "Document Name: %s\n\n" name))
       (insert (format "Document ID: %s\n\n" result-id))
 
       ;; Insert the candidate generator that created this document
@@ -3776,9 +3818,9 @@ If PRESET is non-nil, set up session with PRESET."
     (with-current-buffer outb
       (maphash
        (lambda (id doc)
-         (let* ((title (with-current-buffer p-search-buffer
-                         (p-search-document-property id 'title))))
-           (insert title "\n")))
+         (let* ((name (with-current-buffer p-search-buffer
+                        (p-search-document-property id 'name))))
+           (insert name "\n")))
        candidates))
     (display-buffer outb)))
 
@@ -4267,11 +4309,12 @@ controlled by the custom variable
 
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-buffers)
 (add-to-list 'p-search-candidate-generators p-search-candidate-generator-filesystem)
+
 (add-to-list 'p-search-prior-templates p-search-prior-major-mode)
-(add-to-list 'p-search-prior-templates p-search-prior-title)
 (add-to-list 'p-search-prior-templates p-search-prior-subdirectory)
 (add-to-list 'p-search-prior-templates p-search-prior-mtime-recency)
 (add-to-list 'p-search-prior-templates p-search-prior-query)
+(add-to-list 'p-search-prior-templates p-search-prior-category)
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-time)

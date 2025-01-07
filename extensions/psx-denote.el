@@ -33,11 +33,8 @@
 (require 'p-search)
 (require 'denote)
 
-(p-search-def-field 'denote-title 'text :weight 3)
 (p-search-def-field 'denote-type 'category)
 (p-search-def-field 'denote-identifier 'text :weight 10)
-(p-search-def-field 'denote-keywords-cat 'category)
-(p-search-def-field 'denote-keywords 'text :weight 3)
 (p-search-def-field 'denote-signature 'text :weight 3)
 
 (defgroup psx-denote nil
@@ -46,28 +43,10 @@
   :group 'denote
   :prefix "psx-denote-")
 
-(defconst psx-denote--custom-toggle-type
-  '(choice (const :tag "Off by default" nil)
-           (const :tag "On by default" on)))
-
-(defcustom psx-denote-categories-as-keywords-p nil
-  "Should denote keywords be generated as categories?"
-  :type psx-denote--custom-toggle-type
-  :group 'psx-denote)
-
-(defcustom psx-denote-categories-as-text-p 'on
-  "Should denote keywords be generated as formatted text?"
-  :type psx-denote--custom-toggle-type
-  :group 'psx-denote)
-
 (defcustom psx-denote-include-signature-p 'on
   "Should the Denote signature be a part of metadata?"
-  :type psx-denote--custom-toggle-type
-  :group 'psx-denote)
-
-(defcustom psx-denote-only-denote-p nil
-  "Should the p-search mapper drop non-denote files?"
-  :type psx-denote--custom-toggle-type
+  :type '(choice (const :tag "Off by default" nil)
+                 (const :tag "On by default" on))
   :group 'psx-denote)
 
 (defun psx-denote-annotator (args document)
@@ -90,15 +69,12 @@
             (ignore include-signature)
             (push (cons 'denote-signature signature) new-fields))
           (when keywords
-            (when .category-keywords
-              (push (cons 'denote-keywords-cat keywords) new-fields))
-            (when .category-text
-              (push (cons 'denote-keywords (string-join keywords ", ")) new-fields)))
+            (push (cons 'keywords keywords) new-fields))
           (when title
-            (push (cons 'denote-title title) new-fields))
+            (push (cons 'title title) new-fields))
           (when (and (stringp title-nice)
                      (not (string= title title-nice)))
-            (push (cons 'denote-title (list title-nice title)) new-fields))
+            (push (cons 'title (list title-nice title)) new-fields))
           (list (p-search-document-extend document new-id new-fields)))))))
 
 (defun psx-denote--arg-display (_input-spec _output-spec arguments)
@@ -120,15 +96,7 @@
    :name "Denote"
    :required-property-list '(file-name)
    :input-spec '()
-   :options-spec '((category-keywords . (p-search-infix-toggle
-                                         :key "-kc"
-                                         :description "Include Categorized Keywords"
-                                         :default-value (lambda () psx-denote-categories-as-keywords-p)))
-                   (category-text . (p-search-infix-toggle
-                                     :key "-kt"
-                                     :description "Include Textual Keywords"
-                                     :default-value (lambda () psx-denote-categories-as-text-p)))
-                   (include-signature . (p-search-infix-toggle
+   :options-spec '((include-signature . (p-search-infix-toggle
                                          :key "-s"
                                          :description "Include Signature"
                                          :default-value (lambda () psx-denote-include-signature-p))))

@@ -248,13 +248,7 @@ objects `default-value' slot."
 ;;; Choices
 
 (defclass p-search--choices (p-search--option)
-  ((choices :initarg :choices)
-   (init-choice :initarg :init-choice)))
-
-(cl-defmethod transient-init-value ((obj p-search--choices))
-  (cl-call-next-method)
-  (when-let (init-value (and (slot-boundp obj 'init-choice) (oref obj init-choice)))
-    (oset obj value init-value))) ;; TODO - do I need init-choice
+  ((choices :initarg :choices)))
 
 (cl-defmethod transient-infix-read ((obj p-search--choices))
   (let* ((choices (oref obj choices)))
@@ -266,6 +260,33 @@ objects `default-value' slot."
 
 (transient-define-infix p-search-infix-choices ()
   :class p-search--choices)
+
+
+;;; Constant - pre-defined value that can't be changed.
+
+(defclass p-search--const (p-search--option)
+  ((init-value :initarg :value)))
+
+(cl-defmethod transient-infix-read ((obj p-search--const))
+  (beep)
+  (message "value read only")
+  (oref obj value))
+
+(transient-define-infix p-search-infix-const ()
+  :class p-search--const)
+
+
+;;; Custom - provide a custom reader
+
+(defclass p-search--custom (p-search--option)
+  ((reader :initarg :reader)))
+
+(cl-defmethod transient-infix-read ((obj p-search--const))
+  (message "reader: %s" (oref obj reader))
+  (funcall (oref obj reader)))
+
+(transient-define-infix p-search-infix-custom ()
+  :class p-search--custom)
 
 
 

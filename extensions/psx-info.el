@@ -171,7 +171,7 @@ not have to open the same file repeatedly.")
      (let* ((node (alist-get 'info-node args)))
        (format "info:%s" (symbol-name node))))))
 
-(p-search-def-property 'psx-info 'title #'psx-info--title)
+(p-search-def-property 'psx-info 'name #'psx-info--title)
 (p-search-def-property 'psx-info 'content #'psx-info--content)
 
 (add-to-list 'p-search-candidate-generators psx-info-candidate-generator)

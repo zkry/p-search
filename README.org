@@ -53,7 +53,7 @@
 
     Candidate generators are the parts of the search session that
     enumerate all possible search candidates.  A search candidate is
-    an entity with a set of key/value properties, ='content= and ='title=
+    an entity with a set of key/value properties, ='content= and ='name=
     being mandetory.  Other properties may exist which will allow you
     to use additional prior functions.  In the p-search session run
     =p-search-add-candidate-generator= (~C~)to add a new candidate generator.
