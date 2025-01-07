@@ -727,7 +727,9 @@ The definition is returned in the form of (cons type properties-p-list)."
                 (list (car document-id) prop)
                 p-search-documentizer-function-properties)))
       (cond
-       (fn (funcall fn (cadr document-id)))
+       (fn (apply fn (cdr document-id)))
+        ;; If the second item is a cons cell, and we didn't have a
+        ;; matching function, see if we can run a function on it.
        ((consp (cadr document-id))
         (p-search-run-document-function (cadr document-id) prop))))))
 
@@ -2997,6 +2999,9 @@ the heading to the point where BODY leaves off."
 ;; various priors being applied.  The p-search major mode is also used for
 ;; interacting with the various search results.
 
+(defvar p-search-line-offset nil
+  "Dynamic variable to store the line offset of the current item.")
+
 (defun p-search--document-hints (priors)
   "Return the documents hints for the current buffer."
   (let ((hints))
@@ -3008,8 +3013,9 @@ the heading to the point where BODY leaves off."
 
 (defun p-search--buffer-substring-line-number (start end)
   "Return area of buffer from START to END with line numbers inserted."
-  (let* ((line-no (line-number-at-pos start))
-         (max-line-no (line-number-at-pos end))
+  (let* ((line-offset (or p-search-line-offset 0))
+         (line-no (+ (line-number-at-pos start) line-offset))
+         (max-line-no (+ (line-number-at-pos end) line-offset))
          (digit-ct (1+ (floor (log max-line-no 10))))
          (substring (buffer-substring start end)))
     (with-temp-buffer
@@ -3151,6 +3157,7 @@ The number of lines returned is determined by `p-search-document-preview-size'."
          (session-tfs p-search-query-session-tf-ht)
          (candidates (p-search-candidates))
          (file-name (p-search-document-property document 'file-name))
+         (p-search-line-offset (p-search-document-property document 'line-offset))
          (final-result))
     (with-temp-buffer
       (let* ((p-search-document-preview-size preview-size))
@@ -4041,13 +4048,15 @@ item's contents."
   "Find the file at the current point."
   (interactive)
   (let* ((document (get-char-property (point) 'p-search-result))
+         (line-offset (p-search-document-property document 'line-offset))
          (line-no (get-char-property (point) 'p-search-document-line-no)))
     (unless document
       (user-error "No document found under point"))
     (p-search-run-document-function document 'p-search-goto-document)
-    (when line-no
-      (goto-char (point-min))
-      (forward-line (1- line-no)))))
+    (when (or line-offset line-no)
+      (let ((goto-line (+ (or line-offset 0) (or line-no 0))))
+        (goto-char (point-min))
+        (forward-line (1- goto-line))))))
 
 (defun p-search-view-document ()
   "Find the document at current point, displaying it in read-only mode."
@@ -4066,13 +4075,15 @@ item's contents."
   (interactive)
   (let* ((document (get-char-property (point) 'p-search-result))
          (line-no (get-char-property (point) 'p-search-document-line-no))
+         (line-offset (p-search-document-property document 'line-offset))
          (current-window (selected-window)))
     (unless document
       (user-error "No document found under point"))
     (p-search-run-document-function document 'p-search-goto-document)
-    (when line-no
-      (goto-char (point-min))
-      (forward-line (1- line-no)))
+    (when (or line-offset line-no)
+      (let ((goto-line (+ (or line-offset 0) (or line-no 0))))
+        (goto-char (point-min))
+        (forward-line (1- goto-line))))
     (select-window current-window)))
 
 (defun p-search--jump-to-section-id (section-id)

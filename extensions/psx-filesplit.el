@@ -33,11 +33,14 @@
     (let* ((id (p-search-document-property document 'id)))
       (seq-map-indexed
        (lambda (string-group idx)
-         (let ((content (string-join string-group "\n"))
-               (new-name (concat name (format "(%d)" idx)))
-               (new-id (list 'filesplit id (* split-size idx))))
+         (let* ((content (string-join string-group "\n"))
+                (new-name (concat name (format "(%d)" idx)))
+                (line-offset (* split-size idx))
+                (new-id (list 'filesplit id line-offset)))
            (p-search-document-extend
-            document new-id nil `((content . ,content) (name . ,new-name)))))
+            document new-id nil `((content . ,content)
+                                  (name . ,new-name)
+                                  (line-offset . ,line-offset)))))
        (seq-split (string-split file-content "\n") split-size)))))
 
 (defconst psx-filesplit-mapping
