@@ -94,15 +94,49 @@
   :group 'p-search
   :type 'boolean)
 
+(defconst p-search--session-preset-inner-type
+  '(plist :tag "Session Preset"
+          :options (((const :format "%v " :candidate-generator)
+                     (variable :tag "Candidate Generator"
+                               :validate (lambda (widget)
+                                           (unless (and (widget-value widget)
+                                                        (boundp (widget-value widget))
+                                                        (p-search-candidate-generator-p (symbol-value (widget-value widget))))
+                                             (widget-put widget :error "[p-search] Generator variable must refer to a p-search candidate generator.")
+                                             widget))))
+                    ((const :format "%v " :candidate-mapping)
+                     (variable :tag "Candidate Mapping"
+                               :validate (lambda (widget)
+                                           (unless (and (widget-value widget)
+                                                        (boundp (widget-value widget))
+                                                        (p-search-candidate-mapping-p (symbol-value (widget-value widget))))
+                                             (widget-put widget :error "[p-search] Mapping variable must refer to a p-search candidate mapping.")
+                                             widget))))
+                    ((const :format "%v " :prior-template)
+                     (variable :tag "Prior Template"
+                               :validate (lambda (widget)
+                                           (unless (and (widget-value widget)
+                                                        (boundp (widget-value widget))
+                                                        (p-search-prior-template-p (symbol-value (widget-value widget))))
+                                             (widget-put widget :error "[p-search] Prior Template variable must refer to a p-search prior template.")
+                                             widget))))
+                    ((const :format "%v " :args)
+                     (alist :tag "Arguments"
+                            :key-type symbol
+                            :value-type (choice string symbol number boolean directory))))))
+
+(defconst p-search--session-preset-type
+  `(choice :tag "Session Preset"
+           (list :tag "Preset Group"
+                 (const :group)
+                 (repeat ,p-search--session-preset-inner-type))
+           ,p-search--session-preset-inner-type))
+
 ;; TODO - Reconsider if the concept of preset mentioned here makes sense or is the best.
 (defcustom p-search-session-presets '()
   "List of presets to easily apply to a p-search session."
   :group 'p-search
-  :type '(repeat (plist :key-type (choice (const :candidate-generator)
-                                          (const :prior-template)
-                                          (const :args)
-                                          (const :name)
-                                          (const :group)))))
+  :type `(repeat :tag "Presets" ,p-search--session-preset-type))
 
 (defcustom p-search-max-fontify-file-size
   100000
@@ -164,7 +198,22 @@ This variable can take one of several types of of values:
 - a function, which will be called to obtain the session setup.
   This function should return either a cons pair or preset plist
   as mentioned above."
-  :group 'p-search)
+  :group 'p-search
+  :type `(choice (const :tag "Project-Based Session" t)
+                 (const :tag "Empty Session" nil)
+                 ,p-search--session-preset-type
+                 (cons :tag "Specified Generator"
+                       (variable :tag "Generator"
+                                 :validate (lambda (widget)
+                                             (unless (and (widget-value widget)
+                                                          (boundp (widget-value widget))
+                                                          (p-search-candidate-generator-p (symbol-value (widget-value widget))))
+                                               (widget-put widget :error "[p-search] Generator variable must refer to a p-search candidate generator.")
+                                               widget)))
+                       (alist :tag "Arguments"
+                              :key-type symbol
+                              :value-type (choice string symbol number boolean directory)))
+                 (function :tag "Custom Function")))
 
 
 
