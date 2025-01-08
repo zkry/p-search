@@ -87,7 +87,7 @@
 (defcustom p-search-default-document-preview-size 10
   "Default number of lines show in the results preview section."
   :group 'p-search
-  :type 'integer)
+  :type 'natnum)
 
 (defcustom p-search-show-preview-lines t
   "If non-nil, display line numbers in preview."
@@ -107,14 +107,16 @@
 (defcustom p-search-max-fontify-file-size
   100000
   "Maxiumum file size to fontify. Any sizes larger won't be fontified."
-  :group 'p-search)
+  :group 'p-search
+  :type 'natnum)
 
 (defcustom p-search-enable-instructions
   t
   "If set to non-nil, the instruction-string of inputs and options will be displayed.
 One may want to set this to nil if they are familliar with all
 the inputs and options they use."
-  :group 'p-search)
+  :group 'p-search
+  :type 'boolean)
 
 (defcustom p-search-default-preview-function #'p-search-preview-from-hints-best-section
   "Function to use to generate previews.  The function should assume
@@ -131,8 +133,12 @@ The current prebuild preview functions are
 `p-search-preview-from-hints-best-section',
 `p-search-preview-from-hints-top-score', and
 `p-search-preview-from-hints-first-n'."
-
-  :group 'p-search)
+  :group 'p-search
+  :type '(choice
+          (function-item p-search-preview-from-hints-best-section)
+          (function-item p-search-preview-from-hints-top-score)
+          (function-item p-search-from-hints-first-n)
+          (function :tag "Custom Preview Function")))
 
 (defcustom p-search-default-command-behavior t
   "Variable the specifies the default behavior of the `p-search' command.
