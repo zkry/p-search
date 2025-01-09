@@ -3802,66 +3802,75 @@ If PRESET is non-nil, set up session with PRESET."
          (observations p-search-observations)
          (marginal-p p-search-marginal)
          (priors p-search-priors))
-    (with-help-window buf
-      (erase-buffer)
-      (insert (format "Document Name: %s\n\n" name))
-      (insert (format "Document ID: %s\n\n" result-id))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
 
-      ;; Insert the candidate generator that created this document
-      (let ((generator+args))
-        (catch 'done
-          (maphash
-           (lambda (gen mapping->docs)
-             (let ((docs (gethash :result-documents mapping->docs)))
-               (when (seq-find
-                      (lambda (doc)
-                        ;; TODO - For the next speedup, this should be improved
-                        ;; a simple index could be stored
-                        (equal doc result-id))
-                      docs)
-                 (setq generator+args gen)
-                 (throw 'done nil))))
-           candidates-by-generator))
-        (let* ((generator (car generator+args))
-               (source-name
-                (format "%s(%s)"
-                        (p-search-candidate-generator-name generator)
-                        (p-search--condenced-arg-string generator+args))))
-          (insert (format "Document Source:\n%s\n\n" source-name))))
+        ;; Insert some basic document information
+        (p-search-add-section `((heading . ,(propertize "Document Information:" 'face 'p-search-section-heading)))
+          (insert (format "Document Name: %s\n" name))
+          (insert (format "Document ID: %s\n\n" result-id)))
 
-      ;; Insert the fields of the document
-      (insert "Fields:\n")
-      (if (not fields)
-          (insert (propertize "no fields\n" 'face 'shadow))
-        (let ((max-field-width (seq-max (seq-map
-                                         (lambda (k+v)
-                                           (length (symbol-name (car k+v))))
-                                         fields))))
-          (pcase-dolist (`(,key . ,val) fields)
-            (insert
-             (format
-              (concat "%" (number-to-string (1+ max-field-width)) "s: %s\n") key val)))))
-      (insert "\n")
+        ;; Insert the candidate generator that created this document
+        (let ((generator+args))
+          (catch 'done
+            (maphash
+             (lambda (gen mapping->docs)
+               (let ((docs (gethash :result-documents mapping->docs)))
+                 (when (seq-find
+                        (lambda (doc)
+                          ;; TODO - For the next speedup, this should be improved
+                          ;; a simple index could be stored
+                          (equal doc result-id))
+                        docs)
+                   (setq generator+args gen)
+                   (throw 'done nil))))
+             candidates-by-generator))
+          (p-search-add-section `((heading . ,(propertize "Document Source:" 'face 'p-search-section-heading)))
+            (insert (format "Generator Name: %s\n" (p-search-candidate-generator-name (car generator+args))))
+            (insert (format "Generator Arguments: %s\n\n" (p-search--condenced-arg-string generator+args)))))
 
-      (insert "Scoring:\n")
-      (let* ((final-prob 1.0))
-        (if (not priors)
-            (insert (propertize "1.000000  no priors\n" 'face 'shadow))
-          (dolist (prior priors)
-            (let* ((prior-template (p-search-prior-template prior))
-                   (prior-p (p-search--p-prior-doc prior result-id)))
-              (setq final-prob (* final-prob prior-p))
-              (insert (format "%7f: %s(%s)\n"
-                              prior-p
-                              (p-search-prior-template-name prior-template)
-                              (p-search--condenced-arg-string prior))))))
-        (if (not p-search-observations)
-            (insert (propertize "1.000000  no observations\n" 'face 'shadow))
-          (let* ((obs (gethash result-id observations 1.0)))
-            (insert (format "%7f: Observation probability\n" obs))))
-        (insert "--------\n")
-        (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
-      (insert "\n"))))
+        ;; Insert the fields of the document
+        (p-search-add-section `((heading . ,(propertize "Fields:" 'face 'p-search-section-heading)))
+          (if (not fields)
+              (insert (propertize "No fields.\n" 'face 'shadow))
+            (let ((new-fields))
+              (pcase-dolist (`(,key . ,val) fields)
+                (if (listp val)
+                    (dolist (item val)
+                      (push item (alist-get key new-fields nil nil)))
+                  (push val (alist-get key new-fields nil nil))))
+              (pcase-dolist (`(,key . ,vals) new-fields)
+                (p-search-add-section `((heading . ,(format "Field %s values:" key)))
+                  (dolist (val (if (listp vals) vals (list vals)))
+                    (insert (format " - \"%s\"\n" val)))
+                  (insert "\n"))))
+            (insert "\n")))
+
+        ;; Insert scoring information
+        (p-search-add-section `((heading . ,(propertize "Scoring:" 'face 'p-search-section-heading)))
+          ;; TODO Improve this section
+          (let* ((final-prob 1.0))
+            (if (not priors)
+                (insert (propertize "1.000000  no priors\n" 'face 'shadow))
+              (dolist (prior priors)
+                (let* ((prior-template (p-search-prior-template prior))
+                       (prior-p (p-search--p-prior-doc prior result-id)))
+                  (setq final-prob (* final-prob prior-p))
+                  (insert (format "%7f: %s(%s)\n"
+                                  prior-p
+                                  (p-search-prior-template-name prior-template)
+                                  (p-search--condenced-arg-string prior))))))
+            (if (not p-search-observations)
+                (insert (propertize "1.000000  no observations\n" 'face 'shadow))
+              (let* ((obs (gethash result-id observations 1.0)))
+                (insert (format "%7f: Observation probability\n" obs))))
+            (insert "--------\n")
+            (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
+          (insert "\n"))
+        (p-search-explanation-mode)
+        (goto-char (point-min))))
+    (display-buffer buf)))
 
 (defun p-search-display-prior-explanation (prior)
   "Display the explanation of PRIOR in a new buffer."
