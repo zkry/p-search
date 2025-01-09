@@ -3776,6 +3776,23 @@ If PRESET is non-nil, set up session with PRESET."
 ;; This section contains the functions for displaying
 ;; help/debugging/info concerting various priors.
 
+(defvar p-search-explanation-mode-map
+  (let ((map (make-keymap)))
+    (suppress-keymap map t)
+    (keymap-set map "n" #'p-search-next-item)
+    (keymap-set map "p" #'p-search-prev-item)
+    (keymap-set map "<tab>" #'p-search-toggle-section)
+    (keymap-set map "q" #'quit-window)
+    map)
+  "Mode Map for p-search explanations")
+
+(define-derived-mode p-search-explanation-mode special-mode "p-search-explanation"
+  "Major mode for display of p-search scoring explanations."
+  :group 'p-search
+  (hack-dir-local-variables-non-file-buffer)
+  (p-search-highlight-point-section)
+  (setq-local truncate-lines t))
+
 (defun p-search-display-result-explanation (result-id)
   "Display the calculation explanation of RESULT-ID."
   (let* ((buf (get-buffer-create (format "*result-explain-%s" result-id)))
