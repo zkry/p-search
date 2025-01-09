@@ -3785,7 +3785,7 @@ If PRESET is non-nil, set up session with PRESET."
          (observations p-search-observations)
          (marginal-p p-search-marginal)
          (priors p-search-priors))
-    (with-current-buffer buf
+    (with-help-window buf
       (erase-buffer)
       (insert (format "Document Name: %s\n\n" name))
       (insert (format "Document ID: %s\n\n" result-id))
@@ -3844,15 +3844,14 @@ If PRESET is non-nil, set up session with PRESET."
             (insert (format "%7f: Observation probability\n" obs))))
         (insert "--------\n")
         (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
-      (insert "\n")
-      (display-buffer buf))))
+      (insert "\n"))))
 
 (defun p-search-display-prior-explanation (prior)
   "Display the explanation of PRIOR in a new buffer."
   (let* ((prior-template (p-search-prior-template prior))
          (buf (get-buffer-create (format "*prior-explain-%s*"
                                          (p-search-prior-template-name prior-template)))))
-    (with-current-buffer buf
+    (with-help-window buf
       (erase-buffer)
       (insert (format "Prior: %s(%s)\n\n"
                       (propertize
@@ -3867,8 +3866,7 @@ If PRESET is non-nil, set up session with PRESET."
          (p-search-prior-results prior))
         (while (not (heap-empty res-hp))
           (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
-            (insert (format "%7f: %s\n" p doc-id))))))
-    (display-buffer buf)))
+            (insert (format "%7f: %s\n" p doc-id))))))))
 
 
 ;;; Debug
