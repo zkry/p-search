@@ -3877,22 +3877,28 @@ If PRESET is non-nil, set up session with PRESET."
   (let* ((prior-template (p-search-prior-template prior))
          (buf (get-buffer-create (format "*prior-explain-%s*"
                                          (p-search-prior-template-name prior-template)))))
-    (with-help-window buf
-      (erase-buffer)
-      (insert (format "Prior: %s(%s)\n\n"
-                      (propertize
-                       (p-search-prior-template-name prior-template)
-                       'face 'bold)
-                      (p-search--condenced-arg-string prior)))
-      (insert "Results:\n")
-      (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
-        (maphash
-         (lambda (doc-id p)
-           (heap-add res-hp (cons doc-id p)))
-         (p-search-prior-results prior))
-        (while (not (heap-empty res-hp))
-          (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
-            (insert (format "%7f: %s\n" p doc-id))))))))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (p-search-add-section `((heading . ,(propertize (format "Prior %s:"
+                                                                (p-search-prior-template-name prior-template)
+                                                                )
+                                                        'face 'p-search-section-heading)))
+          (insert (format "Options: %s\n\n" (p-search--condenced-arg-string prior)))
+          (p-search-add-section '((heading . "Results:"))
+            ;; TODO: Improve this display
+            (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
+              (maphash
+               (lambda (doc-id p)
+                 (heap-add res-hp (cons doc-id p)))
+               (p-search-prior-results prior))
+              (while (not (heap-empty res-hp))
+                (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
+                  (insert (format "%7f: %s\n" p doc-id)))))
+            (insert "\n"))))
+      (p-search-explanation-mode)
+      (goto-char (point-min)))
+    (display-buffer buf)))
 
 
 ;;; Debug
