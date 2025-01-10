@@ -3807,7 +3807,8 @@ If PRESET is non-nil, set up session with PRESET."
         (erase-buffer)
 
         ;; Insert some basic document information
-        (p-search-add-section `((heading . ,(propertize "Document Information:" 'face 'p-search-section-heading)))
+        (p-search-add-section `((heading . ,(propertize "Document Information:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop doc-info)))
           (insert (format "Document Name: %s\n" name))
           (insert (format "Document ID: %s\n\n" result-id)))
 
@@ -3826,12 +3827,14 @@ If PRESET is non-nil, set up session with PRESET."
                    (setq generator+args gen)
                    (throw 'done nil))))
              candidates-by-generator))
-          (p-search-add-section `((heading . ,(propertize "Document Source:" 'face 'p-search-section-heading)))
+          (p-search-add-section `((heading . ,(propertize "Document Source:" 'face 'p-search-section-heading))
+                                  (props . (p-search-item-stop doc-source)))
             (insert (format "Generator Name: %s\n" (p-search-candidate-generator-name (car generator+args))))
             (insert (format "Generator Arguments: %s\n\n" (p-search--condenced-arg-string generator+args)))))
 
         ;; Insert the fields of the document
-        (p-search-add-section `((heading . ,(propertize "Fields:" 'face 'p-search-section-heading)))
+        (p-search-add-section `((heading . ,(propertize "Fields:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop fields)))
           (if (not fields)
               (insert (propertize "No fields.\n" 'face 'shadow))
             (let ((new-fields))
@@ -3841,14 +3844,16 @@ If PRESET is non-nil, set up session with PRESET."
                       (push item (alist-get key new-fields nil nil)))
                   (push val (alist-get key new-fields nil nil))))
               (pcase-dolist (`(,key . ,vals) new-fields)
-                (p-search-add-section `((heading . ,(format "Field %s values:" key)))
+                (p-search-add-section `((heading . ,(format "Field %s values:" key))
+                                        (props . (p-search-item-stop field-vals)))
                   (dolist (val (if (listp vals) vals (list vals)))
                     (insert (format " - \"%s\"\n" val)))
                   (insert "\n"))))
             (insert "\n")))
 
         ;; Insert scoring information
-        (p-search-add-section `((heading . ,(propertize "Scoring:" 'face 'p-search-section-heading)))
+        (p-search-add-section `((heading . ,(propertize "Scoring:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop scoring)))
           ;; TODO Improve this section
           (let* ((final-prob 1.0))
             (if (not priors)
@@ -3883,9 +3888,11 @@ If PRESET is non-nil, set up session with PRESET."
         (p-search-add-section `((heading . ,(propertize (format "Prior %s:"
                                                                 (p-search-prior-template-name prior-template)
                                                                 )
-                                                        'face 'p-search-section-heading)))
+                                                        'face 'p-search-section-heading))
+                                (props . (p-search-item-stop prior-info)))
           (insert (format "Options: %s\n\n" (p-search--condenced-arg-string prior)))
-          (p-search-add-section '((heading . "Results:"))
+          (p-search-add-section '((heading . "Results:")
+                                  (props . (p-search-item-stop prior-results)))
             ;; TODO: Improve this display
             (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
               (maphash
