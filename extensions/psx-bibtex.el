@@ -32,9 +32,35 @@
   "Describe (briefly) BibTex Candidate generator CONFIG."
   (format "BIBTEX:%s" (alist-get 'file input-options-alist)))
 
-(p-search-def-property 'bibtex 'id #'cl-first)
-(p-search-def-property 'bibtex 'name #'cl-first)
-(p-search-def-property 'bibtex 'content #'cl-third)
+(defun psx-bibtex--name (id)
+  "Extract BibTeX Entry name from ID."
+  (pcase-let* ((`(_ ,key _) id))
+    key))
+(p-search-def-field 'bibtex 'name #'psx-bibtex--name)
+
+(defun psx-bibtex--content (id)
+  "Get entry content (i.e., abstract) from BibTeX entry ID."
+  (pcase-let* ((`(_ _ ,entry-data) id))
+    (alist-get "abstract" entry-data "" nil #'string-equal-ignore-case)))
+(p-search-def-field 'bibtex 'content #'psx-bibtex--content)
+
+(defun psx-bibtex--fields (id)
+  "Get various searchable fields from BibTeX entry ID."
+  (pcase-let* ((`(,file _ ,entry-data) id))
+    (let ((author (alist-get "author" entry-data nil nil #'string-equal-ignore-case))
+          (title (cl-some (lambda (key)
+                            (alist-get key entry-data nil nil #'string-equal-ignore-case))
+                          '("title" "booktitle" "journaltitle" "journal")))
+          (keywords (alist-get "keywords" entry-data nil nil #'string-equal-ignore-case))
+          fields)
+      (when author
+        (push (cons 'author (mapcar #'string-trim (string-split author " and "))) fields))
+      (when title
+        (push (cons 'title title) fields))
+      (when keywords
+        (push (cons 'keywords (mapcar #'string-trim (string-split keywords ","))) fields))
+      fields)))
+(p-search-def-field 'bibtex 'fields #'psx-bibtex--fields)
 
 (defun psx-bibtex--candidate-generator (args)
   "Generate BibTeX candidates from ARGS."
@@ -42,17 +68,11 @@
     (let ((entries (parsebib-parse .file))
           documents)
       (maphash (lambda (key entry)
-                 (push (p-search-document-extend
-                        (p-search-documentize (list 'bibtex (list key .file (alist-get "abstract" entry "" nil #'string=))))
-                        (cons 'bib key)
-                        (list (cons 'author (string-split (or (assoc-string "author" entry t) "") " and "))
-                              (cons 'title (or (assoc-string "title" entry t) ""))
-                              (cons 'keywords (string-split (or (assoc-string "keywords" entry t) "") ", "))))
-                       documents))
+                 (push (p-search-documentize (list 'bibtex (list .file key entry))) documents))
                entries)
       documents)))
 
-(defvar psx-bibtex-candidate-generator
+(defconst psx-bibtex-candidate-generator
   (p-search-candidate-generator-create
    :id 'psx-bibtex-candidate-generator
    :name "BIBTEX"
