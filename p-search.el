@@ -4017,7 +4017,8 @@ item's contents."
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                     (get-char-property (point) 'p-search-prior)
                                     (get-char-property (point) 'p-search-result)
-                                    (get-char-property (point) 'p-search-mapping))))
+                                    (get-char-property (point) 'p-search-mapping)
+                                    (get-char-property (point) 'p-search-item-stop))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
@@ -4034,12 +4035,13 @@ item's contents."
           (scroll-up (1+ (- next-item-line window-bottom-line))))))))
 
 (defun p-search-prev-item ()
-  "Move the point to the next item"
+  "Move the point to the next item."
   (interactive)
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                     (get-char-property (point) 'p-search-prior)
                                     (get-char-property (point) 'p-search-result)
-                                    (get-char-property (point) 'p-search-mapping))))
+                                    (get-char-property (point) 'p-search-mapping)
+                                    (get-char-property (point) 'p-search-item-stop))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
@@ -4050,9 +4052,10 @@ item's contents."
     ;; go to the top of the thing from the bottom
     (unless (bobp)
       (let ((start-thing (thing-at-point)))
-        (while (equal (thing-at-point) start-thing)
+        (while (and (equal (thing-at-point) start-thing) (not (bobp)))
           (forward-line -1))
-        (forward-line 1)))))
+        (unless (bobp)
+          (forward-line 1))))))
 
 (defun p-search-add-candidate-generator ()
   "Add a new candidate generator to the current session."
