@@ -89,14 +89,14 @@ following keywords.
  - `:all' create documents for both functions and variables."
   (let* ((type (alist-get 'symbol-type args)))
     (let (docs)
-      (mapcar (lambda (symbol)
-                (when (and (functionp symbol) (not (eql type :variables)))
-                  (push (p-search-documentize (list 'elisp (list symbol 'function))) docs))
-                (when (and (symbolp symbol)
-                           (not (eql type :functions))
-                           (get symbol 'variable-documentation))
-                  (push (p-search-documentize (list 'elisp (list symbol 'variable))) docs)))
-              obarray)
+      (mapc (lambda (symbol)
+              (when (and (functionp symbol) (not (eql type :variables)))
+                (push (p-search-documentize (list 'elisp (list symbol 'function))) docs))
+              (when (and (symbolp symbol)
+                         (not (eql type :functions))
+                         (get symbol 'variable-documentation))
+                (push (p-search-documentize (list 'elisp (list symbol 'variable))) docs)))
+            obarray)
       docs)))
 
 (defconst psx-elisp-candidate-generator
