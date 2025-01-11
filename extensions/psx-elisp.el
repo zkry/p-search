@@ -26,6 +26,9 @@
 
 (require 'p-search)
 
+
+;;; Properties and Fields
+
 (p-search-def-field 'elisp-type 'category)
 
 (defun psx-elisp--lighter (_)
@@ -56,6 +59,9 @@
                        (format "Variable `%s' not documented." symbol)))))
         "")))
 (p-search-def-property 'elisp 'content #'psx-elisp--content)
+
+
+;;; Candidate Generator
 
 (defun psx-elisp--candidate-generator (args)
   "Generate elisp p-search candidates."
