@@ -3,7 +3,10 @@
 ;; Copyright (C) 2025  Samuel W. Flint
 
 ;; Author: Samuel W. Flint <me@samuelwflint.com>
+;; Version: 0.9.0
 ;; Keywords: tools, tex
+;; Package-Requires: ((emacs "25.1") (compat "29.1"))
+;; Homepage: https://github.com/zkry/p-search
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -26,7 +29,8 @@
 
 (require 'p-search)
 (require 'parsebib)
-(require 'cl)
+(require 'cl-lib)
+(require 'compat)
 
 
 ;;; Customization
