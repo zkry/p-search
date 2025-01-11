@@ -30,7 +30,7 @@
 
 (defun psx-bibtex--lighter (config)
   "Describe (briefly) BibTex Candidate generator CONFIG."
-  (format "BIBTEX:%s" (alist-get 'file input-options-alist)))
+  (format "BIBTEX:%s" (file-relative-name (alist-get 'file config) default-directory)))
 
 (defun psx-bibtex--name (id)
   "Extract BibTeX Entry name from ID."
