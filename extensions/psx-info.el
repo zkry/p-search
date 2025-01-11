@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'p-search)
+(require 'info)
 
 (defvar psx-info--info-to-file (make-hash-table :test #'equal)
   "Hash table of base to (hash table of extension to full file path).")
@@ -24,7 +25,7 @@ not have to open the same file repeatedly.")
 (defun psx-info--build-tree ()
   "Generate and return cache of info files."
   (dolist (dir Info-directory-list)
-    (condition-case err
+    (condition-case _err
       (dolist (file (directory-files-recursively dir ".*\\.info"))
         (let* ((is-gz))
           (when (string-suffix-p ".gz" file)
@@ -97,6 +98,7 @@ not have to open the same file repeatedly.")
   (concat (nth 1 info-identifier) ": " (nth 2 info-identifier)))
 
 (defun psx-info--insert-file-contents (file)
+  "Insert the contents of FILE, properly handling gzip."
   (cond
    ((and (string-suffix-p ".gz" file) (not auto-compression-mode))
     (call-process "gzip" nil t nil "-c" "-d" file))
@@ -140,7 +142,7 @@ not have to open the same file repeatedly.")
               (search-forward "")
               (let* ((index (string-to-number (buffer-substring (point) (pos-eol))))
                      (at-ref (or (seq-find
-                                  (pcase-lambda (`(,file . ,idx))
+                                  (pcase-lambda (`(,_file . ,idx))
                                     (>= index idx))
                                   references)
                                  (car (seq-sort-by #'cdr #'> references))))
@@ -150,7 +152,7 @@ not have to open the same file repeatedly.")
 
 (defun psx-info--goto (info-identifier)
   "Open the info page of INFO-IDENTIFIER."
-  (pcase-let ((`(,dir ,file ,node) info-identifier))
+  (pcase-let ((`(,_dir ,file ,node) info-identifier))
     (Info-find-node file node)))
 
 (defconst psx-info-candidate-generator
@@ -179,3 +181,4 @@ not have to open the same file repeatedly.")
 (p-search-def-function 'psx-info 'p-search-goto-document #'psx-info--goto)
 
 (provide 'psx-info)
+;;; psx-info.el ends here
