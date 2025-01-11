@@ -3776,6 +3776,23 @@ If PRESET is non-nil, set up session with PRESET."
 ;; This section contains the functions for displaying
 ;; help/debugging/info concerting various priors.
 
+(defvar p-search-explanation-mode-map
+  (let ((map (make-keymap)))
+    (suppress-keymap map t)
+    (keymap-set map "n" #'p-search-next-item)
+    (keymap-set map "p" #'p-search-prev-item)
+    (keymap-set map "<tab>" #'p-search-toggle-section)
+    (keymap-set map "q" #'quit-window)
+    map)
+  "Mode Map for p-search explanations")
+
+(define-derived-mode p-search-explanation-mode special-mode "p-search-explanation"
+  "Major mode for display of p-search scoring explanations."
+  :group 'p-search
+  (hack-dir-local-variables-non-file-buffer)
+  (p-search-highlight-point-section)
+  (setq-local truncate-lines t))
+
 (defun p-search-display-result-explanation (result-id)
   "Display the calculation explanation of RESULT-ID."
   (let* ((buf (get-buffer-create (format "*result-explain-%s" result-id)))
@@ -3786,66 +3803,79 @@ If PRESET is non-nil, set up session with PRESET."
          (marginal-p p-search-marginal)
          (priors p-search-priors))
     (with-current-buffer buf
-      (erase-buffer)
-      (insert (format "Document Name: %s\n\n" name))
-      (insert (format "Document ID: %s\n\n" result-id))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
 
-      ;; Insert the candidate generator that created this document
-      (let ((generator+args))
-        (catch 'done
-          (maphash
-           (lambda (gen mapping->docs)
-             (let ((docs (gethash :result-documents mapping->docs)))
-               (when (seq-find
-                      (lambda (doc)
-                        ;; TODO - For the next speedup, this should be improved
-                        ;; a simple index could be stored
-                        (equal doc result-id))
-                      docs)
-                 (setq generator+args gen)
-                 (throw 'done nil))))
-           candidates-by-generator))
-        (let* ((generator (car generator+args))
-               (source-name
-                (format "%s(%s)"
-                        (p-search-candidate-generator-name generator)
-                        (p-search--condenced-arg-string generator+args))))
-          (insert (format "Document Source:\n%s\n\n" source-name))))
+        ;; Insert some basic document information
+        (p-search-add-section `((heading . ,(propertize "Document Information:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop doc-info)))
+          (insert (format "Document Name: %s\n" name))
+          (insert (format "Document ID: %s\n\n" result-id)))
 
-      ;; Insert the fields of the document
-      (insert "Fields:\n")
-      (if (not fields)
-          (insert (propertize "no fields\n" 'face 'shadow))
-        (let ((max-field-width (seq-max (seq-map
-                                         (lambda (k+v)
-                                           (length (symbol-name (car k+v))))
-                                         fields))))
-          (pcase-dolist (`(,key . ,val) fields)
-            (insert
-             (format
-              (concat "%" (number-to-string (1+ max-field-width)) "s: %s\n") key val)))))
-      (insert "\n")
+        ;; Insert the candidate generator that created this document
+        (let ((generator+args))
+          (catch 'done
+            (maphash
+             (lambda (gen mapping->docs)
+               (let ((docs (gethash :result-documents mapping->docs)))
+                 (when (seq-find
+                        (lambda (doc)
+                          ;; TODO - For the next speedup, this should be improved
+                          ;; a simple index could be stored
+                          (equal doc result-id))
+                        docs)
+                   (setq generator+args gen)
+                   (throw 'done nil))))
+             candidates-by-generator))
+          (p-search-add-section `((heading . ,(propertize "Document Source:" 'face 'p-search-section-heading))
+                                  (props . (p-search-item-stop doc-source)))
+            (insert (format "Generator Name: %s\n" (p-search-candidate-generator-name (car generator+args))))
+            (insert (format "Generator Arguments: %s\n\n" (p-search--condenced-arg-string generator+args)))))
 
-      (insert "Scoring:\n")
-      (let* ((final-prob 1.0))
-        (if (not priors)
-            (insert (propertize "1.000000  no priors\n" 'face 'shadow))
-          (dolist (prior priors)
-            (let* ((prior-template (p-search-prior-template prior))
-                   (prior-p (p-search--p-prior-doc prior result-id)))
-              (setq final-prob (* final-prob prior-p))
-              (insert (format "%7f: %s(%s)\n"
-                              prior-p
-                              (p-search-prior-template-name prior-template)
-                              (p-search--condenced-arg-string prior))))))
-        (if (not p-search-observations)
-            (insert (propertize "1.000000  no observations\n" 'face 'shadow))
-          (let* ((obs (gethash result-id observations 1.0)))
-            (insert (format "%7f: Observation probability\n" obs))))
-        (insert "--------\n")
-        (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
-      (insert "\n")
-      (display-buffer buf))))
+        ;; Insert the fields of the document
+        (p-search-add-section `((heading . ,(propertize "Fields:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop fields)))
+          (if (not fields)
+              (insert (propertize "No fields.\n" 'face 'shadow))
+            (let ((new-fields))
+              (pcase-dolist (`(,key . ,val) fields)
+                (if (listp val)
+                    (dolist (item val)
+                      (push item (alist-get key new-fields nil nil)))
+                  (push val (alist-get key new-fields nil nil))))
+              (pcase-dolist (`(,key . ,vals) new-fields)
+                (p-search-add-section `((heading . ,(format "Field %s values:" key))
+                                        (props . (p-search-item-stop field-vals)))
+                  (dolist (val (if (listp vals) vals (list vals)))
+                    (insert (format " - \"%s\"\n" val)))
+                  (insert "\n"))))
+            (insert "\n")))
+
+        ;; Insert scoring information
+        (p-search-add-section `((heading . ,(propertize "Scoring:" 'face 'p-search-section-heading))
+                                (props . (p-search-item-stop scoring)))
+          ;; TODO Improve this section
+          (let* ((final-prob 1.0))
+            (if (not priors)
+                (insert (propertize "1.000000  no priors\n" 'face 'shadow))
+              (dolist (prior priors)
+                (let* ((prior-template (p-search-prior-template prior))
+                       (prior-p (p-search--p-prior-doc prior result-id)))
+                  (setq final-prob (* final-prob prior-p))
+                  (insert (format "%7f: %s(%s)\n"
+                                  prior-p
+                                  (p-search-prior-template-name prior-template)
+                                  (p-search--condenced-arg-string prior))))))
+            (if (not p-search-observations)
+                (insert (propertize "1.000000  no observations\n" 'face 'shadow))
+              (let* ((obs (gethash result-id observations 1.0)))
+                (insert (format "%7f: Observation probability\n" obs))))
+            (insert "--------\n")
+            (insert (format "%7f / %7f = %f" final-prob marginal-p (/ final-prob marginal-p))))
+          (insert "\n"))
+        (p-search-explanation-mode)
+        (goto-char (point-min))))
+    (display-buffer buf)))
 
 (defun p-search-display-prior-explanation (prior)
   "Display the explanation of PRIOR in a new buffer."
@@ -3853,21 +3883,28 @@ If PRESET is non-nil, set up session with PRESET."
          (buf (get-buffer-create (format "*prior-explain-%s*"
                                          (p-search-prior-template-name prior-template)))))
     (with-current-buffer buf
-      (erase-buffer)
-      (insert (format "Prior: %s(%s)\n\n"
-                      (propertize
-                       (p-search-prior-template-name prior-template)
-                       'face 'bold)
-                      (p-search--condenced-arg-string prior)))
-      (insert "Results:\n")
-      (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
-        (maphash
-         (lambda (doc-id p)
-           (heap-add res-hp (cons doc-id p)))
-         (p-search-prior-results prior))
-        (while (not (heap-empty res-hp))
-          (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
-            (insert (format "%7f: %s\n" p doc-id))))))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (p-search-add-section `((heading . ,(propertize (format "Prior %s:"
+                                                                (p-search-prior-template-name prior-template)
+                                                                )
+                                                        'face 'p-search-section-heading))
+                                (props . (p-search-item-stop prior-info)))
+          (insert (format "Options: %s\n\n" (p-search--condenced-arg-string prior)))
+          (p-search-add-section '((heading . "Results:")
+                                  (props . (p-search-item-stop prior-results)))
+            ;; TODO: Improve this display
+            (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
+              (maphash
+               (lambda (doc-id p)
+                 (heap-add res-hp (cons doc-id p)))
+               (p-search-prior-results prior))
+              (while (not (heap-empty res-hp))
+                (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
+                  (insert (format "%7f: %s\n" p doc-id)))))
+            (insert "\n"))))
+      (p-search-explanation-mode)
+      (goto-char (point-min)))
     (display-buffer buf)))
 
 
@@ -3987,7 +4024,8 @@ item's contents."
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                     (get-char-property (point) 'p-search-prior)
                                     (get-char-property (point) 'p-search-result)
-                                    (get-char-property (point) 'p-search-mapping))))
+                                    (get-char-property (point) 'p-search-mapping)
+                                    (get-char-property (point) 'p-search-item-stop))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
@@ -4004,12 +4042,13 @@ item's contents."
           (scroll-up (1+ (- next-item-line window-bottom-line))))))))
 
 (defun p-search-prev-item ()
-  "Move the point to the next item"
+  "Move the point to the next item."
   (interactive)
   (cl-flet* ((thing-at-point () (or (get-char-property (point) 'p-search-candidate-generator)
                                     (get-char-property (point) 'p-search-prior)
                                     (get-char-property (point) 'p-search-result)
-                                    (get-char-property (point) 'p-search-mapping))))
+                                    (get-char-property (point) 'p-search-mapping)
+                                    (get-char-property (point) 'p-search-item-stop))))
     (let ((start-thing (thing-at-point)))
       (catch 'out
         (while t
@@ -4020,9 +4059,10 @@ item's contents."
     ;; go to the top of the thing from the bottom
     (unless (bobp)
       (let ((start-thing (thing-at-point)))
-        (while (equal (thing-at-point) start-thing)
+        (while (and (equal (thing-at-point) start-thing) (not (bobp)))
           (forward-line -1))
-        (forward-line 1)))))
+        (unless (bobp)
+          (forward-line 1))))))
 
 (defun p-search-add-candidate-generator ()
   "Add a new candidate generator to the current session."
