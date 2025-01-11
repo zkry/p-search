@@ -50,6 +50,12 @@
     (alist-get "abstract" entry-data "" nil #'string-equal-ignore-case)))
 (p-search-def-property 'bibtex 'content #'psx-bibtex--content)
 
+(defun psx-bibtex--filename (id)
+  "Get entry filename from ID."
+  (pcase-let* ((`(,file _ _) id))
+    file))
+(p-search-def-property 'bibtex 'file-name #'psx-bibtex--filename)
+
 (defun psx-bibtex--fields (id)
   "Get various searchable fields from BibTeX entry ID."
   (pcase-let* ((`(,file _ ,entry-data) id))
