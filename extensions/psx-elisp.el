@@ -1,9 +1,12 @@
-;;; psx-elisp.el --- p-search candidate generator for emacs symbols  -*- lexical-binding: t; -*-
+;;; psx-elisp.el --- A p-search candidate generator for emacs lisp symbols  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025  Samuel W. Flint
 
 ;; Author: Samuel W. Flint <me@samuelwflint.com>
+;; Version: 0.9.0
 ;; Keywords: tools, lisp, help
+;; Package-Requires: ((emacs "25.1") p-search)
+;; Homepage: https://github.com/zkry/p-search
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,7 +23,13 @@
 
 ;;; Commentary:
 
-;;
+;; This library implements a `p-search' candidate generator for Emacs
+;; Lisp symbols (functions, variables).  To use it with `p-search' by
+;; default, you can either add the symbol
+;; `psx-elisp-candidate-generator' to your
+;; `p-search-default-command-behavior' or to
+;; `p-search-session-presets'.  You may also add the candidate
+;; generator interactively.
 
 ;;; Code:
 
