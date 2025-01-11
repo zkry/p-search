@@ -74,7 +74,7 @@
    :id 'psx-elisp-candidate-generator
    :name "ELISP"
    :function #'psx-elisp--candidate-generator
-   :lighter #'psx-elisp--lighter))
+   :lighter-function #'psx-elisp--lighter))
 
 (add-to-list 'p-search-candidate-generators psx-elisp-candidate-generator)
 
