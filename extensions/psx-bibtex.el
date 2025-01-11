@@ -29,6 +29,26 @@
 (require 'cl)
 
 
+;;; Customization
+
+(defgroup psx-bibtex nil
+  "Customization for `p-search' bibtex candidate generator."
+  :group 'p-search
+  :group 'bibtex
+  :prefix "psx-bibtex-")
+
+(defcustom psx-bibtex-open-entry-function nil
+  "Function to open a bibtex entry.
+
+This function should take two arguments, FILENAME and ENTRY-KEY,
+and will be called as follows.
+
+\(apply psx-bibtex-open-entry-function filename entry-key)"
+  :type '(choice (const :tag "Don't Open" nil)
+                 (function :tag "Custom Function"))
+  :group 'psx-bibtex)
+
+
 ;;; Property Definitions
 
 (defun psx-bibtex--lighter (config)
@@ -76,6 +96,16 @@
         (push (cons 'keywords (mapcar #'string-trim (string-split keywords ","))) fields))
       fields)))
 (p-search-def-property 'bibtex 'fields #'psx-bibtex--fields)
+
+(defun psx-bibtex--goto-entry (id)
+  "Go to BibTeX entry ID.
+
+Use `psx-bibtex-open-entry-function' if set, otherwise, do
+nothing."
+  (when psx-bibtex-open-entry-function
+    (pcase-let* ((`(,filename ,entry-key _) id))
+      (apply psx-bibtex-open-entry-function filename entry-key))))
+(p-search-def-function 'bibtex 'p-search-goto-document #'psx-bibtex--goto-entry)
 
 
 ;;; Candidate Generator
