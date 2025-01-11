@@ -43,7 +43,7 @@
 This function should take two arguments, FILENAME and ENTRY-KEY,
 and will be called as follows.
 
-\(apply psx-bibtex-open-entry-function filename entry-key)"
+    (apply psx-bibtex-open-entry-function filename entry-key)"
   :type '(choice (const :tag "Don't Open" nil)
                  (function :tag "Custom Function"))
   :group 'psx-bibtex)
