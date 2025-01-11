@@ -57,21 +57,28 @@
         "")))
 (p-search-def-property 'elisp 'content #'psx-elisp--content)
 
-(defun psx-elisp--candidate-generator (_args)
+(defun psx-elisp--candidate-generator (args)
   "Generate elisp p-search candidates."
-  (let (docs)
-    (mapcar (lambda (symbol)
-              (when (functionp symbol)
-                (push (p-search-documentize (list 'elisp (list symbol 'function))) docs))
-              (when (and (symbolp symbol)
-                         (get symbol 'variable-documentation))
-                (push (p-search-documentize (list 'elisp (list symbol 'variable))) docs)))
-            obarray)
-    docs))
+  (let* ((type (alist-get 'symbol-type args)))
+    (let (docs)
+      (mapcar (lambda (symbol)
+                (when (and (functionp symbol) (not (eql type :variables)))
+                  (push (p-search-documentize (list 'elisp (list symbol 'function))) docs))
+                (when (and (symbolp symbol)
+                           (not (eql type :functions))
+                           (get symbol 'variable-documentation))
+                  (push (p-search-documentize (list 'elisp (list symbol 'variable))) docs)))
+              obarray)
+      docs)))
 
 (defconst psx-elisp-candidate-generator
   (p-search-candidate-generator-create
    :id 'psx-elisp-candidate-generator
+   :input-spec '((symbol-type . (p-search-infix-choices
+                                 :key "t"
+                                 :description "Symbol Type"
+                                 :choices (:all :functions :variables)
+                                 :default-value :all)))
    :name "ELISP"
    :function #'psx-elisp--candidate-generator
    :lighter-function #'psx-elisp--lighter))
