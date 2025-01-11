@@ -28,6 +28,9 @@
 (require 'parsebib)
 (require 'cl)
 
+
+;;; Property Definitions
+
 (defun psx-bibtex--lighter (config)
   "Describe (briefly) BibTex Candidate generator CONFIG."
   (format "BIBTEX:%s"
@@ -73,6 +76,9 @@
         (push (cons 'keywords (mapcar #'string-trim (string-split keywords ","))) fields))
       fields)))
 (p-search-def-property 'bibtex 'fields #'psx-bibtex--fields)
+
+
+;;; Candidate Generator
 
 (defun psx-bibtex--candidate-generator (args)
   "Generate BibTeX candidates from ARGS.
