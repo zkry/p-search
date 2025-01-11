@@ -30,7 +30,13 @@
 
 (defun psx-bibtex--lighter (config)
   "Describe (briefly) BibTex Candidate generator CONFIG."
-  (format "BIBTEX:%s" (file-relative-name (alist-get 'file config) default-directory)))
+  (format "BIBTEX:%s"
+          (mapconcat
+           #'file-name-nondirectory
+           (if (listp (alist-get 'files config))
+               (alist-get 'files config)
+             (list (alist-get 'files config)))
+           "/")))
 
 (defun psx-bibtex--name (id)
   "Extract BibTeX Entry name from ID."
@@ -63,24 +69,34 @@
 (p-search-def-property 'bibtex 'fields #'psx-bibtex--fields)
 
 (defun psx-bibtex--candidate-generator (args)
-  "Generate BibTeX candidates from ARGS."
+  "Generate BibTeX candidates from ARGS.
+
+ARGS should be an alist containing the following keys:
+
+ - `FILES' a file or list of files (latter useful for presets)."
   (let-alist args
-    (let ((entries (parsebib-parse .file))
+    (let ((files-list (if (listp .files) .files (list .files)))
           documents)
-      (maphash (lambda (key entry)
-                 (push (p-search-documentize (list 'bibtex (list .file key entry))) documents))
-               entries)
+      (dolist (file files-list)
+        (let ((entries (parsebib-parse file)))
+          (maphash (lambda (key entry)
+                     (push (p-search-documentize (list 'bibtex (list file key entry))) documents))
+                   entries)))
       documents)))
 
 (defconst psx-bibtex-candidate-generator
   (p-search-candidate-generator-create
    :id 'psx-bibtex-candidate-generator
    :name "BIBTEX"
-   :input-spec '((file . (p-search-infix-file
-                          :key "f"
-                          :description "BibTeX Filename")))
+   :input-spec '((files . (p-search-infix-file
+                           :key "f"
+                           :description "BibTeX Filename")))
    :function #'psx-bibtex--candidate-generator
-   :lighter-function #'psx-bibtex--lighter))
+   :lighter-function #'psx-bibtex--lighter)
+  "BibTeX Candidate generator for `p-search'.
+
+In use, there is a single argument, `files', which should be a
+file name or list of file names.")
 
 (add-to-list 'p-search-candidate-generators psx-bibtex-candidate-generator)
 
