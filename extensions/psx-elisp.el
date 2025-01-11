@@ -64,7 +64,15 @@
 ;;; Candidate Generator
 
 (defun psx-elisp--candidate-generator (args)
-  "Generate elisp p-search candidates."
+  "Generate elisp `p-search' candidates, based on ARGS.
+
+ARGS should contain the symbol `symbol-type' specifying which
+types of symbols are included.  This should be one of the
+following keywords.
+
+ - `:functions' create only documents for functions.
+ - `:variables' create only documents for variables.
+ - `:all' create documents for both functions and variables."
   (let* ((type (alist-get 'symbol-type args)))
     (let (docs)
       (mapcar (lambda (symbol)
@@ -87,7 +95,15 @@
                                  :default-value :all)))
    :name "ELISP"
    :function #'psx-elisp--candidate-generator
-   :lighter-function #'psx-elisp--lighter))
+   :lighter-function #'psx-elisp--lighter)
+  "Elisp symbol candidate generator for `p-search'.
+
+In use, there is a single argument, `symbol-type', which should
+be one of the following keywords:
+
+ - `:functions' create only documents for functions.
+ - `:variables' create only documents for variables.
+ - `:all' create documents for both functions and variables.")
 
 (add-to-list 'p-search-candidate-generators psx-elisp-candidate-generator)
 
