@@ -1,4 +1,4 @@
-;;; psx-bibtex.el --- P-Search BibTex Candidate Generator  -*- lexical-binding: t; -*-
+;;; psx-bibtex.el --- A BibTeX candidate generator for p-search  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025  Samuel W. Flint
 
