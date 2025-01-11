@@ -61,6 +61,20 @@
 (p-search-def-property 'elisp 'content #'psx-elisp--content)
 
 
+;;; Special Functions
+
+(defun psx-elisp--goto-doc (id)
+  "Go to documentation for ID.
+
+Use either `describe-function' or `describe-variable'."
+  (pcase id
+    (`(,symbol variable)
+     (describe-variable symbol))
+    (`(,symbol 'function)
+     (describe-function symbol)))
+(p-search-def-function 'elisp 'p-search-goto-document #'psx-elisp--goto-doc)
+
+
 ;;; Candidate Generator
 
 (defun psx-elisp--candidate-generator (args)
