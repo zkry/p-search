@@ -88,7 +88,7 @@ ARGS should be an alist containing the following keys:
           (maphash (lambda (key entry)
                      (push (p-search-documentize (list 'bibtex (list file key entry))) documents))
                    entries)))
-      documents)))
+      (nreverse documents))))
 
 (defconst psx-bibtex-candidate-generator
   (p-search-candidate-generator-create
