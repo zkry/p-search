@@ -23,7 +23,17 @@
 
 ;;; Commentary:
 
+;; This package implements a BibTeX candidate generator for
+;; `p-search'.  Of note, it is designed to be used interactively, or
+;; as part of `p-search-default-command-behavior'.  When used with the
+;; latter, there is a single, mandatory option of `files', which can
+;; be set to a single file name or a list of file names, which will be
+;; read in turn.
 ;;
+;; Additionally, bibliography entries can be opened internally or
+;; externally.  This is disabled by default, but can be configured by
+;; setting `psx-bibtex-open-entry-function' to a function which takes
+;; a filename and an entry key, and opens the bibentry as you choose.
 
 ;;; Code:
 
