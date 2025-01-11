@@ -36,13 +36,13 @@
   "Extract BibTeX Entry name from ID."
   (pcase-let* ((`(_ ,key _) id))
     key))
-(p-search-def-field 'bibtex 'name #'psx-bibtex--name)
+(p-search-def-property 'bibtex 'name #'psx-bibtex--name)
 
 (defun psx-bibtex--content (id)
   "Get entry content (i.e., abstract) from BibTeX entry ID."
   (pcase-let* ((`(_ _ ,entry-data) id))
     (alist-get "abstract" entry-data "" nil #'string-equal-ignore-case)))
-(p-search-def-field 'bibtex 'content #'psx-bibtex--content)
+(p-search-def-property 'bibtex 'content #'psx-bibtex--content)
 
 (defun psx-bibtex--fields (id)
   "Get various searchable fields from BibTeX entry ID."
@@ -60,7 +60,7 @@
       (when keywords
         (push (cons 'keywords (mapcar #'string-trim (string-split keywords ","))) fields))
       fields)))
-(p-search-def-field 'bibtex 'fields #'psx-bibtex--fields)
+(p-search-def-property 'bibtex 'fields #'psx-bibtex--fields)
 
 (defun psx-bibtex--candidate-generator (args)
   "Generate BibTeX candidates from ARGS."
