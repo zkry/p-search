@@ -571,7 +571,7 @@ options all begin with a dash.
 If you wanted to search all of your open buffers, you could create a
 ``BUFFERS'' candidate generator (the all caps naming for candidate
 generators is an arbitrary convention).  This has no associated
-configuration options.  Every buffer in your emacs session will then
+configuration options.  Every buffer in your Emacs session will then
 become a search candidate.
 
 
