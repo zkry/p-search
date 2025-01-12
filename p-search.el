@@ -871,7 +871,7 @@ return a list of the IDs that DOC-ID maps to."
           (cl-incf ct (length (gethash subseq (gethash cg+args p-search-candidates-by-generator))))))
       ct)))
 
-(defun p-search--document-map-p (document mapping)
+(defun p-search--document-can-map-p (document mapping)
   "Return non-nil if DOCUMENT satisfies requirements of MAPPING."
   (seq-every-p
    (lambda (key) (alist-get key document))
@@ -898,7 +898,11 @@ return a list of the IDs that DOC-ID maps to."
                     (let ((mapping-filter-unmodified-p (alist-get 'filter-unmodified args))
                           (new-doc-queue '()))
                       (dolist (d doc-queue)
-                        (when (p-search--document-map-p d mapping)
+                        (cond
+                         ((and (not mapping-filter-unmodified-p)
+                               (not (p-search--document-can-map-p d mapping)))
+                          (setq new-doc-queue (cons doc new-doc-queue)))
+                         ((p-search--document-can-map-p d mapping)
                           (let ((res (funcall (p-search-candidate-mapping-function mapping) args doc)))
                             (cond
                              ((eql res :remove))
@@ -908,7 +912,7 @@ return a list of the IDs that DOC-ID maps to."
                              ((and (consp res) (alist-get 'id res))
                               (setq new-doc-queue (cons res new-doc-queue)))
                              ((consp res)
-                              (setq new-doc-queue (append new-doc-queue res)))))))
+                              (setq new-doc-queue (append new-doc-queue res))))))))
                       (puthash mapping-key (append new-doc-queue (gethash mapping-key mappings->docs)) mappings->docs)
                       (setq doc-queue new-doc-queue)))
                   (puthash original-doc-id doc-queue p-search-candidate-ids-mapping)
