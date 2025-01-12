@@ -1,4 +1,4 @@
-This is p-search.info, produced by makeinfo version 7.1.1 from
+This is p-search.info, produced by texi2any version 7.1.1 from
 p-search.texi.
 
      Copyright (C) 2024 Zachary Romero <zacromero@posteo.com>
@@ -85,18 +85,18 @@ Candidate Generators
 
 * Creating and Editing Candidate Generators::
 * Inputs and Options::
-* Built-in Candidate Generators: FILESYSTEM::
-* Built-in Candidate Generators: BUFFERS::
-* Extension Candidate Generators: ELISP::
-* Extension Candidate Generators: INFO::
+* Built-in Candidate Generator: FILESYSTEM::
+* Built-in Candidate Generator: BUFFERS::
+* Extension Candidate Generator: ELISP::
+* Extension Candidate Generator: INFO::
 * Extension Candidate Generator: PACKAGE-LIST::
 
 Mappings
 
 * Creating and Editing Mappings::
-* Mapping Extension: File Split::
-* Mapping Extension: Denote::
-* Mapping Extension: PDF Info::
+* Extension Mapping: File Split::
+* Extension Mapping: Denote::
+* Extension Mapping: PDF Info::
 
 Priors
 
@@ -708,10 +708,10 @@ extensions, *note Creating Candidate Generators::.
 
 * Creating and Editing Candidate Generators::
 * Inputs and Options::
-* Built-in Candidate Generators: FILESYSTEM::
-* Built-in Candidate Generators: BUFFERS::
-* Extension Candidate Generators: ELISP::
-* Extension Candidate Generators: INFO::
+* Built-in Candidate Generator: FILESYSTEM::
+* Built-in Candidate Generator: BUFFERS::
+* Extension Candidate Generator: ELISP::
+* Extension Candidate Generator: INFO::
 * Extension Candidate Generator: PACKAGE-LIST::
 
 
@@ -760,7 +760,7 @@ candidates added by candidate generators are ignored.
      Priors:: more information on creating priors.
 
 
-File: p-search.info,  Node: Inputs and Options,  Next: Built-in Candidate Generators: FILESYSTEM,  Prev: Creating and Editing Candidate Generators,  Up: Candidate Generators
+File: p-search.info,  Node: Inputs and Options,  Next: Built-in Candidate Generator: FILESYSTEM,  Prev: Creating and Editing Candidate Generators,  Up: Candidate Generators
 
 4.3.2 Inputs and Options
 ------------------------
@@ -775,10 +775,10 @@ will have defaults.  If a default is not provided however, you will
 always be prompted for its value for it not to be blank.
 
 
-File: p-search.info,  Node: Built-in Candidate Generators: FILESYSTEM,  Next: Built-in Candidate Generators: BUFFERS,  Prev: Inputs and Options,  Up: Candidate Generators
+File: p-search.info,  Node: Built-in Candidate Generator: FILESYSTEM,  Next: Built-in Candidate Generator: BUFFERS,  Prev: Inputs and Options,  Up: Candidate Generators
 
-4.3.3 Built-in Candidate Generators: FILESYSTEM
------------------------------------------------
+4.3.3 Built-in Candidate Generator: FILESYSTEM
+----------------------------------------------
 
 The remainder of the candidate generator section will cover the
 candidate generators that come packaged in p-search.  The most prominent
@@ -787,24 +787,24 @@ creating this in a variety of situations.  The candidate generator makes
 a document for each file in a directory.  You will be prompted for the
 following arguments when creating a filesystem candidate generator:
 
-‘d’ Directory
+‘d’ Directory (‘base-directory’)
      The directory from which all candidates will be produced.
 
-‘f’ Filename Pattern
+‘f’ Filename Pattern (‘filename-regexp’)
      A regular expression that all candidate files must match.  Use ".*"
      to match all files.
 
-‘t’ Search Tool
+‘t’ Search Tool (‘search-tool’)
      The CLI tool used to perform the term frequency search.  At the
      moment, the filesystem candidate generator supports the tools
      ripgrep (recommended), ag, and grep.  These tools will be used when
      creating a "text query" prior.
 
-‘-i’ Ignore Pattern
+‘-i’ Ignore Pattern (‘ignore-pattern’)
      A regular expression which can be provided to specify files not to
      match.
 
-‘-g’ Git ls-files
+‘-g’ Git ls-files (‘use-git-ignore’)
      Use the command ‘git ls-files’ to enumerate the candidates.  If
      your directory is a Git repository, it is *strongly* recommended
      that you turn this setting on to ignore files not committed to git.
@@ -816,64 +816,58 @@ following arguments when creating a filesystem candidate generator:
 options all begin with a dash.
 
 
-File: p-search.info,  Node: Built-in Candidate Generators: BUFFERS,  Next: Extension Candidate Generators: ELISP,  Prev: Built-in Candidate Generators: FILESYSTEM,  Up: Candidate Generators
+File: p-search.info,  Node: Built-in Candidate Generator: BUFFERS,  Next: Extension Candidate Generator: ELISP,  Prev: Built-in Candidate Generator: FILESYSTEM,  Up: Candidate Generators
 
-4.3.4 Built-in Candidate Generators: BUFFERS
---------------------------------------------
+4.3.4 Built-in Candidate Generator: BUFFERS
+-------------------------------------------
 
 If you wanted to search all of your open buffers, you could create a
 "BUFFERS" candidate generator (the all caps naming for candidate
 generators is an arbitrary convention).  This has no associated
-configuration options.  Every buffer in your emacs session will then
+configuration options.  Every buffer in your Emacs session will then
 become a search candidate.
 
 
-File: p-search.info,  Node: Extension Candidate Generators: ELISP,  Next: Extension Candidate Generators: INFO,  Prev: Built-in Candidate Generators: BUFFERS,  Up: Candidate Generators
+File: p-search.info,  Node: Extension Candidate Generator: ELISP,  Next: Extension Candidate Generator: INFO,  Prev: Built-in Candidate Generator: BUFFERS,  Up: Candidate Generators
 
-4.3.5 Extension Candidate Generators: ELISP
--------------------------------------------
-
-The function symbol candidate generator can be used to search function
-symbols along with their documentation.  When being created, you can
-provide it with the following options:
-
-‘s’ Symbol Name Regex
-     A regular expression which the symbol's name must match in order
-     for it to be considered a candidate.  For example, if you wanted to
-     search org functions, you could use the regular expression "^org".
-
-‘-c’ Is Command?
-     When set to true, the candidate generator will only make documents
-     for symbols that are defined as commands (i.e.  with
-     ‘(interactive)’).
-
-‘-m’ Major Mode
-     Search for commands as if you were in the selected major mode and
-     ran ‘M-X’ (‘execute-extended-command-for-buffer’) in a buffer of
-     that mode.
-
-
-File: p-search.info,  Node: Extension Candidate Generators: INFO,  Next: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generators: ELISP,  Up: Candidate Generators
-
-4.3.6 Extension Candidate Generators: INFO
+4.3.5 Extension Candidate Generator: ELISP
 ------------------------------------------
 
-p-search also provides a candidate generator to search info files.  Once
-you select an info file, it will break it up into its constituent nodes
-which can be searched on.
+The ELISP candidate generator (‘psx-elisp’) can be used to search Emacs
+Lisp symbols along with their documentation.  When being created, you
+can provide it with the following option:
 
-‘i’ Info Node
-     The name of the info file to search.  The possible info files are
-     taken from the variable ‘Info-directory-list’.
-
-   If you wanted to search multiple info files at the same time, you can
-just create two candidate generators with the two info nodes.
+‘t’ Symbol Type ‘symbol-type’
+     A keyword, one of: ‘:all’ for all symbols (default), ‘:functions’
+     for all function symbols, or ‘:variables’ for all variables.
 
 
-File: p-search.info,  Node: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generators: INFO,  Up: Candidate Generators
+File: p-search.info,  Node: Extension Candidate Generator: INFO,  Next: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generator: ELISP,  Up: Candidate Generators
+
+4.3.6 Extension Candidate Generator: INFO
+-----------------------------------------
+
+p-search also provides a candidate generator to search GNU Info
+documents (‘psx-info’).  Once you select an Info file, it will be broken
+up into its constituent nodes for further search.
+
+‘i’ Info Node ‘info-node’
+     The name of the info file to search.  The possible Info files are
+     taken from the variable ‘Info-directory-list’.
+
+   If you wanted to search multiple Info files at the same time, you can
+create a candidate generator for each.
+
+
+File: p-search.info,  Node: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generator: INFO,  Up: Candidate Generators
 
 4.3.7 Extension Candidate Generator: PACKAGE-LIST
 -------------------------------------------------
+
+The PACKAGE-LIST candidate generator (‘psx-package-list’) allows you to
+search through Emacs packages.  This candidate generator has no options,
+and will create documents for each package your installation knows
+about.
 
 
 File: p-search.info,  Node: Mappings,  Next: Priors,  Prev: Candidate Generators,  Up: The p-search Interface
@@ -906,12 +900,12 @@ later chapter (*note Creating Mappings::).
 * Menu:
 
 * Creating and Editing Mappings::
-* Mapping Extension: File Split::
-* Mapping Extension: Denote::
-* Mapping Extension: PDF Info::
+* Extension Mapping: File Split::
+* Extension Mapping: Denote::
+* Extension Mapping: PDF Info::
 
 
-File: p-search.info,  Node: Creating and Editing Mappings,  Next: Mapping Extension: File Split,  Up: Mappings
+File: p-search.info,  Node: Creating and Editing Mappings,  Next: Extension Mapping: File Split,  Up: Mappings
 
 4.4.1 Creating and Editing Mappings
 -----------------------------------
@@ -947,22 +941,81 @@ created with the option ‘-f’ (‘filter’).  When on, a mapping that
 doesn't do anything to a document will remove the document.
 
 
-File: p-search.info,  Node: Mapping Extension: File Split,  Next: Mapping Extension: Denote,  Prev: Creating and Editing Mappings,  Up: Mappings
+File: p-search.info,  Node: Extension Mapping: File Split,  Next: Extension Mapping: Denote,  Prev: Creating and Editing Mappings,  Up: Mappings
 
-4.4.2 Mapping Extension: File Split
+4.4.2 Extension Mapping: File Split
 -----------------------------------
 
-
-File: p-search.info,  Node: Mapping Extension: Denote,  Next: Mapping Extension: PDF Info,  Prev: Mapping Extension: File Split,  Up: Mappings
+The File Split mapping (‘psx-file-split’) splits existing documents into
+smaller sections, based on a number of lines.  It has one option:
 
-4.4.3 Mapping Extension: Denote
+‘n’ Split by N lines ‘split-size’
+     Number of lines to split documents by.
+
+
+File: p-search.info,  Node: Extension Mapping: Denote,  Next: Extension Mapping: PDF Info,  Prev: Extension Mapping: File Split,  Up: Mappings
+
+4.4.3 Extension Mapping: Denote
 -------------------------------
 
-
-File: p-search.info,  Node: Mapping Extension: PDF Info,  Prev: Mapping Extension: Denote,  Up: Mappings
+The Denote mapping (‘psx-denote’) provides a selection of denote-derived
+fields for search.  Mapped fields include as follows:
 
-4.4.4 Mapping Extension: PDF Info
+‘denote-type’
+     The type of the Denote document.
+
+‘denote-identifier’
+     The Denote document's identifier.
+
+‘denote-signature’
+     The Denote document's signature, if it exists and signatures are
+     requested.
+
+‘keywords’
+     The Denote document's keywords, extracted from the filename.
+
+‘title’
+     The Denote document's title, extracted from the file name, and if
+     different, from the file itself.
+
+   This mapping has one option, as follows:
+
+‘-s’ Include Signature ‘include-signature’
+     Whether document signatures should be included, when present.  The
+     default for this value is provided by
+     ‘psx-denote-include-signature-p’.
+
+
+File: p-search.info,  Node: Extension Mapping: PDF Info,  Prev: Extension Mapping: Denote,  Up: Mappings
+
+4.4.4 Extension Mapping: PDF Info
 ---------------------------------
+
+The PDF Info mapping (‘psx-pdfinfo’) collects metadata from PDF
+documents.  There are no options on mapping creation, but the
+‘psx-pdfinfo-executable’ variable can be used to configure the location
+of your preferred ‘pdfinfo’ command.  The following metadata fields are
+collected:
+
+   • ‘title’
+
+   • ‘keywords’
+
+   • ‘author’
+
+   • ‘creation-date’
+
+   • ‘modification-date’
+
+   • ‘pdf-subject’
+
+   • ‘pdf-creator’
+
+   • ‘pdf-producer’
+
+   • ‘pdf-pages’
+
+   • ‘pdf-pagesize’
 
 
 File: p-search.info,  Node: Priors,  Next: Search Results,  Prev: Mappings,  Up: The p-search Interface
@@ -2252,64 +2305,64 @@ included, this too would greatly slow down p-search.
 
 Tag Table:
 Node: Top764
-Node: Introduction3571
-Node: The Search Candidates5907
-Node: Candidate Mappings7368
-Node: Asserting Probabilities8603
-Node: Searching and Making Observations10398
-Node: Installation12008
-Node: Installing from Quelpa12472
-Node: Installing with Straight12882
-Node: Recommended Tooling13209
-Node: Getting Started13564
-Node: Creating the p-search session14004
-Node: Adding Search Criteria15794
-Node: Refining our Search19073
-Node: Final Results20852
-Node: The p-search Interface22334
-Node: Starting a session22653
-Node: The p-search session buffer25260
-Node: Candidate Generators26263
-Node: Creating and Editing Candidate Generators27544
-Node: Inputs and Options29829
-Node: Built-in Candidate Generators: FILESYSTEM30612
-Node: Built-in Candidate Generators: BUFFERS32398
-Node: Extension Candidate Generators: ELISP32977
-Node: Extension Candidate Generators: INFO34041
-Node: Extension Candidate Generator: PACKAGE-LIST34775
-Node: Mappings35023
-Node: Creating and Editing Mappings36463
-Node: Mapping Extension: File Split38242
-Node: Mapping Extension: Denote38463
-Node: Mapping Extension: PDF Info38674
-Node: Priors38851
-Node: Creating and Editing Priors40081
-Node: Scoring41258
-Node: Importance and Complement Options42595
-Node: Text Queries44466
-Node: Text Query Syntax47319
-Node: Fields50580
-Node: Searching Category51552
-Node: Instruction Strings52273
-Node: Git-related Priors52906
-Node: Filesystem-related Priors55518
-Node: Troubleshooting Priors56735
-Node: Search Results57631
-Node: Navigating and Viewing Search Results58633
-Node: Making Observations60167
-Node: Search Result Preview61649
-Node: Saving Sessions63060
-Node: Extending p-search63206
-Node: Creating Candidate Generators63836
-Node: Creating Documents68349
-Node: Creating Mappings71819
-Node: Input/Options Specification75982
-Node: Creating Priors80405
-Node: The Preset Data Structure and Programatically Creating Sessions84242
-Node: Examples of Extending p-search87212
-Node: Candidate Generator Examples87695
-Node: A Candidate Generator with Hard-coded Items88149
-Node: Defining Custom Properties90050
+Node: Introduction3567
+Node: The Search Candidates5903
+Node: Candidate Mappings7364
+Node: Asserting Probabilities8599
+Node: Searching and Making Observations10394
+Node: Installation12004
+Node: Installing from Quelpa12468
+Node: Installing with Straight12878
+Node: Recommended Tooling13205
+Node: Getting Started13560
+Node: Creating the p-search session14000
+Node: Adding Search Criteria15790
+Node: Refining our Search19069
+Node: Final Results20848
+Node: The p-search Interface22330
+Node: Starting a session22649
+Node: The p-search session buffer25256
+Node: Candidate Generators26259
+Node: Creating and Editing Candidate Generators27536
+Node: Inputs and Options29821
+Node: Built-in Candidate Generator: FILESYSTEM30603
+Node: Built-in Candidate Generator: BUFFERS32498
+Node: Extension Candidate Generator: ELISP33072
+Node: Extension Candidate Generator: INFO33721
+Node: Extension Candidate Generator: PACKAGE-LIST34464
+Node: Mappings34935
+Node: Creating and Editing Mappings36375
+Node: Extension Mapping: File Split38154
+Node: Extension Mapping: Denote38606
+Node: Extension Mapping: PDF Info39639
+Node: Priors40364
+Node: Creating and Editing Priors41594
+Node: Scoring42771
+Node: Importance and Complement Options44108
+Node: Text Queries45979
+Node: Text Query Syntax48832
+Node: Fields52093
+Node: Searching Category53065
+Node: Instruction Strings53786
+Node: Git-related Priors54419
+Node: Filesystem-related Priors57031
+Node: Troubleshooting Priors58248
+Node: Search Results59144
+Node: Navigating and Viewing Search Results60146
+Node: Making Observations61680
+Node: Search Result Preview63162
+Node: Saving Sessions64573
+Node: Extending p-search64719
+Node: Creating Candidate Generators65349
+Node: Creating Documents69862
+Node: Creating Mappings73332
+Node: Input/Options Specification77495
+Node: Creating Priors81918
+Node: The Preset Data Structure and Programatically Creating Sessions85755
+Node: Examples of Extending p-search88725
+Node: Candidate Generator Examples89208
+Node: A Candidate Generator with Hard-coded Items89662
+Node: Defining Custom Properties91563
 
 End Tag Table
 

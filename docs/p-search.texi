@@ -660,6 +660,14 @@ A mapping works simmilar to the map function in the functional programming parad
 @node Extension Mapping: File Split
 @subsection Extension Mapping: File Split
 
+The File Split mapping (@code{psx-file-split}) splits existing documents
+into smaller sections, based on a number of lines.  It has one option:
+
+@table @asis
+@item @kbd{n} Split by N lines @code{split-size}
+Number of lines to split documents by.
+@end table
+
 @node Extension Mapping: Denote
 @subsection Extension Mapping: Denote
 
