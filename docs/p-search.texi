@@ -537,22 +537,22 @@ prompted for the following arguments when creating a filesystem
 candidate generator:
 
 @table @asis
-@item @kbd{d} Directory
+@item @kbd{d} Directory (@code{base-directory})
 The directory from which all candidates will be produced.
 
-@item @kbd{f} Filename Pattern
+@item @kbd{f} Filename Pattern (@code{filename-regexp})
 A regular expression that all candidate files must match.  Use ``.*'' to match all files.
 
-@item @kbd{t} Search Tool
+@item @kbd{t} Search Tool (@code{search-tool})
 The CLI tool used to perform the term frequency search.  At the
 moment, the filesystem candidate generator supports the tools ripgrep
 (recommended), ag, and grep.  These tools will be used when creating a
 ``text query'' prior.
 
-@item @kbd{-i} Ignore Pattern
+@item @kbd{-i} Ignore Pattern (@code{ignore-pattern})
 A regular expression which can be provided to specify files not to match.
 
-@item @kbd{-g} Git ls-files
+@item @kbd{-g} Git ls-files (@code{use-git-ignore})
 Use the command @code{git ls-files} to enumerate the candidates.  If
 your directory is a Git repository, it is @strong{strongly}
 recommended that you turn this setting on to ignore files not
@@ -561,7 +561,8 @@ p-search attempting to search all vendored directories like
 node_modules, which could make the search very slow.
 @end table
 
-Note how required inputs in the transient menu are letters while the options all begin with a dash.
+Note how required inputs in the transient menu are letters while the
+options all begin with a dash.
 
 
 @node Built-in Candidate Generator: BUFFERS
