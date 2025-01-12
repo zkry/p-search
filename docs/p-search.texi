@@ -608,6 +608,11 @@ create a candidate generator for each.
 @node Extension Candidate Generator: PACKAGE-LIST
 @subsection Extension Candidate Generator: PACKAGE-LIST
 
+The PACKAGE-LIST candidate generator (@code{psx-package-list}) allows
+you to search through Emacs packages.  This candidate generator has no
+options, and will create documents for each package your installation
+knows about.
+
 @node Mappings
 @section Mappings
 
