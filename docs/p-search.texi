@@ -525,8 +525,8 @@ provided however, you will always be prompted for its value for it not
 to be blank.
 
 
-@node Common Candidate Generators: FILESYSTEM
-@subsection Common Candidate Generators: FILESYSTEM
+@node Built-in Candidate Generator: FILESYSTEM
+@subsection Built-in Candidate Generator: FILESYSTEM
 
 The remainder of the candidate generator section will cover the
 candidate generators that come packaged in p-search.  The most
@@ -564,8 +564,8 @@ node_modules, which could make the search very slow.
 Note how required inputs in the transient menu are letters while the options all begin with a dash.
 
 
-@node Common Candidate Generators: BUFFERS
-@subsection Common Candidate Generators: BUFFERS
+@node Built-in Candidate Generator: BUFFERS
+@subsection Built-in Candidate Generator: BUFFERS
 
 If you wanted to search all of your open buffers, you could create a
 ``BUFFERS'' candidate generator (the all caps naming for candidate
@@ -574,8 +574,8 @@ configuration options.  Every buffer in your emacs session will then
 become a search candidate.
 
 
-@node Common Candidate Generators: FUNCTION-SYMBOL
-@subsection Common Candidate Generators: FUNCTION-SYMBOL
+@node Extension Candidate Generator: ELISP
+@subsection Extension Candidate Generator: ELISP
 
 The function symbol candidate generator can be used to search function symbols along with their documentation.  When being created, you can provide it with the following options:
 
@@ -592,8 +592,8 @@ Search for commands as if you were in the selected major mode and ran
 @end table
 
 
-@node Common Candidate Generators: INFO
-@subsection Common Candidate Generators: INFO
+@node Extension Candidate Generator: INFO
+@subsection Extension Candidate Generator: INFO
 
 p-search also provides a candidate generator to search info files. Once you select an info file, it will break it up into its constituent nodes which can be searched on.
 
@@ -605,6 +605,8 @@ The name of the info file to search.  The possible info files are taken from the
 
 If you wanted to search multiple info files at the same time, you can just create two candidate generators with the two info nodes.
 
+@node Extension Candidate Generator: PACKAGE-LIST
+@subsection Extension Candidate Generator: PACKAGE-LIST
 
 @node Mappings
 @section Mappings
@@ -649,6 +651,15 @@ After selecting the prior you want, you will the proceed to configure the mappin
 Mappings can be edited and killed simmilar to how candidate generators are, via @kbd{e} (@code{p-search-edit-dwim}) and @kbd{k} (@code{p-search-kill-entity-at-point}) respectively.
 
 A mapping works simmilar to the map function in the functional programming paradigm.  Each mapping has a function which takes in the candidate document (which is a set of key-value pairs), and returns one or more deriving documents, nil meaning nothing can be done, or @code{:remove}, which explicitly removes a document. Every mapping can be created with the option @kbd{-f} (@samp{filter}).  When on, a mapping that doesn't do anything to a document will remove the document.
+
+@node Extension Mapping: File Split
+@subsection Extension Mapping: File Split
+
+@node Extension Mapping: Denote
+@subsection Extension Mapping: Denote
+
+@node Extension Mapping: PDF Info
+@subsection Extension Mapping: PDF Info
 
 @node Priors
 @section Priors
