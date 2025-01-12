@@ -4063,9 +4063,11 @@ item's contents."
     ;; go to the top of the thing from the bottom
     (unless (bobp)
       (let ((start-thing (thing-at-point)))
-        (while (and (equal (thing-at-point) start-thing) (not (bobp)))
-          (forward-line -1))
-        (unless (bobp)
+        (catch 'done
+          (while (and (equal (thing-at-point) start-thing))
+            (when (bobp)
+              (throw 'done nil))
+            (forward-line -1))
           (forward-line 1))))))
 
 (defun p-search-add-candidate-generator ()
