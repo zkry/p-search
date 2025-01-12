@@ -578,20 +578,16 @@ become a search candidate.
 @node Extension Candidate Generator: ELISP
 @subsection Extension Candidate Generator: ELISP
 
-The function symbol candidate generator can be used to search function symbols along with their documentation.  When being created, you can provide it with the following options:
+The ELISP candidate generator (@code{psx-elisp}) can be used to search
+Emacs Lisp symbols along with their documentation.  When being created,
+you can provide it with the following option:
 
 @table @asis
-@item @kbd{s} Symbol Name Regex
-A regular expression which the symbol's name must match in order for it to be considered a candidate.  For example, if you wanted to search org functions, you could use the regular expression ``^org''.
-
-@item @kbd{-c} Is Command?
-When set to true, the candidate generator will only make documents for symbols that are defined as commands (i.e. with @code{(interactive)}).
-
-@item @kbd{-m} Major Mode
-Search for commands as if you were in the selected major mode and ran
-@kbd{M-X} (@code{execute-extended-command-for-buffer}) in a buffer of that mode.
+@item @kbd{t} Symbol Type @code{symbol-type}
+A keyword, one of: @code{:all} for all symbols (default),
+@code{:functions} for all function symbols, or @code{:variables} for all
+variables.
 @end table
-
 
 @node Extension Candidate Generator: INFO
 @subsection Extension Candidate Generator: INFO
