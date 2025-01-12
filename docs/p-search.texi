@@ -663,6 +663,37 @@ A mapping works simmilar to the map function in the functional programming parad
 @node Extension Mapping: Denote
 @subsection Extension Mapping: Denote
 
+The Denote mapping (@code{psx-denote}) provides a selection of
+denote-derived fields for search.  Mapped fields include as follows:
+
+@table @asis
+@item @code{denote-type}
+The type of the Denote document.
+
+@item @code{denote-identifier}
+The Denote document's identifier.
+
+@item @code{denote-signature}
+The Denote document's signature, if it exists and signatures are
+requested.
+
+@item @code{keywords}
+The Denote document's keywords, extracted from the filename.
+
+@item @code{title}
+The Denote document's title, extracted from the file name, and if
+different, from the file itself.
+@end table
+
+This mapping has one option, as follows:
+
+@table @asis
+@item @kbd{-s} Include Signature @code{include-signature}
+Whether document signatures should be included, when present.  The
+default for this value is provided by
+@code{psx-denote-include-signature-p}.
+@end table
+
 @node Extension Mapping: PDF Info
 @subsection Extension Mapping: PDF Info
 
