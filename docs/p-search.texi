@@ -592,15 +592,18 @@ variables.
 @node Extension Candidate Generator: INFO
 @subsection Extension Candidate Generator: INFO
 
-p-search also provides a candidate generator to search info files. Once you select an info file, it will break it up into its constituent nodes which can be searched on.
+p-search also provides a candidate generator to search GNU Info
+documents (@code{psx-info}).  Once you select an Info file, it will be
+broken up into its constituent nodes for further search.
 
 @table @asis
-@item @kbd{i} Info Node
-The name of the info file to search.  The possible info files are taken from the variable @code{Info-directory-list}.
-
+@item @kbd{i} Info Node @code{info-node}
+The name of the info file to search.  The possible Info files are taken
+from the variable @code{Info-directory-list}.
 @end table
 
-If you wanted to search multiple info files at the same time, you can just create two candidate generators with the two info nodes.
+If you wanted to search multiple Info files at the same time, you can
+create a candidate generator for each.
 
 @node Extension Candidate Generator: PACKAGE-LIST
 @subsection Extension Candidate Generator: PACKAGE-LIST
