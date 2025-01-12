@@ -697,6 +697,35 @@ default for this value is provided by
 @node Extension Mapping: PDF Info
 @subsection Extension Mapping: PDF Info
 
+The PDF Info mapping (@code{psx-pdfinfo}) collects metadata from
+PDF documents.  There are no options on mapping creation, but the
+@code{psx-pdfinfo-executable} variable can be used to configure the
+location of your preferred @code{pdfinfo} command.  The following
+metadata fields are collected:
+
+@itemize
+@item @code{title}
+
+@item @code{keywords}
+
+@item @code{author}
+
+@item @code{creation-date}
+
+@item @code{modification-date}
+
+@item @code{pdf-subject}
+
+@item @code{pdf-creator}
+
+@item @code{pdf-producer}
+
+@item @code{pdf-pages}
+
+@item @code{pdf-pagesize}
+
+@end itemize
+
 @node Priors
 @section Priors
 
