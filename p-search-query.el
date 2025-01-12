@@ -395,6 +395,15 @@ resulting data hashmap."
 ;; the element as the first item and all metadata as subsequent plist
 ;; items.
 
+(defun p-search-query--with-metadata (elt metadata)
+  "Return ELT with METADATA attached.
+The metadata-related functions in this package are concerning
+attaching metadata to results such as weight, in order for the
+final calculation to process the results properly.  In this
+package, an element with metadata is defined as a cons cell with
+the element in the car position and metadata a plist in cdr."
+  (cons elt metadata))
+
 (defun p-search-query--metadata-add (elt md-key md-val)
   "Add metadata MD-KEY MD-VAL to ELT."
   (if (listp elt)
@@ -412,10 +421,6 @@ resulting data hashmap."
   "Return metadata value MD-KEY of ELT."
   (when (listp elt)
     (cdr elt)))
-
-(defun p-search-query--with-metadata (elt metadata)
-  "Return METADATA value MD-KEY of ELT."
-  (cons elt metadata))
 
 (defun p-search-query--metadata-elt (elt)
   "Return original element of ELT."
