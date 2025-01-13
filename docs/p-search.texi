@@ -525,8 +525,8 @@ provided however, you will always be prompted for its value for it not
 to be blank.
 
 
-@node Common Candidate Generators: FILESYSTEM
-@subsection Common Candidate Generators: FILESYSTEM
+@node Built-in Candidate Generator: FILESYSTEM
+@subsection Built-in Candidate Generator: FILESYSTEM
 
 The remainder of the candidate generator section will cover the
 candidate generators that come packaged in p-search.  The most
@@ -537,22 +537,22 @@ prompted for the following arguments when creating a filesystem
 candidate generator:
 
 @table @asis
-@item @kbd{d} Directory
+@item @kbd{d} Directory (@code{base-directory})
 The directory from which all candidates will be produced.
 
-@item @kbd{f} Filename Pattern
+@item @kbd{f} Filename Pattern (@code{filename-regexp})
 A regular expression that all candidate files must match.  Use ``.*'' to match all files.
 
-@item @kbd{t} Search Tool
+@item @kbd{t} Search Tool (@code{search-tool})
 The CLI tool used to perform the term frequency search.  At the
 moment, the filesystem candidate generator supports the tools ripgrep
 (recommended), ag, and grep.  These tools will be used when creating a
 ``text query'' prior.
 
-@item @kbd{-i} Ignore Pattern
+@item @kbd{-i} Ignore Pattern (@code{ignore-pattern})
 A regular expression which can be provided to specify files not to match.
 
-@item @kbd{-g} Git ls-files
+@item @kbd{-g} Git ls-files (@code{use-git-ignore})
 Use the command @code{git ls-files} to enumerate the candidates.  If
 your directory is a Git repository, it is @strong{strongly}
 recommended that you turn this setting on to ignore files not
@@ -561,50 +561,57 @@ p-search attempting to search all vendored directories like
 node_modules, which could make the search very slow.
 @end table
 
-Note how required inputs in the transient menu are letters while the options all begin with a dash.
+Note how required inputs in the transient menu are letters while the
+options all begin with a dash.
 
 
-@node Common Candidate Generators: BUFFERS
-@subsection Common Candidate Generators: BUFFERS
+@node Built-in Candidate Generator: BUFFERS
+@subsection Built-in Candidate Generator: BUFFERS
 
 If you wanted to search all of your open buffers, you could create a
 ``BUFFERS'' candidate generator (the all caps naming for candidate
 generators is an arbitrary convention).  This has no associated
-configuration options.  Every buffer in your emacs session will then
+configuration options.  Every buffer in your Emacs session will then
 become a search candidate.
 
 
-@node Common Candidate Generators: FUNCTION-SYMBOL
-@subsection Common Candidate Generators: FUNCTION-SYMBOL
+@node Extension Candidate Generator: ELISP
+@subsection Extension Candidate Generator: ELISP
 
-The function symbol candidate generator can be used to search function symbols along with their documentation.  When being created, you can provide it with the following options:
-
-@table @asis
-@item @kbd{s} Symbol Name Regex
-A regular expression which the symbol's name must match in order for it to be considered a candidate.  For example, if you wanted to search org functions, you could use the regular expression ``^org''.
-
-@item @kbd{-c} Is Command?
-When set to true, the candidate generator will only make documents for symbols that are defined as commands (i.e. with @code{(interactive)}).
-
-@item @kbd{-m} Major Mode
-Search for commands as if you were in the selected major mode and ran
-@kbd{M-X} (@code{execute-extended-command-for-buffer}) in a buffer of that mode.
-@end table
-
-
-@node Common Candidate Generators: INFO
-@subsection Common Candidate Generators: INFO
-
-p-search also provides a candidate generator to search info files. Once you select an info file, it will break it up into its constituent nodes which can be searched on.
+The ELISP candidate generator (@code{psx-elisp}) can be used to search
+Emacs Lisp symbols along with their documentation.  When being created,
+you can provide it with the following option:
 
 @table @asis
-@item @kbd{i} Info Node
-The name of the info file to search.  The possible info files are taken from the variable @code{Info-directory-list}.
-
+@item @kbd{t} Symbol Type @code{symbol-type}
+A keyword, one of: @code{:all} for all symbols (default),
+@code{:functions} for all function symbols, or @code{:variables} for all
+variables.
 @end table
 
-If you wanted to search multiple info files at the same time, you can just create two candidate generators with the two info nodes.
+@node Extension Candidate Generator: INFO
+@subsection Extension Candidate Generator: INFO
 
+p-search also provides a candidate generator to search GNU Info
+documents (@code{psx-info}).  Once you select an Info file, it will be
+broken up into its constituent nodes for further search.
+
+@table @asis
+@item @kbd{i} Info Node @code{info-node}
+The name of the info file to search.  The possible Info files are taken
+from the variable @code{Info-directory-list}.
+@end table
+
+If you wanted to search multiple Info files at the same time, you can
+create a candidate generator for each.
+
+@node Extension Candidate Generator: PACKAGE-LIST
+@subsection Extension Candidate Generator: PACKAGE-LIST
+
+The PACKAGE-LIST candidate generator (@code{psx-package-list}) allows
+you to search through Emacs packages.  This candidate generator has no
+options, and will create documents for each package your installation
+knows about.
 
 @node Mappings
 @section Mappings
@@ -649,6 +656,83 @@ After selecting the prior you want, you will the proceed to configure the mappin
 Mappings can be edited and killed simmilar to how candidate generators are, via @kbd{e} (@code{p-search-edit-dwim}) and @kbd{k} (@code{p-search-kill-entity-at-point}) respectively.
 
 A mapping works simmilar to the map function in the functional programming paradigm.  Each mapping has a function which takes in the candidate document (which is a set of key-value pairs), and returns one or more deriving documents, nil meaning nothing can be done, or @code{:remove}, which explicitly removes a document. Every mapping can be created with the option @kbd{-f} (@samp{filter}).  When on, a mapping that doesn't do anything to a document will remove the document.
+
+@node Extension Mapping: File Split
+@subsection Extension Mapping: File Split
+
+The File Split mapping (@code{psx-file-split}) splits existing documents
+into smaller sections, based on a number of lines.  It has one option:
+
+@table @asis
+@item @kbd{n} Split by N lines @code{split-size}
+Number of lines to split documents by.
+@end table
+
+@node Extension Mapping: Denote
+@subsection Extension Mapping: Denote
+
+The Denote mapping (@code{psx-denote}) provides a selection of
+denote-derived fields for search.  Mapped fields include as follows:
+
+@table @asis
+@item @code{denote-type}
+The type of the Denote document.
+
+@item @code{denote-identifier}
+The Denote document's identifier.
+
+@item @code{denote-signature}
+The Denote document's signature, if it exists and signatures are
+requested.
+
+@item @code{keywords}
+The Denote document's keywords, extracted from the filename.
+
+@item @code{title}
+The Denote document's title, extracted from the file name, and if
+different, from the file itself.
+@end table
+
+This mapping has one option, as follows:
+
+@table @asis
+@item @kbd{-s} Include Signature @code{include-signature}
+Whether document signatures should be included, when present.  The
+default for this value is provided by
+@code{psx-denote-include-signature-p}.
+@end table
+
+@node Extension Mapping: PDF Info
+@subsection Extension Mapping: PDF Info
+
+The PDF Info mapping (@code{psx-pdfinfo}) collects metadata from
+PDF documents.  There are no options on mapping creation, but the
+@code{psx-pdfinfo-executable} variable can be used to configure the
+location of your preferred @code{pdfinfo} command.  The following
+metadata fields are collected:
+
+@itemize
+@item @code{title}
+
+@item @code{keywords}
+
+@item @code{author}
+
+@item @code{creation-date}
+
+@item @code{modification-date}
+
+@item @code{pdf-subject}
+
+@item @code{pdf-creator}
+
+@item @code{pdf-producer}
+
+@item @code{pdf-pages}
+
+@item @code{pdf-pagesize}
+
+@end itemize
 
 @node Priors
 @section Priors

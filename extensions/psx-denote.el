@@ -80,14 +80,7 @@
 (defun psx-denote--arg-display (_input-spec _output-spec arguments)
   "Display ARGUMENTS in a condensed format."
   (let-alist arguments
-    (format "category: %s, signature: %s"
-            (propertize
-             (cond
-              ((and .category-keywords .category-text) "both")
-              (.category-keywords "cat")
-              (.category-text "text")
-              (t "off"))
-             'face 'p-search-value)
+    (format "signature: %s"
             (propertize (if .include-signature "on" "off") 'face 'p-search-value))))
 
 (defconst psx-denote-mapping
