@@ -574,6 +574,20 @@ generators is an arbitrary convention).  This has no associated
 configuration options.  Every buffer in your Emacs session will then
 become a search candidate.
 
+@node Extension Candidate Generator: BIBTEX
+@subsection Extension Candidate Generator: BIBTEX
+
+The BIBTEX candidate generator (@code{psx-bibtex}) turns a series of
+BibTeX or CSL-JSON files into a sequence of p-search searchable
+documents.  This is done using the parsebib library.  There is a single,
+mandatory configuration option, as follows:
+
+@table @asis
+@item @kbd{f} BibTeX Filename @code{files}
+In interactive use, the path of a single BibTeX or CSL-JSON file.  When
+used as part of @code{p-search-default-command-behavior}, a list of
+files can be provided instead.
+@end table
 
 @node Extension Candidate Generator: ELISP
 @subsection Extension Candidate Generator: ELISP
