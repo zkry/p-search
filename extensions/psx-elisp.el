@@ -80,7 +80,7 @@ Use either `describe-function' or `describe-variable'."
     (`(,symbol variable)
      (describe-variable symbol))
     (`(,symbol 'function)
-     (describe-function symbol)))
+     (describe-function symbol))))
 (p-search-def-function 'elisp 'p-search-goto-document #'psx-elisp--goto-doc)
 
 
