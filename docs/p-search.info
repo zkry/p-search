@@ -87,6 +87,7 @@ Candidate Generators
 * Inputs and Options::
 * Built-in Candidate Generator: FILESYSTEM::
 * Built-in Candidate Generator: BUFFERS::
+* Extension Candidate Generator: BIBTEX::
 * Extension Candidate Generator: ELISP::
 * Extension Candidate Generator: INFO::
 * Extension Candidate Generator: PACKAGE-LIST::
@@ -710,6 +711,7 @@ extensions, *note Creating Candidate Generators::.
 * Inputs and Options::
 * Built-in Candidate Generator: FILESYSTEM::
 * Built-in Candidate Generator: BUFFERS::
+* Extension Candidate Generator: BIBTEX::
 * Extension Candidate Generator: ELISP::
 * Extension Candidate Generator: INFO::
 * Extension Candidate Generator: PACKAGE-LIST::
@@ -816,7 +818,7 @@ following arguments when creating a filesystem candidate generator:
 options all begin with a dash.
 
 
-File: p-search.info,  Node: Built-in Candidate Generator: BUFFERS,  Next: Extension Candidate Generator: ELISP,  Prev: Built-in Candidate Generator: FILESYSTEM,  Up: Candidate Generators
+File: p-search.info,  Node: Built-in Candidate Generator: BUFFERS,  Next: Extension Candidate Generator: BIBTEX,  Prev: Built-in Candidate Generator: FILESYSTEM,  Up: Candidate Generators
 
 4.3.4 Built-in Candidate Generator: BUFFERS
 -------------------------------------------
@@ -828,9 +830,25 @@ configuration options.  Every buffer in your Emacs session will then
 become a search candidate.
 
 
-File: p-search.info,  Node: Extension Candidate Generator: ELISP,  Next: Extension Candidate Generator: INFO,  Prev: Built-in Candidate Generator: BUFFERS,  Up: Candidate Generators
+File: p-search.info,  Node: Extension Candidate Generator: BIBTEX,  Next: Extension Candidate Generator: ELISP,  Prev: Built-in Candidate Generator: BUFFERS,  Up: Candidate Generators
 
-4.3.5 Extension Candidate Generator: ELISP
+4.3.5 Extension Candidate Generator: BIBTEX
+-------------------------------------------
+
+The BIBTEX candidate generator (‘psx-bibtex’) turns a series of BibTeX
+or CSL-JSON files into a sequence of p-search searchable documents.
+This is done using the parsebib library.  There is a single, mandatory
+configuration option, as follows:
+
+‘f’ BibTeX Filename ‘files’
+     In interactive use, the path of a single BibTeX or CSL-JSON file.
+     When used as part of ‘p-search-default-command-behavior’, a list of
+     files can be provided instead.
+
+
+File: p-search.info,  Node: Extension Candidate Generator: ELISP,  Next: Extension Candidate Generator: INFO,  Prev: Extension Candidate Generator: BIBTEX,  Up: Candidate Generators
+
+4.3.6 Extension Candidate Generator: ELISP
 ------------------------------------------
 
 The ELISP candidate generator (‘psx-elisp’) can be used to search Emacs
@@ -844,7 +862,7 @@ can provide it with the following option:
 
 File: p-search.info,  Node: Extension Candidate Generator: INFO,  Next: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generator: ELISP,  Up: Candidate Generators
 
-4.3.6 Extension Candidate Generator: INFO
+4.3.7 Extension Candidate Generator: INFO
 -----------------------------------------
 
 p-search also provides a candidate generator to search GNU Info
@@ -861,7 +879,7 @@ create a candidate generator for each.
 
 File: p-search.info,  Node: Extension Candidate Generator: PACKAGE-LIST,  Prev: Extension Candidate Generator: INFO,  Up: Candidate Generators
 
-4.3.7 Extension Candidate Generator: PACKAGE-LIST
+4.3.8 Extension Candidate Generator: PACKAGE-LIST
 -------------------------------------------------
 
 The PACKAGE-LIST candidate generator (‘psx-package-list’) allows you to
@@ -2305,64 +2323,65 @@ included, this too would greatly slow down p-search.
 
 Tag Table:
 Node: Top764
-Node: Introduction3567
-Node: The Search Candidates5903
-Node: Candidate Mappings7364
-Node: Asserting Probabilities8599
-Node: Searching and Making Observations10394
-Node: Installation12004
-Node: Installing from Quelpa12468
-Node: Installing with Straight12878
-Node: Recommended Tooling13205
-Node: Getting Started13560
-Node: Creating the p-search session14000
-Node: Adding Search Criteria15790
-Node: Refining our Search19069
-Node: Final Results20848
-Node: The p-search Interface22330
-Node: Starting a session22649
-Node: The p-search session buffer25256
-Node: Candidate Generators26259
-Node: Creating and Editing Candidate Generators27536
-Node: Inputs and Options29821
-Node: Built-in Candidate Generator: FILESYSTEM30603
-Node: Built-in Candidate Generator: BUFFERS32498
-Node: Extension Candidate Generator: ELISP33072
-Node: Extension Candidate Generator: INFO33721
-Node: Extension Candidate Generator: PACKAGE-LIST34464
-Node: Mappings34935
-Node: Creating and Editing Mappings36375
-Node: Extension Mapping: File Split38154
-Node: Extension Mapping: Denote38606
-Node: Extension Mapping: PDF Info39639
-Node: Priors40364
-Node: Creating and Editing Priors41594
-Node: Scoring42771
-Node: Importance and Complement Options44108
-Node: Text Queries45979
-Node: Text Query Syntax48832
-Node: Fields52093
-Node: Searching Category53065
-Node: Instruction Strings53786
-Node: Git-related Priors54419
-Node: Filesystem-related Priors57031
-Node: Troubleshooting Priors58248
-Node: Search Results59144
-Node: Navigating and Viewing Search Results60146
-Node: Making Observations61680
-Node: Search Result Preview63162
-Node: Saving Sessions64573
-Node: Extending p-search64719
-Node: Creating Candidate Generators65349
-Node: Creating Documents69862
-Node: Creating Mappings73332
-Node: Input/Options Specification77495
-Node: Creating Priors81918
-Node: The Preset Data Structure and Programatically Creating Sessions85755
-Node: Examples of Extending p-search88725
-Node: Candidate Generator Examples89208
-Node: A Candidate Generator with Hard-coded Items89662
-Node: Defining Custom Properties91563
+Node: Introduction3609
+Node: The Search Candidates5945
+Node: Candidate Mappings7406
+Node: Asserting Probabilities8641
+Node: Searching and Making Observations10436
+Node: Installation12046
+Node: Installing from Quelpa12510
+Node: Installing with Straight12920
+Node: Recommended Tooling13247
+Node: Getting Started13602
+Node: Creating the p-search session14042
+Node: Adding Search Criteria15832
+Node: Refining our Search19111
+Node: Final Results20890
+Node: The p-search Interface22372
+Node: Starting a session22691
+Node: The p-search session buffer25298
+Node: Candidate Generators26301
+Node: Creating and Editing Candidate Generators27620
+Node: Inputs and Options29905
+Node: Built-in Candidate Generator: FILESYSTEM30687
+Node: Built-in Candidate Generator: BUFFERS32582
+Node: Extension Candidate Generator: BIBTEX33157
+Node: Extension Candidate Generator: ELISP33903
+Node: Extension Candidate Generator: INFO34552
+Node: Extension Candidate Generator: PACKAGE-LIST35295
+Node: Mappings35766
+Node: Creating and Editing Mappings37206
+Node: Extension Mapping: File Split38985
+Node: Extension Mapping: Denote39437
+Node: Extension Mapping: PDF Info40470
+Node: Priors41195
+Node: Creating and Editing Priors42425
+Node: Scoring43602
+Node: Importance and Complement Options44939
+Node: Text Queries46810
+Node: Text Query Syntax49663
+Node: Fields52924
+Node: Searching Category53896
+Node: Instruction Strings54617
+Node: Git-related Priors55250
+Node: Filesystem-related Priors57862
+Node: Troubleshooting Priors59079
+Node: Search Results59975
+Node: Navigating and Viewing Search Results60977
+Node: Making Observations62511
+Node: Search Result Preview63993
+Node: Saving Sessions65404
+Node: Extending p-search65550
+Node: Creating Candidate Generators66180
+Node: Creating Documents70693
+Node: Creating Mappings74163
+Node: Input/Options Specification78326
+Node: Creating Priors82749
+Node: The Preset Data Structure and Programatically Creating Sessions86586
+Node: Examples of Extending p-search89556
+Node: Candidate Generator Examples90039
+Node: A Candidate Generator with Hard-coded Items90493
+Node: Defining Custom Properties92394
 
 End Tag Table
 
