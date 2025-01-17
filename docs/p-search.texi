@@ -1204,6 +1204,18 @@ show when the candidate generator's section is folded.  The function should take
 
 In summary, to make a new candidate generator, make a candidate generator object and store it in a @code{defconst}, then add it to the @code{p-search-candidate-generators} list.  The candidate generator you create should at a minimum have a name, id, input/options specs and a function to generate documents.
 
+@node A Note on Properties and Fields
+@subsection A Note on Properties and Fields
+
+p-search's internals have two concepts which might be confused with
+eachother: properies and fields. Properties, usually defined with
+@code{p-search-def-property}, define what a document @emph{is}.  The @emph{fields} are just a property on the document, specifying generic things that can be searched on.
+
+For example, a database connection object or buffer object could be a candidate's property if the document is related to searching in a database.  The database connection wouldn't be a field though, since it's not something that can be generically searched on.  A document's @emph{title} or @emph{subtitle} would be good fields however, as a user may want to search on these.
+
+Suppose we want to create a search candidate for Emacs windows, searching the text visible in each window across all frames.  In this case, we may have a property called @emph{window} and set it to the window object, because that's what the search candidate @emph{is}.
+
+Arbitrary properties and fields can be defined, though there is a number of built-in items.  Each candidate @strong{must} have the @emph{name} and @emph{content} properties.  @emph{file-name} is another commonly used property, which is the full file path if a seach candidate is derived from a file.  As for built-in fields, @emph{title}, @emph{author}, @emph{keywords}, @emph{creation-date}, @emph{modification-date}, @emph{language}, and @emph{file-type} can be used without having to define them with @code{p-search-def-field}.
 
 @node Creating Documents
 @subsection Creating Documents
