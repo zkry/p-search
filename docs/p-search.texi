@@ -208,7 +208,7 @@ In any case, it's my hope that p-search assisted you on your journey.
 @node Installation
 @chapter Installation
 
-p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.  The only external dependency is the @code{heap} package which is available on GNU ELPA.
+p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.
 
 
 @node Installing from Quelpa

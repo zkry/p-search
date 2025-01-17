@@ -13,7 +13,7 @@
   https://p-search.org/documentation/Installation.html
 
   Until p-search is available on ELPA/MELPA, you will have to install
-  this package manually.  The only dependency of p-search is [[https://elpa.gnu.org/devel/heap.html][heap]].
+  this package manually.
 
   Using Quelpa:
 #+begin_src lisp

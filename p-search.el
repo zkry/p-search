@@ -3,7 +3,7 @@
 ;; Author: Zachary Romero
 ;; URL: https://github.com/zkry/p-search.el
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (heap "0.5"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools
 ;;
 
@@ -54,7 +54,6 @@
 
 ;;; Code:
 
-(require 'heap)
 (require 'cl-lib)
 (require 'subr-x)
 (require 'eieio)
@@ -344,8 +343,13 @@ generators don't change then this shouldn't be recomputed.")
   "Mapping of previous document ID to mapped IDs.")
 
 (defvar-local p-search-posterior-probs nil
-  "Heap of calculated posterior probabilities.
+  "List of calculated posterior probabilities.
 Elements are of the type (DOC-ID PROB).")
+
+(defvar-local p-search-top-n-posterior-probs nil
+  "Vector of the top N posterior items in sorted order.
+Items are of the same structure as `p-search-posterior-probs'.
+The top-N is defined by the variable `p-search-top-n'.")
 
 (defvar-local p-search--section-level 0
   "Variable used to determine leveling of nested sections.")
@@ -2126,7 +2130,7 @@ have an ID."
 
 
 
-;;; Posterior Calculation and Heap integration
+;;; Posterior Calculation
 
 ;; Each search candidate document is assigned a probability based on
 ;; the user-defined prior distribution, and the users search
@@ -2158,13 +2162,11 @@ have an ID."
 ;; exist, with more work-intensive observations reducing the documents
 ;; probability more than shorter observations.
 
-(defun p-search--create-heap (&optional size)
-  "Return a heap that has a sort first on probability, then on name.
-If SIZE is provided create the heap with this size."
-  (make-heap (lambda (a b) (if (= (cadr a) (cadr b))
-                               (string> (format "%s" (car a)) (format "%s" (car b)))
-                             (> (cadr a) (cadr b))))
-             size))
+(defun p-search--compare-scored-documents (a b)
+  "Comparison function for sorting list of documents A and B."
+  (if (= (cadr a) (cadr b))
+      (string> (format "%s" (car a)) (format "%s" (car b)))
+    (> (cadr a) (cadr b))))
 
 (defun p-search-prior-modified-p (p importance)
   "Return the modified probability of P based on IMPORTANCE."
@@ -2412,18 +2414,39 @@ If NO-REPRINT is nil, don't redraw `p-search' buffer."
   (let* ((documents (p-search-candidates))
          (priors p-search-priors)
          (marginal-p 0.0)
-         (res (p-search--create-heap (hash-table-size documents))))
+         (res (make-vector (hash-table-count documents) nil))
+         (top-n (make-vector p-search-top-n '(nil 0.0)))
+         (max-p 0.0))
+    (let ((idx 0))
+      (maphash
+       (lambda (id _)
+         (let* ((probability 1.0))
+           (dolist (prior priors)
+             (let* ((prior-p (p-search--p-prior-doc prior id)))
+               (setq probability (* probability prior-p))))
+           (setq probability (* probability (gethash id p-search-observations 1.0)))
+           (when (> probability max-p)
+             ;; If probability is greater than the lowest top-n item,
+             ;; add it to the top-n.
+             ;; First look for insertion spot:
+             (catch 'done
+               (dotimes (i p-search-top-n)
+                 (when (> probability (cadr (aref top-n i)))
+                   ;; When found, bubble down the elements up to it.
+                   (let ((j (1- p-search-top-n)))
+                     (while (> j i)
+                       (aset top-n j (aref top-n (1- j)))
+                       (cl-decf j)))
+                   ;; Set the item at its correct position
+                   (aset top-n i (list id probability))
+                   (throw 'done nil)))
+               (setq max-p (cadr (aref top-n (1- p-search-top-n))))))
+           (aset res idx (list id probability))
+           (cl-incf marginal-p probability)
+           (cl-incf idx)))
+       documents))
+    (setq p-search-top-n-posterior-probs top-n)
     (setq p-search-posterior-probs res)
-    (maphash
-     (lambda (id _)
-       (let* ((probability 1.0))
-         (dolist (prior priors)
-           (let* ((prior-p (p-search--p-prior-doc prior id)))
-             (setq probability (* probability prior-p))))
-         (setq probability (* probability (gethash id p-search-observations 1.0)))
-         (heap-add res (list id probability))
-         (cl-incf marginal-p probability)))
-     documents)
     (setq p-search-marginal marginal-p)
     (unless no-reprint
       (p-search--reprint))
@@ -2447,21 +2470,27 @@ If NO-REPRINT is nil, don't redraw `p-search' buffer."
       (setf (p-search-prior-proc-or-thread prior) init-res)))
   (p-search-calculate))
 
-(defun p-search-top-results ()
-  "Return the top results of the posterior probs."
+(defun p-search-top-results (&optional all)
+  "Return the top results of the posterior probs.
+If ALL is non-nil, return all of the results sorted."
   (when p-search-posterior-probs
-    (let* ((hp (heap-copy p-search-posterior-probs))
-           (elts '())
-           (skip-amt (* p-search-top-n p-search-results-page-no)))
-      (catch 'done
-        (dotimes (i (max (+ p-search-top-n skip-amt)))
-          (when (heap-empty hp)
-            (throw 'done nil))
-          (let* ((newelt (heap-delete-root hp)))
-            (when (>= i skip-amt)
-              (push newelt elts)))))
-      (setq elts (nreverse elts))
-      elts)))
+    (cond
+     ((eql 0 p-search-results-page-no)
+      (seq-into (cl-subseq p-search-top-n-posterior-probs
+                           0 p-search-top-n)
+                'list))
+     (t
+      (let ((skip-amt (* p-search-top-n p-search-results-page-no)))
+        (when (not (equal (length p-search-top-n-posterior-probs)
+                          (length p-search-posterior-probs)))
+          (sort p-search-posterior-probs #'p-search--compare-scored-documents)
+          (setq p-search-top-n-posterior-probs p-search-posterior-probs))
+        (if all
+            (seq-into p-search-top-n-posterior-probs 'list)
+          (seq-into (cl-subseq p-search-top-n-posterior-probs skip-amt
+                               (min (+ skip-amt p-search-top-n)
+                                    (length p-search-top-n-posterior-probs)))
+                    'list)))))))
 
 
 ;;; Entropy Calculation
@@ -3269,36 +3298,44 @@ Score is not taken into acconut for this preview method."
 
 (defun p-search-preview-from-hints-top-score (hints)
   "Return a preview string of the buffer containing the max score from HINTS."
-  (let* ((score-heap (make-heap (lambda (a b) (> (cdr a) (cdr b)))))
-         (top-lines '()))
+  (let* ((N p-search-document-preview-size)
+         (top-lines (make-vector N (cons -1 0.0)))
+         (max-score 0.0))
     (pcase-dolist (`((,start . ,end) . ,_metadata) hints)
       (add-text-properties start end '(face p-search-hi-yellow)))
-    (let* ((prev-line -1)
-           (prev-score nil))
-      (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
-        (let* ((score (plist-get metadata :score))
-               (line-no (1- (line-number-at-pos start))))
-          (when (not (= line-no prev-line))
-            (when prev-score
-              (heap-add score-heap (cons prev-line prev-score)))
-            (setq prev-score 0))
-          (setq prev-line line-no)
-          (cl-incf prev-score score)))
-      (heap-add score-heap (cons prev-line prev-score)))
-    (dotimes (_ p-search-document-preview-size)
-      (let ((top (heap-delete-root score-heap)))
-        (push top top-lines)))
-    (setq top-lines (seq-sort-by #'car #'< top-lines))
+    (cl-flet* ((add-element (elt score)
+                 (when (> score max-score)
+                   (let ((i 0))
+                     (while (< score (cdr (aref top-lines i))) (cl-incf i))
+                     (let ((j (1- N)))
+                       (while (> j i)
+                         (aset top-lines j (aref top-lines (1- j)))
+                         (cl-decf j)))
+                     (aset top-lines i (cons elt score)))
+                   (setq max-score (cdr (aref top-lines (1- N)))))))
+      (let* ((prev-line -1)
+             (prev-score nil))
+        (pcase-dolist (`((,start . ,_end) . ,metadata) hints)
+          (let* ((score (plist-get metadata :score))
+                 (line-no (1- (line-number-at-pos start))))
+            (when (not (= line-no prev-line))
+              (when prev-score
+                (add-element line-no prev-score))
+              (setq prev-score 0))
+            (setq prev-line line-no)
+            (cl-incf prev-score score)
+            (add-element line-no prev-score)))))
     (let ((output-string ""))
-      (pcase-dolist (`(,line-no . ,_score) top-lines)
-        (goto-char (point-min))
-        (forward-line line-no)
-        (let* ((line-str (propertize
-                          (if p-search-show-preview-lines
-                              (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
-                            (buffer-substring (pos-bol) (pos-eol)))
-                          'p-search-document-line-no line-no)))
-          (setq output-string (concat output-string line-str "\n"))))
+      (pcase-dolist (`(,line-no . ,_score) (seq-into top-lines 'list))
+        (when (>= line-no 0)
+          (goto-char (point-min))
+          (forward-line line-no)
+          (let* ((line-str (propertize
+                            (if p-search-show-preview-lines
+                                (p-search--buffer-substring-line-number (pos-bol) (pos-eol))
+                              (buffer-substring (pos-bol) (pos-eol)))
+                            'p-search-document-line-no line-no)))
+            (setq output-string (concat output-string line-str "\n")))))
       output-string)))
 
 (defun p-search-document-preview (document)
@@ -3652,12 +3689,12 @@ mapping as this data is needed to retrieve the document count."
           `((heading . ,(propertize
                          (if (eql 0 p-search-results-page-no)
                              (format "Search Results (%d)"
-                                     (heap-size p-search-posterior-probs))
+                                     (length p-search-posterior-probs))
                            (format "Search Results, page %d/%d (%d)"
                                    (1+ p-search-results-page-no)
                                    (1+ (/ (1- (hash-table-count (p-search-candidates)))
                                           p-search-top-n))
-                                   (heap-size p-search-posterior-probs)))
+                                   (length p-search-posterior-probs)))
                          'face 'p-search-section-heading))
             (props . (p-search-results t p-search-section-id results))
             (key . p-search-results-header))
@@ -4010,15 +4047,8 @@ If PRESET is non-nil, set up session with PRESET."
           (insert (format "Options: %s\n\n" (p-search--condenced-arg-string prior)))
           (p-search-add-section '((heading . "Results:")
                                   (props . (p-search-item-stop prior-results)))
-            ;; TODO: Improve this display
-            (let ((res-hp (make-heap (lambda (a b) (> (cdr a) (cdr b))))))
-              (maphash
-               (lambda (doc-id p)
-                 (heap-add res-hp (cons doc-id p)))
-               (p-search-prior-results prior))
-              (while (not (heap-empty res-hp))
-                (pcase-let ((`(,doc-id . ,p) (heap-delete-root res-hp)))
-                  (insert (format "%7f: %s\n" p doc-id)))))
+            (pcase-dolist (`(,doc-id ,p) (p-search-top-results t))
+              (insert (format "%7f: %s\n" p doc-id)))
             (insert "\n"))))
       (p-search-explanation-mode)
       (goto-char (point-min)))

@@ -178,7 +178,7 @@ Call FINALIZE-FUNC on obtained results."
     (if p-search-query-fields
         (funcall callback (make-hash-table :test #'equal))
       (dolist (gen+args p-search-active-candidate-generators)
-        (let* ((tf-func (p-search-candidate-generator-term-frequency-function (car gen+args))))
+        (let* ((tf-func (p-search-candidate-generator-term-frequency-func (car gen+args))))
           (funcall tf-func gen+args term callback))))))
 
 (defun p-search-query-and (results)
