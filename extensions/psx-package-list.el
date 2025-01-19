@@ -25,7 +25,8 @@
 ;;; Code:
 
 (require 'p-search)
-(require 'cl)
+(require 'cl-lib)
+(require 'package)
 
 (defun psx-package-list--lighter (_config)
   "Show lighter for psx-package-list candidate generator."
@@ -62,26 +63,32 @@ Metadata collected include:
       (if (vectorp properties)
           (progn
             (when-let* ((version (package--bi-desc-version properties)))
-              (push (cons 'package-version (mapconcat #'number-to-string version ".")) fields))
+              (push (cons 'package-version
+                          (mapconcat #'number-to-string version "."))
+                    fields))
             (push (cons 'package-type "builtin") fields))
         (progn
           (push (cons 'package-type "installable") fields)
           (when-let ((version (package-desc-version properties)))
-            (push (cons 'package-version (mapconcat #'number-to-string version ".")) fields))
+            (push (cons 'package-version
+                        (mapconcat #'number-to-string version "."))
+                  fields))
           (when-let ((requirements (package-desc-reqs properties)))
-            (push (cons 'package-requires (mapcar (lambda (x) (symbol-name (car x))) requirements)) fields))
+            (push (cons 'package-requires
+                        (mapcar (lambda (x) (symbol-name (car x))) requirements))
+                  fields))
           (when-let ((extras (package-desc-extras properties)))
             (when-let ((url (alist-get :url extras)))
               (push (cons 'package-url url) fields))
             (let (authors)
               (when-let ((maintainers (alist-get :maintainers extras)))
-                (mapcar (lambda (maint)
-                          (push (car maint) authors))
-                        maintainers))
+                (mapc (lambda (maint)
+                        (push (car maint) authors))
+                      maintainers))
               (when-let ((auths (alist-get :authors extras)))
-                (mapcar (lambda (auth)
-                          (push (car auth) authors))
-                        auths))
+                (mapc (lambda (auth)
+                        (push (car auth) authors))
+                      auths))
               (when authors
                 (push (cons 'author authors) fields)))
             (when-let (kws (alist-get :keywords extras))
@@ -94,13 +101,18 @@ Metadata collected include:
   (let-alist args
     (append
      (mapcar (lambda (pkg)
-               (p-search-documentize (list 'package (list (car pkg) (aref (cdr pkg) 2) (cdr pkg)))))
+               (p-search-documentize
+                (list 'package (list (car pkg) (aref (cdr pkg) 2) (cdr pkg)))))
              package--builtins)
      (mapcar (lambda (pkg)
-               (p-search-documentize (list 'package (list (car pkg) (package-desc-summary (nth 1 pkg)) (nth 1 pkg)))))
+               (p-search-documentize
+                (list 'package
+                      (list (car pkg) (package-desc-summary (nth 1 pkg)) (nth 1 pkg)))))
              package-alist)
      (mapcar (lambda (pkg)
-               (p-search-documentize (list 'package (list (car pkg) (package-desc-summary (nth 1 pkg)) (nth 1 pkg)))))
+               (p-search-documentize
+                (list 'package
+                      (list (car pkg) (package-desc-summary (nth 1 pkg)) (nth 1 pkg)))))
              package-archive-contents))))
 
 (defconst psx-package-list-candidate-generator

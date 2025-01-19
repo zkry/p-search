@@ -50,7 +50,7 @@
   :group 'psx-denote)
 
 (defun psx-denote-annotator (args document)
-  "Annotate DOCUMENT with denote-related metadata."
+  "Annotate DOCUMENT with denote-related metadata with given ARGS."
   (let* ((file-name (p-search-document-property document 'file-name)))
     (let-alist args
       (when (denote-file-is-note-p file-name)
@@ -94,7 +94,7 @@
                                          :description "Include Signature"
                                          :default-value (lambda () psx-denote-include-signature-p))))
    :function #'psx-denote-annotator
-   :condenced-arg-display-function #'psx-denote--arg-display))
+   :short-arg-disp-func #'psx-denote--arg-display))
 
 (add-to-list 'p-search-candidate-mappings psx-denote-mapping)
 

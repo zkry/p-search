@@ -19,10 +19,7 @@
 
 (defvar p-search-active-candidate-generators)
 
-(defvar-local p-search-query-session-tf-ht nil
-  "Stores the raw term frequencies for the current session.
-This variable is not used in the main text query, but may be used
-for auxiliary purposes, namely prioritizing sections of the preview.")
+(defvar p-search-query-session-tf-ht)
 
 
 
@@ -61,6 +58,12 @@ Indicates which token we are currently considering.")
 
 (defvar p-search-query-fields nil
   "Dynamic variable to store the list of specific fields to search on.")
+
+(defvar p-search-query-run--no-expansion nil
+  "When non-nil, implicit term expansion should not occur.
+This dynamic variable is for the `p-search-query-run' to know
+when it has entered contexts that can't or shouldn't handle term
+expansion.")
 
 
 ;;; Term Expansion:
@@ -175,7 +178,7 @@ Call FINALIZE-FUNC on obtained results."
     (if p-search-query-fields
         (funcall callback (make-hash-table :test #'equal))
       (dolist (gen+args p-search-active-candidate-generators)
-        (let* ((tf-func (p-search-candidate-generator-term-frequency-function (car gen+args))))
+        (let* ((tf-func (p-search-candidate-generator-term-frequency-func (car gen+args))))
           (funcall tf-func gen+args term callback))))))
 
 (defun p-search-query-and (results)
@@ -207,7 +210,7 @@ Call FINALIZE-FUNC on obtained results."
     (let* ((intersection-documents (make-hash-table :test #'equal))
            (result-ht (make-hash-table :test #'equal)))
       (maphash
-       (lambda (doc ct)
+       (lambda (doc _ct)
          (cl-loop for i from 1 to (1- (length results))
                   always (gethash doc (aref results i))
                   finally (puthash doc 0 intersection-documents)))
@@ -254,12 +257,6 @@ Call FINALIZE-FUNC on obtained results."
                      (setq pos next-pos))))))))
        intersection-documents)
       result-ht)))
-
-(defvar p-search-query-run--no-expansion nil
-  "When non-nil, implicit term expansion should not occur.
-This dynamic variable is for the `p-search-query-run' to know
-when it has entered contexts that can't or shouldn't handle term
-expansion.")
 
 (defun p-search-query-run (query finalize-func)
   "Dispatch processes according to QUERY syntax tree.
@@ -398,6 +395,15 @@ resulting data hashmap."
 ;; the element as the first item and all metadata as subsequent plist
 ;; items.
 
+(defun p-search-query--with-metadata (elt metadata)
+  "Return ELT with METADATA attached.
+The metadata-related functions in this package are concerning
+attaching metadata to results such as weight, in order for the
+final calculation to process the results properly.  In this
+package, an element with metadata is defined as a cons cell with
+the element in the car position and metadata a plist in cdr."
+  (cons elt metadata))
+
 (defun p-search-query--metadata-add (elt md-key md-val)
   "Add metadata MD-KEY MD-VAL to ELT."
   (if (listp elt)
@@ -415,10 +421,6 @@ resulting data hashmap."
   "Return metadata value MD-KEY of ELT."
   (when (listp elt)
     (cdr elt)))
-
-(defun p-search-query--with-metadata (elt metadata)
-  "Return metadata value MD-KEY of ELT."
-  (cons elt metadata))
 
 (defun p-search-query--metadata-elt (elt)
   "Return original element of ELT."
@@ -453,6 +455,7 @@ sizes."
     scores))
 
 (defun p-search-query--flatten-vector (elts)
+  "Flatten vector of elements ELTS into a single vector."
   (seq-into
    (seq-mapcat
     (lambda (elt)
@@ -664,7 +667,7 @@ variables `p-search-query-parse--tokens' and
      (p-search-query-parse--next-token)
      (let* ((statement (p-search-query-parse--statement)))
        (unless (and (consp statement) (eql (car statement) 'q))
-         (error "invalid use of hashtag in query (usage example: #\"^reg[eE]xp?$\")"))
+         (error "Invalid use of hashtag in query (usage example: #\"^reg[eE]xp?$\")"))
        `(regexp ,(p-search-query-parse--postfix (cadr statement)))))
     ('lparen
      (p-search-query-parse--next-token)
@@ -732,7 +735,8 @@ structure."
 ;;; Mark
 
 (defun p-search--mark-query* (query mark-function)
-  "Return intervals where QUERY matches content in current buffer."
+  "Return intervals where QUERY matches content in current buffer.
+MARK-FUNCTION is called to determine intervals."
   (pcase query
     (`(q ,elt)
      (funcall mark-function elt))
@@ -768,7 +772,7 @@ structure."
      (p-search--mark-query* elt mark-function))
     (`(must-not ,_elt)
      (ignore))
-    (_ (error "unhandled mark case: %s" query))))
+    (_ (error "Unhandled mark case: %s" query))))
 
 (defun p-search-mark-query (query mark-function)
   "Dispatch terms of QUERY by MARK-FUNCTION to return match ranges."

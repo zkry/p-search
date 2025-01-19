@@ -208,7 +208,7 @@ In any case, it's my hope that p-search assisted you on your journey.
 @node Installation
 @chapter Installation
 
-p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.  The only external dependency is the @code{heap} package which is available on GNU ELPA.
+p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.
 
 
 @node Installing from Quelpa
@@ -1189,14 +1189,14 @@ generator is to be displayed in various places.  For example, the
 @emph{FILESYSTEM} candidate generator returns the string ``FS:'' plus
 the directory being searched on.
 
-@item :term-frequency-function @var{tf-func}
+@item :term-frequency-func @var{tf-func}
 This function, when provided, should accept three parameters: the arguments of the candidate generator, the term being searched on, and the callback to call after the terms are counted.
 
 The arguments are the combined inputs/outputs, similar to the other functions.  The term is an Emacs regular expression form as data (@pxref{Regular Expressions,,,elisp,GNU Emacs Lisp Reference Manual}).  The callback should be called with one argument: a hashmap of document ID to term count.
 
 This is an optional argument and if this function isn't provided, p-search will search the contents using Elisp.  The main usage of this function is to give p-search a faster way to search rather than Elisp.
 
-@item :condenced-arg-display-function @var{func}
+@item :short-arg-disp-func @var{func}
 This function can be defined in order to define a custom string to
 show when the candidate generator's section is folded.  The function should take one argument, a cons pair of candidate generator and its arguments, and should return a string to be displayed when the candidate generator is folded.
 @end table
@@ -1204,6 +1204,18 @@ show when the candidate generator's section is folded.  The function should take
 
 In summary, to make a new candidate generator, make a candidate generator object and store it in a @code{defconst}, then add it to the @code{p-search-candidate-generators} list.  The candidate generator you create should at a minimum have a name, id, input/options specs and a function to generate documents.
 
+@node A Note on Properties and Fields
+@subsection A Note on Properties and Fields
+
+p-search's internals have two concepts which might be confused with
+eachother: properies and fields. Properties, usually defined with
+@code{p-search-def-property}, define what a document @emph{is}.  The @emph{fields} are just a property on the document, specifying generic things that can be searched on.
+
+For example, a database connection object or buffer object could be a candidate's property if the document is related to searching in a database.  The database connection wouldn't be a field though, since it's not something that can be generically searched on.  A document's @emph{title} or @emph{subtitle} would be good fields however, as a user may want to search on these.
+
+Suppose we want to create a search candidate for Emacs windows, searching the text visible in each window across all frames.  In this case, we may have a property called @emph{window} and set it to the window object, because that's what the search candidate @emph{is}.
+
+Arbitrary properties and fields can be defined, though there is a number of built-in items.  Each candidate @strong{must} have the @emph{name} and @emph{content} properties.  @emph{file-name} is another commonly used property, which is the full file path if a seach candidate is derived from a file.  As for built-in fields, @emph{title}, @emph{author}, @emph{keywords}, @emph{creation-date}, @emph{modification-date}, @emph{language}, and @emph{file-type} can be used without having to define them with @code{p-search-def-field}.
 
 @node Creating Documents
 @subsection Creating Documents
@@ -1234,6 +1246,12 @@ then calling @code{(p-search-documentize (base (cons "My Title" "my
 content...")))} will result in a document with @var{id} of @code{(base
 (cons "My Title" "my content..."))}, @var{title} of @code{"My Title"}
 and content of @code{"my content..."}.
+
+You can define fields (@pxref{Fields}) for candidate generators in a
+simmilar manner using @code{p-search-def-property}.  @code{fields},
+@code{name} and @code{content} are the three properties with generic
+use in p-search.  Other properties can be defined, and will normally
+exist in conjunction with a specific type of prior.
 
 If we wanted to make a candidate generator for Wikipedia entries, we could make the following definition:
 
@@ -1326,6 +1344,8 @@ Take an existing document and return a new document extended with various proper
 The @var{new-fields} argument should be an alist of any new fields to be added to the document. The fields will be appended to the document and previously added fields will never be overwritten.
 
 The @var{new-props} argument should be a an alist of any new properties to give the document.  Properties given here, unlike fields, will overwrite the previous value.
+
+This function @strong{should not} be used in candidate generators, only mappings.
 @end defun
 
 @node Input/Options Specification

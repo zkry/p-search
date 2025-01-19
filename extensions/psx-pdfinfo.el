@@ -72,28 +72,28 @@
         (unless (string-empty-p (cdr field))
           (pcase (car field)
             ("Title"
-             (add-to-list 'fields (cons 'title (cdr field))))
+             (push (cons 'title (cdr field)) fields))
             ("Keywords"
-             (add-to-list 'fields (cons 'keywords (cdr field))))
+             (push (cons 'keywords (cdr field)) fields))
             ("Author"
-             (add-to-list 'fields (cons 'author (cdr field))))
+             (push (cons 'author (cdr field)) fields))
             ("CreationDate"
-             (add-to-list 'fields (cons 'creation-date (cdr field))))
+             (push (cons 'creation-date (cdr field)) fields))
             ("ModDate"
-             (add-to-list 'fields (cons 'modification-date (cdr field))))
+             (push (cons 'modification-date (cdr field)) fields))
             ("Subject"
-             (add-to-list 'fields (cons 'pdf-subject (cdr field))))
+             (push (cons 'pdf-subject (cdr field)) fields))
             ("Creator"
-             (add-to-list 'fields (cons 'pdf-creator (cdr field))))
+             (push (cons 'pdf-creator (cdr field)) fields))
             ("Producer"
-             (add-to-list 'fields (cons 'pdf-producer (cdr field))))
+             (push (cons 'pdf-producer (cdr field)) fields))
             ("Pages"
-             (add-to-list 'fields (cons 'pdf-pages (cdr field))))
+             (push (cons 'pdf-pages (cdr field)) fields))
             ("Page size"
-             (add-to-list 'fields (cons 'pdf-pagesize (cdr field)))))))
+             (push (cons 'pdf-pagesize (cdr field)) fields)))))
       fields)))
 
-(defun psx-pdfinfo-annotator (args document)
+(defun psx-pdfinfo-annotator (_args document)
   "Annotate DOCUMENT with `pdfinfo'-derived fields.
 
 Options taken from ARGS."
