@@ -38,7 +38,7 @@
 (p-search-def-field 'denote-signature 'text :weight 3)
 
 (defgroup psx-denote nil
-  "Customization for Denote p-search mapping."
+  "Customization for Denote `p-search' mapping."
   :group 'p-search
   :group 'denote
   :prefix "psx-denote-")

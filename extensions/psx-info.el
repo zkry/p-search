@@ -78,7 +78,7 @@ not have to open the same file repeatedly.")
     documents))
 
 (defun psx-info--documents-for-entry (entry)
-  "Return list of p-search documents for info ENTRY."
+  "Return list of `p-search' documents for info ENTRY."
   (when (or (not psx-info--info-to-file)
             (= (hash-table-count psx-info--info-to-file) 0)
             (not (gethash (symbol-name entry) psx-info--info-to-file)))

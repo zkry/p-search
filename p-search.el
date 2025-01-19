@@ -254,6 +254,25 @@ This variable can take one of several types of of values:
             :value-type (choice string symbol number boolean directory)))
     (function :tag "Custom Function")))
 
+(defcustom p-search-default-near-line-length 3
+  "Default max number of line differences to count for a near query.
+
+For example, the query (fox bear)~ with this variable set to 3
+would indicate that if the line of a found \"fox\" match minus
+the line of a found \"bear\" match is greater than 3, the
+nearness match wouldn't count."
+  :group 'p-search-query
+  :type 'integer)
+
+(defcustom p-search-default-boost-amount 1.3
+  "Default max number of line differences to count for a near query.
+
+For example, the query (fox bear)~ with this variable set to 3
+would indicate that if the line of a found \"fox\" match minus
+the line of a found \"bear\" match is greater than 3, the
+nearness match wouldn't count."
+  :group 'p-search-query
+  :type 'integer)
 
 
 ;;; Consts
@@ -1585,7 +1604,7 @@ Called with user supplied ARGS for the prior."
   "Mark places where the query args of PRIOR matches text in BUFFER."
   (let* ((args (p-search-prior-arguments prior))
          (query (alist-get 'query-string args)))
-    (p-search-mark-query
+    (p-search-query-mark
      query
      (lambda (query) ; finalize function:
        (let* ((term (p-search-query-emacs--term-regexp query))

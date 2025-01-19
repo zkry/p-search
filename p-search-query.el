@@ -21,29 +21,10 @@
 
 (defvar p-search-query-session-tf-ht)
 
+(defvar p-search-default-boost-amount)
 
-
-;;; Customs:
+(defvar p-search-default-near-line-length)
 
-(defcustom p-search-default-near-line-length 3
-  "Default max number of line differences to count for a near query.
-
-For example, the query (fox bear)~ with this variable set to 3
-would indicate that if the line of a found \"fox\" match minus
-the line of a found \"bear\" match is greater than 3, the
-nearness match wouldn't count."
-  :group 'p-search-query
-  :type 'integer)
-
-(defcustom p-search-default-boost-amount 1.3
-  "Default max number of line differences to count for a near query.
-
-For example, the query (fox bear)~ with this variable set to 3
-would indicate that if the line of a found \"fox\" match minus
-the line of a found \"bear\" match is greater than 3, the
-nearness match wouldn't count."
-  :group 'p-search-query
-  :type 'integer)
 
 
 ;;; Variables:
@@ -226,7 +207,7 @@ Call FINALIZE-FUNC on obtained results."
                (goto-char (point-min))
                ;; 1. Mark all matches for earch sub element in for the text of current document
                (dolist (elt sub-elts)
-                 (let* ((ranges (p-search--mark-query*
+                 (let* ((ranges (p-search-query-mark*
                                  elt
                                  (lambda (query) ;; TODO This function is used somewhere else, maybe extract it
                                    (let* ((term (p-search-query-emacs--term-regexp query))
@@ -734,7 +715,7 @@ structure."
 
 ;;; Mark
 
-(defun p-search--mark-query* (query mark-function)
+(defun p-search-query-mark* (query mark-function)
   "Return intervals where QUERY matches content in current buffer.
 MARK-FUNCTION is called to determine intervals."
   (pcase query
@@ -743,41 +724,41 @@ MARK-FUNCTION is called to determine intervals."
     (`(regexp ,elt)
      (funcall mark-function `(regexp ,elt)))
     (`(subtract ,a ,b)
-     (p-search--mark-query* `(terms ,a ,b) mark-function))
+     (p-search-query-mark* `(terms ,a ,b) mark-function))
     (`(boost . ,rest)
-     (p-search--mark-query* (car rest) mark-function))
+     (p-search-query-mark* (car rest) mark-function))
     (`(terms . ,elts)
      (let* ((ress '()))
        (dolist (elt elts)
-         (let* ((res (p-search--mark-query* elt mark-function)))
+         (let* ((res (p-search-query-mark* elt mark-function)))
            (when res
              (setq ress (append res ress)))))
        ress))
     ((cl-type string)
      (let* ((expansion-terms (p-search-query-expand-term query)))
-       (p-search--mark-query* `(terms ,@expansion-terms) mark-function)))
+       (p-search-query-mark* `(terms ,@expansion-terms) mark-function)))
     (`(and . ,elts)
      (let* ((ress '()))
        (dolist (elt elts)
-         (let* ((res (p-search--mark-query* elt mark-function)))
+         (let* ((res (p-search-query-mark* elt mark-function)))
            (when res
              (setq ress (append res ress)))))
        ress))
     (`(near . ,elts)
      (let ((p-search-query-run--no-expansion t))
-       (p-search--mark-query* (cons 'terms elts) mark-function)))
+       (p-search-query-mark* (cons 'terms elts) mark-function)))
     (`(not ,_elt)
      (ignore))
     (`(must ,elt)
-     (p-search--mark-query* elt mark-function))
+     (p-search-query-mark* elt mark-function))
     (`(must-not ,_elt)
      (ignore))
     (_ (error "Unhandled mark case: %s" query))))
 
-(defun p-search-mark-query (query mark-function)
+(defun p-search-query-mark (query mark-function)
   "Dispatch terms of QUERY by MARK-FUNCTION to return match ranges."
   (let* ((parsed (p-search-query-parse query)))
-    (p-search--mark-query* parsed mark-function)))
+    (p-search-query-mark* parsed mark-function)))
 
 
 ;;; API Functions

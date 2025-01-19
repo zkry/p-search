@@ -46,7 +46,7 @@
 (p-search-def-field 'pdf-pagesize 'category)
 
 (defgroup psx-pdfinfo nil
-  "Customization for p-search pdfinfo mapping."
+  "Customization for `p-search' pdfinfo mapping."
   :group 'p-search
   :prefix "psx-pdfinfo-")
 
