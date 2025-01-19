@@ -2445,8 +2445,8 @@ If NO-REPRINT is nil, don't redraw `p-search' buffer."
            (cl-incf marginal-p probability)
            (cl-incf idx)))
        documents))
-    (setq p-search-top-n-posterior-probs top-n)
-    (setq p-search-posterior-probs res)
+    (setq p-search-top-n-posterior-probs (seq-filter (lambda (elt) (car elt)) top-n))
+    (setq p-search-posterior-probs (if (seq-empty-p res) nil res))
     (setq p-search-marginal marginal-p)
     (unless no-reprint
       (p-search--reprint))
@@ -2477,7 +2477,8 @@ If ALL is non-nil, return all of the results sorted."
     (cond
      ((eql 0 p-search-results-page-no)
       (seq-into (cl-subseq p-search-top-n-posterior-probs
-                           0 p-search-top-n)
+                           0 (min (length p-search-top-n-posterior-probs)
+                                  p-search-top-n))
                 'list))
      (t
       (let ((skip-amt (* p-search-top-n p-search-results-page-no)))
@@ -3681,7 +3682,7 @@ mapping as this data is needed to retrieve the document count."
 (defun p-search--insert-results ()
   "Insert the search results into current buffer."
   (when (not p-search-posterior-probs)
-    (insert "no results calculated...\n"))
+    (insert "no results...\n"))
   (when p-search-posterior-probs
     (let* ((top-results (p-search-top-results))
            (page-dims (p-search--display-columns)))
