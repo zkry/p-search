@@ -3682,7 +3682,13 @@ mapping as this data is needed to retrieve the document count."
 (defun p-search--insert-results ()
   "Insert the search results into current buffer."
   (when (not p-search-posterior-probs)
-    (insert "no results...\n"))
+    (p-search-add-section `((heading . ,(propertize
+                                         (format "Search Results (0)")
+                                        'face 'p-search-section-heading))
+                            (props . (p-search-results t p-search-section-id results))
+                            (key . p-search-results-header))
+
+      (insert (propertize "No results..." 'face 'shadow))))
   (when p-search-posterior-probs
     (let* ((top-results (p-search-top-results))
            (page-dims (p-search--display-columns)))
