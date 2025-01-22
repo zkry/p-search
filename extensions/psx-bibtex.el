@@ -144,9 +144,10 @@ ARGS should be an alist containing the following keys:
   (p-search-candidate-generator-create
    :id 'psx-bibtex-candidate-generator
    :name "BIBTEX"
-   :input-spec '((files . (p-search-infix-file
+   :input-spec '((files . (p-search-infix-files
                            :key "f"
-                           :description "BibTeX Filename")))
+                           :description "BibTeX Filenames"
+                           :prompt "BibTeX Files: ")))
    :function #'psx-bibtex--candidate-generator
    :lighter-function #'psx-bibtex--lighter)
   "BibTeX Candidate generator for `p-search'.
