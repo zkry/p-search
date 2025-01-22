@@ -30,6 +30,17 @@ HIST is the input history of the underlying `completing-read-multiple' command."
   "Read file name, showing PROMPT with INIT as initial value."
   (read-file-name prompt nil nil t init))
 
+(defun p-search-read-existing-file-names (prompt init hist)
+  "Read files, showing PROMPT with HIST, having initial input INIT.
+
+Note, if INIT is nil, `default-directory' will be used."
+  (completing-read-multiple prompt
+                            #'completion-file-name-table
+                            #'file-exists-p
+                            nil
+                            (abbreviate-file-name (or init default-directory))
+                            hist))
+
 (defun p-search-read-bytes (prompt &optional init hist)
   "Read a byte value (e.g. \"1MB\"), displaying PROMPT to user.
 INIT and HIST the initial value and input history respectively."
@@ -162,6 +173,12 @@ objects `default-value' slot."
 
 (transient-define-infix p-search-infix-file ()
   :class p-search--file)
+
+(defclass p-search--files (p-search--option)
+  ((reader :initform #'p-search-read-existing-file-names)))
+
+(transient-define-infix p-search-infix-files ()
+  :class p-search--files)
 
 (defclass p-search--regexp (p-search--option)
   ((reader :initform #'read-regexp)
