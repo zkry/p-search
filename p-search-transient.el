@@ -168,8 +168,7 @@ objects `default-value' slot."
 
 
 (defclass p-search--file (p-search--option)
-  ((reader :initform (lambda (prompt init _hist)
-                       (read-file-name prompt nil nil nil init)))))
+  ((reader :initform #'p-search-read-file-name)))
 
 (transient-define-infix p-search-infix-file ()
   :class p-search--file)
