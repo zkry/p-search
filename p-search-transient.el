@@ -2,6 +2,9 @@
 
 ;;; Commentary:
 
+;; This packages defines the various transient integrations that
+;; p-search uses.
+
 ;;; Code:
 
 (require 'org)

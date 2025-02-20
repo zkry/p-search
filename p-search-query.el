@@ -2,6 +2,8 @@
 
 ;;; Commentary:
 
+;; This package defines the main querying functionality of p-search.
+
 ;;; Code:
 
 
