@@ -6,8 +6,8 @@
 ;; Require this file and the Info candidate generator should be
 ;; available in a p-search session.
 
-;;; The psx-info document identifier is a list with the three
-;;; components: (dir file node-name)
+;; The psx-info document identifier is a list with the three
+;; components: (dir file node-name)
 
 ;;; Code:
 
