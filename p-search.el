@@ -79,14 +79,16 @@
   :group 'applications)
 
 (defcustom p-search-default-search-tool
-  (cond ((executable-find "rg") :rg)
+  (cond ((executable-find "ugrep") :ug)
+        ((executable-find "rg") :rg)
         ((executable-find "ag") :ag)
         (t :grep))
   "Default tool to use when running search on filesystem."
   :group 'p-search
   :type '(choice (const :tag "grep" :grep)
                  (const :tag "ag (the_silver_searcher)" :ag)
-                 (const :tag "rg (ripgrep)" :rg)))
+                 (const :tag "rg (ripgrep)" :rg)
+                 (const :tag "ug (ugrep)" :ug)))
 
 (defcustom p-search-default-document-preview-size 10
   "Default number of lines show in the results preview section."
@@ -292,7 +294,8 @@ The search results posterior probability will be their prior
 score times this value.")
 (defconst p-search-query-wildcards '((:rg . "[^\w]")
                                      (:ag . "[^\s]")
-                                     (:grep . "[^[:space:]]"))
+                                     (:grep . "[^[:space:]]")
+                                     (:ug . "[^[:space:]]"))
   "Alist of search tool to wildcard regexp.")
 
 
@@ -710,6 +713,12 @@ Maps from file name to result indicator.")
                 (word-start . "\\<")
                 (word-end . "\\>")
                 (not-word-boundary . "[[:alnum:]]")))
+      '((:ug . ((or . "\\|")
+                (lparen . "\\(")
+                (rparen . "\\)")
+                (word-start . "\\<")
+                (word-end . "\\>")
+                (not-word-boundary . "[[:alnum:]]"))))
       (:rg . ((or . "|")
               (lparen . "(")
               (rparen . ")")
@@ -763,6 +772,7 @@ should be the symbol of one of the supported tools."
             ((pred stringp)
              (pcase cmd
                (:grep (p-search--grep-escape rx-expr))
+               (:ug (p-search--grep-escape rx-expr))
                (:ag (p-search--ag-escape rx-expr))
                (:rg (p-search--rg-escape rx-expr)))))))
     (if case-insensitive-p
@@ -814,6 +824,9 @@ A term regex is noted for marking boundary characters."
          (case-insensitive-p
           (get-text-property 0 'p-search-case-insensitive term-str)))
     (pcase cmd
+      (:ug
+       `("ugrep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case"))
+         ,term-str "."))
       (:grep
        `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case"))
          ,term-str "."))
@@ -1402,7 +1415,7 @@ of the term frequency counts."
                  (search-tool . (p-search-infix-choices
                                  :key "t"
                                  :description "Search Tool"
-                                 :choices (:grep :rg :ag)
+                                 :choices (:grep :ug :rg :ag)
                                  :default-value ,(or p-search-default-search-tool :grep))))
    :options-spec '((ignore-pattern . (p-search-infix-regexp
                                       :key "-i" ;; TODO - allow multiple (?)
