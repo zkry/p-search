@@ -28,29 +28,30 @@
 ;; distribution of where it can be found, and that the act of looking
 ;; should update our posterior probability distribution.
 
-;; Terminology: In p-search there are parts of the search, the prior
-;; and likelihood.  The prior is specified via certain predicates that
-;; reflect your beliefs where the file is located.  For example, you
-;; could be 90% sure that a file is in a certain directory, and 10%
-;; elsewhere.  Or you can be very sure that what you are looking for
-;; will contain some form of a search term.  Or you may have belife
-;; that the object you are looking for may have a more active Git log
-;; than other files.  Or you think you remember seeing the file you
-;; were looking for in one of your open buffers.  And so on.  The
-;; important thing is that priors have 1) an objective criteria 2) a
-;; subjective belief tied to the criteria.
+;; Terminology: In p-search there are two parts of the search, the
+;; prior and likelihood.  The prior is specified via certain
+;; predicates that reflect your beliefs where the file is located.
+;; For example, you could be 90% sure that a file is in a certain
+;; directory, and 10% elsewhere.  Or you can be very sure that what
+;; you are looking for will contain some form of a search term.  Or
+;; you may believe that the object you are looking for may have a more
+;; active Git log than other files.  Or you think you remember seeing
+;; the file you were looking for in one of your open buffers.  And so
+;; on.  The important thing is that priors have 1) an objective
+;; criteria 2) a subjective belief tied to the criteria.
 ;;
 ;; The second part of the equation is the likelihood.  When looking
 ;; for something, the very act of looking for something and not
-;; finding doesn't mean that the its not there!  Think about when
+;; finding it doesn't mean that the its not there!  Think about when
 ;; looking for your keys.  You may check the same place several times
-;; until you actually find them.  The act of observation reduces your
-;; probability that the thing being looked for is there, but it
-;; doesn't reduce it to zero.  When looking for something via
-;; p-search, you mark the item with one of several gradations of
-;; certainty that the element being looked for exists.  After
-;; performing the observation, the probabilities where things exists
-;; gets updated.
+;; before you actually find them (e.g. hidden under that advertisement
+;; for pizza you have been meaning to throw away).  The act of
+;; observation reduces your probability that the thing being looked
+;; for is there, but it doesn't reduce it all the way to zero.  When
+;; looking for something via p-search, you mark the item with one of
+;; several gradations of certainty that the element being looked for
+;; exists.  After performing the observation, the vector of subjective
+;; probabilities where things exists get following by Bayes rule.
 
 ;;; Code:
 
@@ -78,14 +79,16 @@
   :group 'applications)
 
 (defcustom p-search-default-search-tool
-  (cond ((executable-find "rg") :rg)
+  (cond ((executable-find "ugrep") :ug)
+        ((executable-find "rg") :rg)
         ((executable-find "ag") :ag)
         (t :grep))
   "Default tool to use when running search on filesystem."
   :group 'p-search
   :type '(choice (const :tag "grep" :grep)
                  (const :tag "ag (the_silver_searcher)" :ag)
-                 (const :tag "rg (ripgrep)" :rg)))
+                 (const :tag "rg (ripgrep)" :rg)
+                 (const :tag "ug (ugrep)" :ug)))
 
 (defcustom p-search-default-document-preview-size 10
   "Default number of lines show in the results preview section."
@@ -291,7 +294,8 @@ The search results posterior probability will be their prior
 score times this value.")
 (defconst p-search-query-wildcards '((:rg . "[^\w]")
                                      (:ag . "[^\s]")
-                                     (:grep . "[^[:space:]]"))
+                                     (:grep . "[^[:space:]]")
+                                     (:ug . "[^[:space:]]"))
   "Alist of search tool to wildcard regexp.")
 
 
@@ -709,6 +713,12 @@ Maps from file name to result indicator.")
                 (word-start . "\\<")
                 (word-end . "\\>")
                 (not-word-boundary . "[[:alnum:]]")))
+      '((:ug . ((or . "\\|")
+                (lparen . "\\(")
+                (rparen . "\\)")
+                (word-start . "\\<")
+                (word-end . "\\>")
+                (not-word-boundary . "[[:alnum:]]"))))
       (:rg . ((or . "|")
               (lparen . "(")
               (rparen . ")")
@@ -762,6 +772,7 @@ should be the symbol of one of the supported tools."
             ((pred stringp)
              (pcase cmd
                (:grep (p-search--grep-escape rx-expr))
+               (:ug (p-search--grep-escape rx-expr))
                (:ag (p-search--ag-escape rx-expr))
                (:rg (p-search--rg-escape rx-expr)))))))
     (if case-insensitive-p
@@ -813,6 +824,9 @@ A term regex is noted for marking boundary characters."
          (case-insensitive-p
           (get-text-property 0 'p-search-case-insensitive term-str)))
     (pcase cmd
+      (:ug
+       `("ugrep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case"))
+         ,term-str "."))
       (:grep
        `("grep" "-r" "-c" ,@(and case-insensitive-p '("--ignore-case"))
          ,term-str "."))
@@ -1401,7 +1415,7 @@ of the term frequency counts."
                  (search-tool . (p-search-infix-choices
                                  :key "t"
                                  :description "Search Tool"
-                                 :choices (:grep :rg :ag)
+                                 :choices (:grep :ug :rg :ag)
                                  :default-value ,(or p-search-default-search-tool :grep))))
    :options-spec '((ignore-pattern . (p-search-infix-regexp
                                       :key "-i" ;; TODO - allow multiple (?)
