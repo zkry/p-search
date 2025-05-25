@@ -911,12 +911,20 @@ The definition is returned in the form of (cons type properties-p-list)."
 (defun p-search-documentize (doc-id)
   "Given DOC-ID, return IR properties."
   (pcase-let ((`(,doc-type ,element) doc-id)
-              (results `((id . ,doc-id))))
+              (results `((id . ,doc-id)))
+              (fields-added-p nil))
+    ;; add default fields
     (pcase-dolist (`(,prop-id . ,function)
                    (gethash doc-type p-search-documentizer-functions))
+      (when (eql prop-id 'fields)
+        (setq fields-added-p t))
       (let* ((property-fetcher (lambda () (funcall function element))))
         (push (cons prop-id property-fetcher) results)))
-    (nreverse results)))
+    (let ((results (nreverse results)))
+      (unless fields-added-p
+        (let ((name (funcall (alist-get 'name results))))
+          (push (cons 'fields `((document-name . ,name))) results)))
+      results)))
 
 (defun p-search--size-from-content (doc-id)
   "Return the length of the content of document DOC-ID."
@@ -945,6 +953,7 @@ The definition is returned in the form of (cons type properties-p-list)."
 (p-search-def-property :default 'size #'p-search--size-from-content)
 
 ;; predefined set of fields
+(p-search-def-field 'document-name 'text :weight 3)
 (p-search-def-field 'title 'text :weight 3)
 (p-search-def-field 'author 'text :weight 3)
 (p-search-def-field 'keywords 'category)
