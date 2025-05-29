@@ -2760,7 +2760,7 @@ Arguments are provided from the transient dispatcher."
               (funcall reader prompt nil nil)
             (cond
              ;; TODO - rething how this is done
-             ((p-search--choices-p (get (car spec) 'transient--suffix))
+             ((p-search-transient--choices-p (get (car spec) 'transient--suffix))
               (let* ((choices (plist-get (cdr spec) :choices)))
                 (when (functionp choices)
                   (setq choices (funcall choices)))

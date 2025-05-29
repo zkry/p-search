@@ -1,12 +1,5 @@
 ;;; p-search-transient.el --- Support for transients -*- lexical-binding:t -*-
 
-;; Author: Zachary Romero
-;; URL: https://github.com/zkry/p-search
-;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1"))
-;; Keywords: tools
-;;
-
 ;;; Commentary:
 
 ;; This packages defines the various transient integrations that
@@ -28,7 +21,7 @@
   "Read date via `org-read-date' using PROMPT and INIT for initial value."
   (org-read-date nil nil nil prompt nil init))
 
-(defun p-search-read-directories (_prompt _init hist)
+(defun p-search-transient-read-directories (_prompt _init hist)
   "Read multiple directories.
 HIST is the input history of the underlying `completing-read-multiple' command."
   (completing-read-multiple
@@ -36,11 +29,11 @@ HIST is the input history of the underlying `completing-read-multiple' command."
    #'completion-file-name-table
    #'directory-name-p nil nil hist))
 
-(defun p-search-read-file-name (prompt init _hist)
+(defun p-search-transient-read-file-name (prompt init _hist)
   "Read file name, showing PROMPT with INIT as initial value."
   (read-file-name prompt nil nil t init))
 
-(defun p-search-read-existing-file-names (prompt init hist)
+(defun p-search-transient-read-existing-file-names (prompt init hist)
   "Read files, showing PROMPT with HIST, having initial input INIT.
 
 Note, if INIT is nil, `default-directory' will be used."
@@ -51,7 +44,7 @@ Note, if INIT is nil, `default-directory' will be used."
                             (abbreviate-file-name (or init default-directory))
                             hist))
 
-(defun p-search-read-bytes (prompt &optional init hist)
+(defun p-search-transient-read-bytes (prompt &optional init hist)
   "Read a byte value (e.g. \"1MB\"), displaying PROMPT to user.
 INIT and HIST the initial value and input history respectively."
   (catch 'done
@@ -83,20 +76,20 @@ INIT and HIST the initial value and input history respectively."
 
 ;;; Base Option Class
 
-(defclass p-search--option (transient-variable)
+(defclass p-search-transient--option (transient-variable)
   ((option-symbol :initarg :option-symbol :initform nil)
    (default-value :initarg :default-value :initform nil)
    (instruction-string :initarg :instruction-string :initform nil)
    (description :initarg :description :initform nil)))
 
-(cl-defmethod transient-infix-value ((obj p-search--option))
+(cl-defmethod transient-infix-value ((obj p-search-transient--option))
   "Return value of OBJ, being a cons pair of its symbol and value."
   (when-let ((value (oref obj value)))
       (cons
        (oref obj option-symbol)
        (oref obj value))))
 
-(cl-defmethod transient-init-value ((obj p-search--option))
+(cl-defmethod transient-init-value ((obj p-search-transient--option))
   "Return initial value of OBJ.
 The initial value will either be: the value of the options symbol
 in `p-search-transient-default-inputs' or the value in the transient
@@ -115,11 +108,11 @@ objects `default-value' slot."
     (when init-value
       (oset obj value init-value))))
 
-(cl-defmethod transient-infix-set ((obj p-search--option) value)
+(cl-defmethod transient-infix-set ((obj p-search-transient--option) value)
   "Simple infix set method to set VALUE slot of OBJ."
   (oset obj value value))
 
-(cl-defmethod transient-format-value ((obj p-search--option))
+(cl-defmethod transient-format-value ((obj p-search-transient--option))
   "Format value of OBJ."
   (if-let* ((value (and (slot-boundp obj 'value) (oref obj value))))
       (cond
@@ -135,24 +128,24 @@ objects `default-value' slot."
 
 ;;; Directory
 
-(defclass p-search--directory (p-search--option)
+(defclass p-search-transient--directory (p-search-transient--option)
   ((reader :initform (lambda (prompt init _hist)
                        (read-directory-name prompt init nil nil init)))
    (multi-value :initarg :multi-value :initform nil)))
 
-(cl-defmethod transient-init-value ((obj p-search--directory))
+(cl-defmethod transient-init-value ((obj p-search-transient--directory))
   "Return initial values of OBJ."
   (cl-call-next-method)
   (let* ((multi-value-p (oref obj multi-value)))
     (if multi-value-p
         (progn
-          (oset obj reader #'p-search-read-directories)
+          (oset obj reader #'p-search-transient-read-directories)
           (oset obj prompt "Directories: "))
       (oset obj reader (lambda (prompt init _hist)
                          (read-directory-name prompt init nil nil init)))
       (oset obj prompt "Directory: "))))
 
-(cl-defmethod transient-format-value ((obj p-search--directory))
+(cl-defmethod transient-format-value ((obj p-search-transient--directory))
   "Format value of OBJ, looking like a list of items."
   (let* ((multi-value-p (and (slot-boundp obj 'multi-value) (oref obj multi-value)))
          (value (and (slot-boundp obj 'value) (oref obj value))))
@@ -174,41 +167,41 @@ objects `default-value' slot."
       (propertize "nil" 'face 'transient-inactive-value)))))
 
 (transient-define-infix p-search-infix-directory ()
-  :class p-search--directory)
+  :class p-search-transient--directory)
 
 
-(defclass p-search--file (p-search--option)
-  ((reader :initform #'p-search-read-file-name)))
+(defclass p-search-transient--file (p-search-transient--option)
+  ((reader :initform #'p-search-transient-read-file-name)))
 
 (transient-define-infix p-search-infix-file ()
-  :class p-search--file)
+  :class p-search-transient--file)
 
-(defclass p-search--files (p-search--option)
-  ((reader :initform #'p-search-read-existing-file-names)))
+(defclass p-search-transient--files (p-search-transient--option)
+  ((reader :initform #'p-search-transient-read-existing-file-names)))
 
 (transient-define-infix p-search-infix-files ()
-  :class p-search--files)
+  :class p-search-transient--files)
 
-(defclass p-search--regexp (p-search--option)
+(defclass p-search-transient--regexp (p-search-transient--option)
   ((reader :initform #'read-regexp)
    (prompt :initform "regexp: ")))
 
 (transient-define-infix p-search-infix-regexp ()
-  :class p-search--regexp)
+  :class p-search-transient--regexp)
 
 
 
 ;;; String
 
-(defclass p-search--string (p-search--option)
+(defclass p-search-transient--string (p-search-transient--option)
   ((reader :initform #'read-string)
    (multi-value :initarg :multi-value :initform nil)))
 
-(cl-defmethod transient-init-value ((_obj p-search--string))
+(cl-defmethod transient-init-value ((_obj p-search-transient--string))
   "The init-value transient method, doing nothing."
   (cl-call-next-method))
 
-(cl-defmethod transient-format-value ((obj p-search--string))
+(cl-defmethod transient-format-value ((obj p-search-transient--string))
   "Format transient OBJ value for string."
   (if-let* ((val (and (slot-boundp obj 'value) (oref obj value))))
       (if-let* ((multi-value-p (oref obj multi-value))
@@ -226,7 +219,7 @@ objects `default-value' slot."
          (format "\"%s\"" val) 'face 'transient-value))
     (propertize "nil" 'face 'transient-inactive-value)))
 
-(cl-defmethod transient-infix-value ((obj p-search--string))
+(cl-defmethod transient-infix-value ((obj p-search-transient--string))
   "Set initial transient value of OBJ for string."
   (if-let* ((val (oref obj value)))
       (cons
@@ -237,24 +230,24 @@ objects `default-value' slot."
     nil))
 
 (transient-define-infix p-search-infix-string ()
-  :class p-search--string)
+  :class p-search-transient--string)
 
 
 ;;; Number
 
-(defclass p-search--number (p-search--option)
+(defclass p-search-transient--number (p-search-transient--option)
   ((reader :initform #'read-number)
    (prompt :initform "number: ")))
 
 (transient-define-infix p-search-infix-number ()
-  :class p-search--number)
+  :class p-search-transient--number)
 
 
-(defclass p-search--memory (p-search--option)
-  ((reader :initform #'p-search-read-bytes)
+(defclass p-search-transient--memory (p-search-transient--option)
+  ((reader :initform #'p-search-transient-read-bytes)
    (prompt :initform "Memory size (e.g. 10MB): ")))
 
-(cl-defmethod transient-format-value ((obj p-search--memory))
+(cl-defmethod transient-format-value ((obj p-search-transient--memory))
   "Format the value of memory value OBJ."
   (if-let* ((bytes (and (slot-boundp obj 'value) (oref obj value))))
       (cond
@@ -265,24 +258,24 @@ objects `default-value' slot."
     (propertize "nil" 'face 'transient-inactive-value)))
 
 (transient-define-infix p-search-infix-memory ()
-  :class p-search--memory)
+  :class p-search-transient--memory)
 
 
 ;;; Time
 
-(defclass p-search--date (p-search--option)
+(defclass p-search-transient--date (p-search-transient--option)
   ((reader :initform #'p-search-transient-read-date)))
 
 (transient-define-infix p-search-infix-date ()
-  :class p-search--date)
+  :class p-search-transient--date)
 
 
 ;;; Choices
 
-(defclass p-search--choices (p-search--option)
+(defclass p-search-transient--choices (p-search-transient--option)
   ((choices :initarg :choices)))
 
-(cl-defmethod transient-infix-read ((obj p-search--choices))
+(cl-defmethod transient-infix-read ((obj p-search-transient--choices))
   "Transient infix-read method for choices OBJ."
   (let* ((choices (oref obj choices)))
     (intern (completing-read
@@ -292,50 +285,50 @@ objects `default-value' slot."
              nil t))))
 
 (transient-define-infix p-search-infix-choices ()
-  :class p-search--choices)
+  :class p-search-transient--choices)
 
 
 ;;; Constant - pre-defined value that can't be changed.
 
-(defclass p-search--const (p-search--option)
+(defclass p-search-transient--const (p-search-transient--option)
   ((init-value :initarg :value)))
 
-(cl-defmethod transient-infix-read ((obj p-search--const))
+(cl-defmethod transient-infix-read ((obj p-search-transient--const))
   "Prevent read for transient OBJ, returning original value."
   (beep)
   (message "value read only")
   (oref obj value))
 
 (transient-define-infix p-search-infix-const ()
-  :class p-search--const)
+  :class p-search-transient--const)
 
 
 ;;; Custom - provide a custom reader
 
-(defclass p-search--custom (p-search--option)
+(defclass p-search-transient--custom (p-search-transient--option)
   ((reader :initarg :reader)))
 
-(cl-defmethod transient-infix-read ((obj p-search--custom))
+(cl-defmethod transient-infix-read ((obj p-search-transient--custom))
   "Transient infix-read for OBJ custom reader type."
   (funcall (oref obj reader)))
 
 (transient-define-infix p-search-infix-custom ()
-  :class p-search--custom)
+  :class p-search-transient--custom)
 
 
 
 ;;; Toggle
 
-(defclass p-search--toggle (p-search--option)
+(defclass p-search-transient--toggle (p-search-transient--option)
   ((init-state :initarg :init-state)))
 
-(cl-defmethod transient-init-value ((obj p-search--toggle))
+(cl-defmethod transient-init-value ((obj p-search-transient--toggle))
   "Transient init-value function for toggle type OBJ."
   (cl-call-next-method)
   (when-let (init-value (and (slot-boundp obj 'init-state) (oref obj init-state)))
     (oset obj value init-value)))
 
-(cl-defmethod transient-infix-read ((obj p-search--toggle))
+(cl-defmethod transient-infix-read ((obj p-search-transient--toggle))
   "Transient infix-read method for OBJ of type toggle."
   (let* ((val (oref obj value)))
     (if val
@@ -343,7 +336,7 @@ objects `default-value' slot."
       'on)))
 
 (transient-define-infix p-search-infix-toggle ()
-  :class p-search--toggle)
+  :class p-search-transient--toggle)
 
 (provide 'p-search-transient)
 
