@@ -4,7 +4,7 @@
 # to .github/workflows/melpazoid.yml and modifying RECIPE and EXIST_OK below.
 
 name: melpazoid
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   build:
@@ -25,7 +25,7 @@ jobs:
       env:
         LOCAL_REPO: ${{ github.workspace }}
         # RECIPE is your recipe as written for MELPA:
-        RECIPE: (shx :fetcher github :repo "riscy/shx-for-emacs")
+        RECIPE: (p-search :fetcher github :repo "zkry/p-search")
         # set this to false (or remove it) if the package isn't on MELPA:
         EXIST_OK: true
       run: echo $GITHUB_REF && make -C ~/melpazoid

@@ -95,7 +95,7 @@ and will be called as follows.
 
 (defun p-search-x-bibtex--fields (id)
   "Get various searchable fields from BibTeX entry ID."
-  (pcase-let* ((`(,file _ ,entry-data) id))
+  (pcase-let* ((`(,_file _ ,entry-data) id))
     (let ((author (alist-get "author" entry-data nil nil #'string-equal-ignore-case))
           (title (cl-some (lambda (key)
                             (alist-get key entry-data nil nil #'string-equal-ignore-case))

@@ -1,7 +1,7 @@
 ;;; p-search.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
 
 ;; Author: Zachary Romero
-;; URL: https://github.com/zkry/p-search.el
+;; URL: https://github.com/zkry/p-search
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools
