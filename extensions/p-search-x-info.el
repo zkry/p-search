@@ -1,4 +1,4 @@
-;;; psx-info.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
+;;; p-search-x-info.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -6,7 +6,7 @@
 ;; Require this file and the Info candidate generator should be
 ;; available in a p-search session.
 
-;; The psx-info document identifier is a list with the three
+;; The p-search-x-info document identifier is a list with the three
 ;; components: (dir file node-name)
 
 ;;; Code:
@@ -14,15 +14,15 @@
 (require 'p-search)
 (require 'info)
 
-(defvar psx-info--info-to-file (make-hash-table :test #'equal)
+(defvar p-search-x-info--info-to-file (make-hash-table :test #'equal)
   "Hash table of base to (hash table of extension to full file path).")
 
-(defvar psx-info-content (make-hash-table :test #'equal)
+(defvar p-search-x-info-content (make-hash-table :test #'equal)
   "Hash table of info-identifier to string contents.
 This is used to speed up the reading of info files in order to
 not have to open the same file repeatedly.")
 
-(defun psx-info--build-tree ()
+(defun p-search-x-info--build-tree ()
   "Generate and return cache of info files."
   (dolist (dir Info-directory-list)
     (condition-case _err
@@ -33,29 +33,29 @@ not have to open the same file repeatedly.")
             (setq is-gz t))
           (let* ((base (file-name-base file))
                  (extension (file-name-extension file))
-                 (file-map (gethash base psx-info--info-to-file)))
+                 (file-map (gethash base p-search-x-info--info-to-file)))
             (unless file-map
               (let ((ht (make-hash-table :test #'equal)))
-                (puthash base ht psx-info--info-to-file)
+                (puthash base ht p-search-x-info--info-to-file)
                 (setq file-map ht)))
             (if is-gz
                 (puthash extension (concat file ".gz") file-map)
               (puthash extension file file-map)))))
       (error (message "Error occurred when retrieving info files from directory %s" dir))))
-  psx-info--info-to-file)
+  p-search-x-info--info-to-file)
 
-(defun psx-info--info-candidates ()
+(defun p-search-x-info--info-candidates ()
   "Return list of selectable info candidates."
-  (when (or (not psx-info--info-to-file)
-            (= (hash-table-count psx-info--info-to-file) 0))
-    (psx-info--build-tree))
-  (hash-table-keys psx-info--info-to-file))
+  (when (or (not p-search-x-info--info-to-file)
+            (= (hash-table-count p-search-x-info--info-to-file) 0))
+    (p-search-x-info--build-tree))
+  (hash-table-keys p-search-x-info--info-to-file))
 
-(defun psx-info--documents-from-file (filepath)
+(defun p-search-x-info--documents-from-file (filepath)
   "Return info documents for FILEPATH."
   (let ((documents '()))
     (with-temp-buffer
-      (psx-info--insert-file-contents filepath)
+      (p-search-x-info--insert-file-contents filepath)
       (goto-char (point-min))
       (search-forward "")
       (forward-line 1)
@@ -72,46 +72,46 @@ not have to open the same file repeatedly.")
             (let* ((content-string (buffer-substring-no-properties content-start-point
                                                                    (1- (point)))))
               (when (not (equal "Top" node-name))
-                (puthash doc-id content-string psx-info-content))))
-          (push (p-search-documentize (list 'psx-info doc-id)) documents)
+                (puthash doc-id content-string p-search-x-info-content))))
+          (push (p-search-documentize (list 'p-search-x-info doc-id)) documents)
           (forward-line 1))))
     documents))
 
-(defun psx-info--documents-for-entry (entry)
+(defun p-search-x-info--documents-for-entry (entry)
   "Return list of `p-search' documents for info ENTRY."
-  (when (or (not psx-info--info-to-file)
-            (= (hash-table-count psx-info--info-to-file) 0)
-            (not (gethash (symbol-name entry) psx-info--info-to-file)))
-    (psx-info--build-tree))
-  (let* ((file-map (gethash (symbol-name entry) psx-info--info-to-file))
+  (when (or (not p-search-x-info--info-to-file)
+            (= (hash-table-count p-search-x-info--info-to-file) 0)
+            (not (gethash (symbol-name entry) p-search-x-info--info-to-file)))
+    (p-search-x-info--build-tree))
+  (let* ((file-map (gethash (symbol-name entry) p-search-x-info--info-to-file))
          (docs '()))
     (maphash
      (lambda (extension filepath)
        (unless (and (> (hash-table-count file-map) 1)
                     (equal extension "info"))
-         (setq docs (append docs (psx-info--documents-from-file filepath)))))
+         (setq docs (append docs (p-search-x-info--documents-from-file filepath)))))
      file-map)
     docs))
 
-(defun psx-info--title (info-identifier)
+(defun p-search-x-info--title (info-identifier)
   "Return the title of INFO-IDENTIFIER."
   (concat (nth 1 info-identifier) ": " (nth 2 info-identifier)))
 
-(defun psx-info--insert-file-contents (file)
+(defun p-search-x-info--insert-file-contents (file)
   "Insert the contents of FILE, properly handling gzip."
   (cond
    ((and (string-suffix-p ".gz" file) (not auto-compression-mode))
     (call-process "gzip" nil t nil "-c" "-d" file))
    ((and (not (file-attributes file))
          (file-attributes (concat file ".gz")))
-    (psx-info--insert-file-contents (concat file ".gz")))
+    (p-search-x-info--insert-file-contents (concat file ".gz")))
    (t
     (insert-file-contents file))))
 
-(defun psx-info--node-contents (node-name file)
+(defun p-search-x-info--node-contents (node-name file)
   "Return the contents of NODE-NAME in info FILE."
   (with-temp-buffer
-    (psx-info--insert-file-contents file)
+    (p-search-x-info--insert-file-contents file)
     (search-forward (concat ",  Node: " node-name))
     (forward-line 2)
     (let* ((contents-start (point)))
@@ -119,14 +119,14 @@ not have to open the same file repeatedly.")
         (goto-char (point-max)))
       (buffer-substring-no-properties contents-start (1- (point))))))
 
-(defun psx-info--content (info-identifier)
+(defun p-search-x-info--content (info-identifier)
   "Return the content of INFO-IDENTIFIER."
-  (if-let ((content (gethash info-identifier psx-info-content)))
+  (if-let ((content (gethash info-identifier p-search-x-info-content)))
       content
     (pcase-let ((`(,dir ,file ,node-name) info-identifier))
     (let ((info-file (file-name-concat dir file)))
       (with-temp-buffer
-        (psx-info--insert-file-contents info-file)
+        (p-search-x-info--insert-file-contents info-file)
         (if (search-forward "\nIndirect:" nil t)
             ;; We're dealing with a directory file, we need to read
             ;; the tag table to determine the location of the node
@@ -147,38 +147,38 @@ not have to open the same file repeatedly.")
                                   references)
                                  (car (seq-sort-by #'cdr #'> references))))
                      (ref-file (file-name-concat dir (car at-ref))))
-                (psx-info--node-contents node-name ref-file)))
-          (psx-info--node-contents node-name info-file)))))))
+                (p-search-x-info--node-contents node-name ref-file)))
+          (p-search-x-info--node-contents node-name info-file)))))))
 
-(defun psx-info--goto (info-identifier)
+(defun p-search-x-info--goto (info-identifier)
   "Open the info page of INFO-IDENTIFIER."
   (pcase-let ((`(,_dir ,file ,node) info-identifier))
     (Info-find-node file node)))
 
-(defconst psx-info-candidate-generator
+(defconst p-search-x-info-candidate-generator
   (p-search-candidate-generator-create
-   :id 'psx-info-candidate-generator
+   :id 'p-search-x-info-candidate-generator
    :name "INFO"
    :input-spec '((info-node . (p-search-infix-choices
                                 :key "i"
                                 :description "Info Node"
-                                :choices psx-info--info-candidates)))
+                                :choices p-search-x-info--info-candidates)))
    :options-spec '()
    :function
    (lambda (args)
      (let* ((node (alist-get 'info-node args)))
-       (psx-info--documents-for-entry node)))
+       (p-search-x-info--documents-for-entry node)))
    :lighter-function
    (lambda (args)
      (let* ((node (alist-get 'info-node args)))
        (format "info:%s" (symbol-name node))))))
 
-(p-search-def-property 'psx-info 'name #'psx-info--title)
-(p-search-def-property 'psx-info 'content #'psx-info--content)
+(p-search-def-property 'p-search-x-info 'name #'p-search-x-info--title)
+(p-search-def-property 'p-search-x-info 'content #'p-search-x-info--content)
 
-(add-to-list 'p-search-candidate-generators psx-info-candidate-generator)
+(add-to-list 'p-search-candidate-generators p-search-x-info-candidate-generator)
 
-(p-search-def-function 'psx-info 'p-search-goto-document #'psx-info--goto)
+(p-search-def-function 'p-search-x-info 'p-search-goto-document #'p-search-x-info--goto)
 
-(provide 'psx-info)
-;;; psx-info.el ends here
+(provide 'p-search-x-info)
+;;; p-search-x-info.el ends here

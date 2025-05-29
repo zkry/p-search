@@ -1,4 +1,4 @@
-;;; psx-denote.el --- p-search mapping for Denote  -*- lexical-binding: t; -*-
+;;; p-search-x-denote.el --- p-search mapping for Denote  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024  Zachary Romero, Samuel W. Flint
 
@@ -37,19 +37,19 @@
 (p-search-def-field 'denote-identifier 'text :weight 10)
 (p-search-def-field 'denote-signature 'text :weight 3)
 
-(defgroup psx-denote nil
+(defgroup p-search-x-denote nil
   "Customization for Denote `p-search' mapping."
   :group 'p-search
   :group 'denote
-  :prefix "psx-denote-")
+  :prefix "p-search-x-denote-")
 
-(defcustom psx-denote-include-signature-p 'on
+(defcustom p-search-x-denote-include-signature-p 'on
   "Should the Denote signature be a part of metadata?"
   :type '(choice (const :tag "Off by default" nil)
                  (const :tag "On by default" on))
-  :group 'psx-denote)
+  :group 'p-search-x-denote)
 
-(defun psx-denote-annotator (args document)
+(defun p-search-x-denote-annotator (args document)
   "Annotate DOCUMENT with denote-related metadata with given ARGS."
   (let* ((file-name (p-search-document-property document 'file-name)))
     (let-alist args
@@ -77,26 +77,26 @@
             (push (cons 'title (list title-nice title)) new-fields))
           (list (p-search-document-extend document new-id new-fields)))))))
 
-(defun psx-denote--arg-display (_input-spec _output-spec arguments)
+(defun p-search-x-denote--arg-display (_input-spec _output-spec arguments)
   "Display ARGUMENTS in a condensed format."
   (let-alist arguments
     (format "signature: %s"
             (propertize (if .include-signature "on" "off") 'face 'p-search-value))))
 
-(defconst psx-denote-mapping
+(defconst p-search-x-denote-mapping
   (p-search-candidate-mapping-create
-   :id 'psx-denote-mapping
+   :id 'p-search-x-denote-mapping
    :name "Denote"
    :required-property-list '(file-name)
    :input-spec '()
    :options-spec '((include-signature . (p-search-infix-toggle
                                          :key "-s"
                                          :description "Include Signature"
-                                         :default-value (lambda () psx-denote-include-signature-p))))
-   :function #'psx-denote-annotator
-   :short-arg-disp-func #'psx-denote--arg-display))
+                                         :default-value (lambda () p-search-x-denote-include-signature-p))))
+   :function #'p-search-x-denote-annotator
+   :short-arg-disp-func #'p-search-x-denote--arg-display))
 
-(add-to-list 'p-search-candidate-mappings psx-denote-mapping)
+(add-to-list 'p-search-candidate-mappings p-search-x-denote-mapping)
 
-(provide 'psx-denote)
-;;; psx-denote.el ends here
+(provide 'p-search-x-denote)
+;;; p-search-x-denote.el ends here
