@@ -38,7 +38,7 @@
 ;;; Code:
 
 (require 'p-search)
-(require 'parsebib)
+(require 'parsebib nil t)
 (require 'cl-lib)
 (require 'compat)
 

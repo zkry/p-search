@@ -31,7 +31,7 @@
 ;;; Code:
 
 (require 'p-search)
-(require 'denote)
+(require 'denote nil t)
 
 (p-search-def-field 'denote-type 'category)
 (p-search-def-field 'denote-identifier 'text :weight 10)
