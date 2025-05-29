@@ -1,5 +1,12 @@
 ;;; p-search-query.el --- Support for querys -*- lexical-binding:t -*-
 
+;; Author: Zachary Romero
+;; URL: https://github.com/zkry/p-search.el
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "29.1"))
+;; Keywords: tools
+;;
+
 ;;; Commentary:
 
 ;; This package defines the main querying functionality of p-search.

@@ -1,5 +1,12 @@
 ;;; p-search-transient.el --- Support for transients -*- lexical-binding:t -*-
 
+;; Author: Zachary Romero
+;; URL: https://github.com/zkry/p-search.el
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "29.1"))
+;; Keywords: tools
+;;
+
 ;;; Commentary:
 
 ;; This packages defines the various transient integrations that
