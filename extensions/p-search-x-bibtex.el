@@ -130,7 +130,7 @@ nothing."
 
 ARGS should be an alist containing the following keys:
 
- - `FILES' a file or list of files (latter useful for presets)."
+ - FILES a file or list of files (latter useful for presets)."
   (let-alist args
     (let ((files-list (if (listp .files) .files (list .files)))
           documents)
