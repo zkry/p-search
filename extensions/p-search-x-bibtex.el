@@ -5,7 +5,6 @@
 ;; Author: Samuel W. Flint <me@samuelwflint.com>
 ;; Version: 0.9.0
 ;; Keywords: tools, tex
-;; Package-Requires: ((emacs "29.1") (compat "29.1"))
 ;; Homepage: https://github.com/zkry/p-search
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -41,6 +40,8 @@
 (require 'parsebib nil t)
 (require 'cl-lib)
 (require 'compat)
+
+(declare-function parsebib-parse "parsebib.el")
 
 
 ;;; Customization

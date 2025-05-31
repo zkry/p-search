@@ -90,8 +90,7 @@
             ("Pages"
              (push (cons 'pdf-pages (cdr field)) fields))
             ("Page size"
-             (push (cons 'pdf-pagesize (cdr field)) fields)))))
-      fields)))
+             (push (cons 'pdf-pagesize (cdr field)) fields))))))))
 
 (defun p-search-x-pdfinfo-annotator (_args document)
   "Annotate DOCUMENT with `pdfinfo'-derived fields.

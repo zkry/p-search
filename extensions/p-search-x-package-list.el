@@ -80,7 +80,7 @@ Metadata collected include:
           (when-let ((extras (package-desc-extras properties)))
             (when-let ((url (alist-get :url extras)))
               (push (cons 'package-url url) fields))
-            (let (authors)
+            (let ((authors))
               (when-let ((maintainers (alist-get :maintainers extras)))
                 (mapc (lambda (maint)
                         (push (car maint) authors))

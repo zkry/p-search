@@ -37,6 +37,14 @@
 (p-search-def-field 'denote-identifier 'text :weight 10)
 (p-search-def-field 'denote-signature 'text :weight 3)
 
+(declare-function denote-retrieve-filename-signature "denote.el")
+(declare-function denote-retrieve-front-matter-title-value "denote.el")
+(declare-function denote-file-type "denote.el")
+(declare-function denote-extract-keywords-from-path "denote.el")
+(declare-function denote-retrieve-filename-title "denote.el")
+(declare-function denote-retrieve-filename-identifier "denote.el")
+(declare-function denote-file-is-note-p "denote.el")
+
 (defgroup p-search-x-denote nil
   "Customization for Denote `p-search' mapping."
   :group 'p-search
