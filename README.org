@@ -8,6 +8,10 @@
 
   [[./documents/screenshot.png]]
 
+* Important Changes
+
+  - *2025-05-31*: Package names beginning with `psx-` have been renamed to `p-search-x-`
+
 * Installation
 
   https://p-search.org/documentation/Installation.html
