@@ -205,7 +205,7 @@
 ** Extensions
 
    p-search was designed to be extensible, both in what you can search
-   on and how the search is performed.  Add =(require 'psx-info)= to
+   on and how the search is performed.  Add =(require 'p-search-x-info)= to
    load a p-search extension whilch lets you search on info files.
 
    [[./documents/psx-info-demo.gif]]
@@ -224,8 +224,8 @@
     (p-search-setup-buffer
      `(:group ((:prior-template p-search-prior-query
                                 :args ((query-string . ,search-query) (importance . medium)))
-               (:candidate-generator psx-info-candidate-generator :args ((info-node . emacs)))
-               (:candidate-generator psx-info-candidate-generator :args ((info-node . elisp)))))))
+               (:candidate-generator p-search-x-info-candidate-generator :args ((info-node . emacs)))
+               (:candidate-generator p-search-x-info-candidate-generator :args ((info-node . elisp)))))))
 #+end_src
 
    The above command will search both the emacs and elisp info
