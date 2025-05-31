@@ -1,7 +1,7 @@
 ;;; p-search.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
 
 ;; Author: Zachary Romero
-;; URL: https://github.com/zkry/p-search.el
+;; URL: https://github.com/zkry/p-search
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools
@@ -63,6 +63,7 @@
 (require 'transient)
 (require 'eieio)
 (require 'project)
+(require 'bookmark)
 
 (require 'p-search-transient)
 (require 'p-search-query)
@@ -1563,7 +1564,7 @@ are peanalized by how far away it is."))
                                    :key "d"
                                    :description "Target Date"
                                    :instruction-string ,instruction-string-target-date
-                                   :default-value ,(format-time-string "%Y-%m-%d %H:%m")))
+                                   :default-value ,(format-time-string "%F %H:%m")))
                    (time-scale . (p-search-infix-choices
                                   :key "t"
                                   :description "Time Scale"
@@ -1879,7 +1880,7 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
      (target-date . (p-search-infix-date
                      :key "d"
                      :description "Target Date"
-                     :default-value ,(format-time-string "%Y-%m-%d %H:%m"))))
+                     :default-value ,(format-time-string "%F %H:%m"))))
    :initialize-function
    (lambda (prior)
      (let* ((args (p-search-prior-arguments prior))
@@ -2626,7 +2627,7 @@ CONFIG should be provided simmilar to how `transient-define-prefix' is used."
     (put name 'transient--prefix
          (transient-prefix :command name))
     (put name 'transient--layout
-         (seq-map 'eval (cl-mapcan (lambda (s) (transient--parse-child name s))
+         (seq-map #'eval (cl-mapcan (lambda (s) (transient--parse-child name s))
                                    suffixes)))
     (call-interactively name)))
 
@@ -2759,7 +2760,7 @@ Arguments are provided from the transient dispatcher."
               (funcall reader prompt nil nil)
             (cond
              ;; TODO - rething how this is done
-             ((p-search--choices-p (get (car spec) 'transient--suffix))
+             ((p-search-transient--choices-p (get (car spec) 'transient--suffix))
               (let* ((choices (plist-get (cdr spec) :choices)))
                 (when (functionp choices)
                   (setq choices (funcall choices)))
@@ -3249,14 +3250,14 @@ the heading to the point where BODY leaves off."
       (insert substring)
       (goto-char (point-min))
       (if (eobp)
-          (insert (propertize (format (concat "%" (number-to-string digit-ct) "d ") line-no) 'face 'line-number))
+          (let ((format-str (concat "%" (number-to-string digit-ct) "d ")))
+            (insert (propertize (format format-str line-no) 'face 'line-number)))
         (while (not (eobp))
-          (insert (propertize
-                   (format (concat "%"
-                                   (number-to-string digit-ct)
-                                   "d ")
-                           line-no)
-                   'face 'line-number))
+          (let ((format-str (concat "%" (number-to-string digit-ct) "d ")))
+            (insert (propertize
+                     (format format-str
+                             line-no)
+                     'face 'line-number)))
           (forward-line 1)
           (cl-incf line-no)))
       (buffer-string))))
@@ -4147,7 +4148,6 @@ If PRESET is non-nil, set up session with PRESET."
 
 (defun p-search--make-bookmark ()
   "Create a bookmark for the current `p-search' session."
-  (require 'bookmark)
   (let ((bookmark (cons nil (bookmark-make-record-default 'no-file)))
         (session-preset (p-search--preset-from-current-session)))
     ;; TODO: maybe consider storing hidden sections

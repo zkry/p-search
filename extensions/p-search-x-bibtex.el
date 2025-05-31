@@ -1,4 +1,4 @@
-;;; psx-bibtex.el --- A BibTeX candidate generator for p-search  -*- lexical-binding: t; -*-
+;;; p-search-x-bibtex.el --- A BibTeX candidate generator for p-search  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025  Samuel W. Flint
 
@@ -32,40 +32,40 @@
 ;;
 ;; Additionally, bibliography entries can be opened internally or
 ;; externally.  This is disabled by default, but can be configured by
-;; setting `psx-bibtex-open-entry-function' to a function which takes
+;; setting `p-search-x-bibtex-open-entry-function' to a function which takes
 ;; a filename and an entry key, and opens the bibentry as you choose.
 
 ;;; Code:
 
 (require 'p-search)
-(require 'parsebib)
+(require 'parsebib nil t)
 (require 'cl-lib)
 (require 'compat)
 
 
 ;;; Customization
 
-(defgroup psx-bibtex nil
+(defgroup p-search-x-bibtex nil
   "Customization for `p-search' bibtex candidate generator."
   :group 'p-search
   :group 'bibtex
-  :prefix "psx-bibtex-")
+  :prefix "p-search-x-bibtex-")
 
-(defcustom psx-bibtex-open-entry-function nil
+(defcustom p-search-x-bibtex-open-entry-function nil
   "Function to open a bibtex entry.
 
 This function should take two arguments, FILENAME and ENTRY-KEY,
 and will be called as follows.
 
-    (apply psx-bibtex-open-entry-function filename entry-key)"
+    (apply p-search-x-bibtex-open-entry-function filename entry-key)"
   :type '(choice (const :tag "Don't Open" nil)
                  (function :tag "Custom Function"))
-  :group 'psx-bibtex)
+  :group 'p-search-x-bibtex)
 
 
 ;;; Property Definitions
 
-(defun psx-bibtex--lighter (config)
+(defun p-search-x-bibtex--lighter (config)
   "Describe (briefly) BibTex Candidate generator CONFIG."
   (format "BIBTEX:%s"
           (mapconcat
@@ -75,27 +75,27 @@ and will be called as follows.
              (list (alist-get 'files config)))
            "/")))
 
-(defun psx-bibtex--name (id)
+(defun p-search-x-bibtex--name (id)
   "Extract BibTeX Entry name from ID."
   (pcase-let* ((`(_ ,key _) id))
     key))
-(p-search-def-property 'bibtex 'name #'psx-bibtex--name)
+(p-search-def-property 'bibtex 'name #'p-search-x-bibtex--name)
 
-(defun psx-bibtex--content (id)
+(defun p-search-x-bibtex--content (id)
   "Get entry content (i.e., abstract) from BibTeX entry ID."
   (pcase-let* ((`(_ _ ,entry-data) id))
     (alist-get "abstract" entry-data "" nil #'string-equal-ignore-case)))
-(p-search-def-property 'bibtex 'content #'psx-bibtex--content)
+(p-search-def-property 'bibtex 'content #'p-search-x-bibtex--content)
 
-(defun psx-bibtex--filename (id)
+(defun p-search-x-bibtex--filename (id)
   "Get entry filename from ID."
   (pcase-let* ((`(,file _ _) id))
     file))
-(p-search-def-property 'bibtex 'file-name #'psx-bibtex--filename)
+(p-search-def-property 'bibtex 'file-name #'p-search-x-bibtex--filename)
 
-(defun psx-bibtex--fields (id)
+(defun p-search-x-bibtex--fields (id)
   "Get various searchable fields from BibTeX entry ID."
-  (pcase-let* ((`(,file _ ,entry-data) id))
+  (pcase-let* ((`(,_file _ ,entry-data) id))
     (let ((author (alist-get "author" entry-data nil nil #'string-equal-ignore-case))
           (title (cl-some (lambda (key)
                             (alist-get key entry-data nil nil #'string-equal-ignore-case))
@@ -109,22 +109,22 @@ and will be called as follows.
       (when keywords
         (push (cons 'keywords (mapcar #'string-trim (string-split keywords ","))) fields))
       fields)))
-(p-search-def-property 'bibtex 'fields #'psx-bibtex--fields)
+(p-search-def-property 'bibtex 'fields #'p-search-x-bibtex--fields)
 
-(defun psx-bibtex--goto-entry (id)
+(defun p-search-x-bibtex--goto-entry (id)
   "Go to BibTeX entry ID.
 
-Use `psx-bibtex-open-entry-function' if set, otherwise, do
+Use `p-search-x-bibtex-open-entry-function' if set, otherwise, do
 nothing."
-  (when psx-bibtex-open-entry-function
+  (when p-search-x-bibtex-open-entry-function
     (pcase-let* ((`(,filename ,entry-key _) id))
-      (apply psx-bibtex-open-entry-function filename entry-key))))
-(p-search-def-function 'bibtex 'p-search-goto-document #'psx-bibtex--goto-entry)
+      (apply p-search-x-bibtex-open-entry-function filename entry-key))))
+(p-search-def-function 'bibtex 'p-search-goto-document #'p-search-x-bibtex--goto-entry)
 
 
 ;;; Candidate Generator
 
-(defun psx-bibtex--candidate-generator (args)
+(defun p-search-x-bibtex--candidate-generator (args)
   "Generate BibTeX candidates from ARGS.
 
 ARGS should be an alist containing the following keys:
@@ -140,22 +140,22 @@ ARGS should be an alist containing the following keys:
                    entries)))
       (nreverse documents))))
 
-(defconst psx-bibtex-candidate-generator
+(defconst p-search-x-bibtex-candidate-generator
   (p-search-candidate-generator-create
-   :id 'psx-bibtex-candidate-generator
+   :id 'p-search-x-bibtex-candidate-generator
    :name "BIBTEX"
    :input-spec '((files . (p-search-infix-files
                            :key "f"
                            :description "BibTeX Filenames"
                            :prompt "BibTeX Files: ")))
-   :function #'psx-bibtex--candidate-generator
-   :lighter-function #'psx-bibtex--lighter)
+   :function #'p-search-x-bibtex--candidate-generator
+   :lighter-function #'p-search-x-bibtex--lighter)
   "BibTeX Candidate generator for `p-search'.
 
 In use, there is a single argument, `files', which should be a
 file name or list of file names.")
 
-(add-to-list 'p-search-candidate-generators psx-bibtex-candidate-generator)
+(add-to-list 'p-search-candidate-generators p-search-x-bibtex-candidate-generator)
 
-(provide 'psx-bibtex)
-;;; psx-bibtex.el ends here
+(provide 'p-search-x-bibtex)
+;;; p-search-x-bibtex.el ends here

@@ -1,4 +1,4 @@
-;;; psx-elisp.el --- A p-search candidate generator for emacs lisp symbols  -*- lexical-binding: t; -*-
+;;; p-search-x-elisp.el --- A p-search candidate generator for emacs lisp symbols  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025  Samuel W. Flint
 
@@ -26,7 +26,7 @@
 ;; This library implements a `p-search' candidate generator for Emacs
 ;; Lisp symbols (functions, variables).  To use it with `p-search' by
 ;; default, you can either add the symbol
-;; `psx-elisp-candidate-generator' to your
+;; `p-search-x-elisp-candidate-generator' to your
 ;; `p-search-default-command-behavior' or to
 ;; `p-search-session-presets'.  You may also add the candidate
 ;; generator interactively.
@@ -40,23 +40,23 @@
 
 (p-search-def-field 'elisp-type 'category)
 
-(defun psx-elisp--lighter (_)
+(defun p-search-x-elisp--lighter (_)
   "Return Elisp Candidate Generator lighter."
   "ELISP")
 
-(defun psx-elisp--name (id)
+(defun p-search-x-elisp--name (id)
   "Compute the name for a symbol ID."
   (pcase-let ((`(,symbol ,type) id))
     (format "%s: %s" type symbol)))
-(p-search-def-property 'elisp 'name #'psx-elisp--name)
+(p-search-def-property 'elisp 'name #'p-search-x-elisp--name)
 
-(defun psx-elisp--fields (id)
+(defun p-search-x-elisp--fields (id)
   "Compute fields for item ID."
   (pcase-let ((`(_ ,type) id))
     (list (cons 'elisp-type (symbol-name type)))))
-(p-search-def-property 'elisp 'fields #'psx-elisp--fields)
+(p-search-def-property 'elisp 'fields #'p-search-x-elisp--fields)
 
-(defun psx-elisp--content (id)
+(defun p-search-x-elisp--content (id)
   "Get documentation string for ID."
   (pcase-let ((`(,symbol ,type) id))
     (or (pcase type
@@ -67,12 +67,12 @@
                    (or (get symbol 'variable-documentation)
                        (format "Variable `%s' not documented." symbol)))))
         "")))
-(p-search-def-property 'elisp 'content #'psx-elisp--content)
+(p-search-def-property 'elisp 'content #'p-search-x-elisp--content)
 
 
 ;;; Special Functions
 
-(defun psx-elisp--goto-doc (id)
+(defun p-search-x-elisp--goto-doc (id)
   "Go to documentation for ID.
 
 Use either `describe-function' or `describe-variable'."
@@ -81,12 +81,12 @@ Use either `describe-function' or `describe-variable'."
      (describe-variable symbol))
     (`(,symbol 'function)
      (describe-function symbol))))
-(p-search-def-function 'elisp 'p-search-goto-document #'psx-elisp--goto-doc)
+(p-search-def-function 'elisp 'p-search-goto-document #'p-search-x-elisp--goto-doc)
 
 
 ;;; Candidate Generator
 
-(defun psx-elisp--candidate-generator (args)
+(defun p-search-x-elisp--candidate-generator (args)
   "Generate elisp `p-search' candidates, based on ARGS.
 
 ARGS should contain the symbol `symbol-type' specifying which
@@ -108,17 +108,17 @@ following keywords.
               obarray)
       docs)))
 
-(defconst psx-elisp-candidate-generator
+(defconst p-search-x-elisp-candidate-generator
   (p-search-candidate-generator-create
-   :id 'psx-elisp-candidate-generator
+   :id 'p-search-x-elisp-candidate-generator
    :input-spec '((symbol-type . (p-search-infix-choices
                                  :key "t"
                                  :description "Symbol Type"
                                  :choices (:all :functions :variables)
                                  :default-value :all)))
    :name "ELISP"
-   :function #'psx-elisp--candidate-generator
-   :lighter-function #'psx-elisp--lighter)
+   :function #'p-search-x-elisp--candidate-generator
+   :lighter-function #'p-search-x-elisp--lighter)
   "Elisp symbol candidate generator for `p-search'.
 
 In use, there is a single argument, `symbol-type', which should
@@ -128,7 +128,7 @@ be one of the following keywords:
  - `:variables' create only documents for variables.
  - `:all' create documents for both functions and variables.")
 
-(add-to-list 'p-search-candidate-generators psx-elisp-candidate-generator)
+(add-to-list 'p-search-candidate-generators p-search-x-elisp-candidate-generator)
 
-(provide 'psx-elisp)
-;;; psx-elisp.el ends here
+(provide 'p-search-x-elisp)
+;;; p-search-x-elisp.el ends here

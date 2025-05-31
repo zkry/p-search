@@ -1,4 +1,4 @@
-;;; psx-filesplit.el --- p-search file splitting mapping -*- lexical-binding: t; -*-
+;;; p-search-x-filesplit.el --- p-search file splitting mapping -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024  Zachary Romero
 
@@ -25,7 +25,7 @@
 
 (require 'p-search)
 
-(defun psx-filesplit-function (args document)
+(defun p-search-x-filesplit-function (args document)
   "Split DOCUMENT according to ARGS."
   (let* ((split-size (alist-get 'split-size args))
          (file-content (p-search-document-property document 'content))
@@ -43,9 +43,9 @@
                                   (line-offset . ,line-offset)))))
        (seq-split (string-split file-content "\n") split-size)))))
 
-(defconst psx-filesplit-mapping
+(defconst p-search-x-filesplit-mapping
   (p-search-candidate-mapping-create
-   :id 'psx-filesplit-mapping
+   :id 'p-search-x-filesplit-mapping
    :name "File Split"
    :required-property-list '()
    :input-spec '((split-size . (p-search-infix-number
@@ -53,9 +53,9 @@
                                 :description "Split by N lines"
                                 :default-value 20)))
    :options-spec '()
-   :function #'psx-filesplit-function))
+   :function #'p-search-x-filesplit-function))
 
-(add-to-list 'p-search-candidate-mappings psx-filesplit-mapping)
+(add-to-list 'p-search-candidate-mappings p-search-x-filesplit-mapping)
 
-(provide 'psx-filesplit)
-;;; psx-filesplit.el ends here
+(provide 'p-search-x-filesplit)
+;;; p-search-x-filesplit.el ends here

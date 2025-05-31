@@ -2,6 +2,8 @@
 
 ;;; Commentary:
 
+;; This package defines the main querying functionality of p-search.
+
 ;;; Code:
 
 
@@ -598,19 +600,19 @@ given a value of zero-prob."
     (nreverse tokens)))
 
 (defun p-search-query-parse--at-token ()
-  "When parsing p-search query, return the current token."
+  "When parsing `p-search' query, return the current token."
   (if (>= p-search-query-parse--idx (length p-search-query-parse--tokens))
       'eoq
     (aref p-search-query-parse--tokens p-search-query-parse--idx)))
 
 (defun p-search-query-parse--peek-token ()
-  "When parsing p-search query, return the peek token (i.e. one after at)."
+  "When parsing `p-search' query, return the peek token (i.e. one after at)."
   (if (>= p-search-query-parse--idx (1- (length p-search-query-parse--tokens)))
       'eoq
     (aref p-search-query-parse--tokens (1+ p-search-query-parse--idx))))
 
 (defun p-search-query-parse--next-token ()
-  "When parsing p-search query, move the parsing index forward by one token."
+  "When parsing `p-search' query, move the parsing index forward by one token."
   (cl-incf p-search-query-parse--idx))
 
 (defun p-search-query-parse-tokens (tokens)

@@ -1,4 +1,4 @@
-;;; psx-package-list.el --- P-Search Candidate Generator for Installable Packages  -*- lexical-binding: t; -*-
+;;; p-search-x-package-list.el --- P-Search Candidate Generator for Installable Packages  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025  Samuel W. Flint
 
@@ -28,28 +28,28 @@
 (require 'cl-lib)
 (require 'package)
 
-(defun psx-package-list--lighter (_config)
-  "Show lighter for psx-package-list candidate generator."
+(defun p-search-x-package-list--lighter (_config)
+  "Show lighter for p-search-x-package-list candidate generator."
   "PKG")
 
-(defun psx-package-list--name (id)
+(defun p-search-x-package-list--name (id)
   "Get the package name from ID."
   (pcase-let* ((`(,name _ _) id))
     (symbol-name name)))
-(p-search-def-property 'package 'name #'psx-package-list--name)
+(p-search-def-property 'package 'name #'p-search-x-package-list--name)
 
-(defun psx-package-list--content (id)
+(defun p-search-x-package-list--content (id)
   "Get the content (i.e., summary) from ID."
   (pcase-let* ((`(_ ,summary _) id))
     summary))
-(p-search-def-property 'package 'content #'psx-package-list--content)
+(p-search-def-property 'package 'content #'p-search-x-package-list--content)
 
 (p-search-def-field 'package-version 'text)
 (p-search-def-field 'package-url 'text)
 (p-search-def-field 'package-type 'category)
 (p-search-def-field 'package-requires 'category)
 
-(defun psx-package-list--fields (id)
+(defun p-search-x-package-list--fields (id)
   "Get a list of metadata fields for package ID.
 
 Metadata collected include:
@@ -94,9 +94,9 @@ Metadata collected include:
             (when-let (kws (alist-get :keywords extras))
               (push (cons 'keywords kws) fields)))))
       fields)))
-(p-search-def-property 'package 'fields #'psx-package-list--fields)
+(p-search-def-property 'package 'fields #'p-search-x-package-list--fields)
 
-(defun psx-package-list--candidate-generator (args)
+(defun p-search-x-package-list--candidate-generator (args)
   "Generate a list of package candidates, based on ARGS."
   (let-alist args
     (append
@@ -115,14 +115,14 @@ Metadata collected include:
                       (list (car pkg) (package-desc-summary (nth 1 pkg)) (nth 1 pkg)))))
              package-archive-contents))))
 
-(defconst psx-package-list-candidate-generator
+(defconst p-search-x-package-list-candidate-generator
   (p-search-candidate-generator-create
    :id 'pxs-package-list-candidate-generator
    :name "PKG"
-   :function #'psx-package-list--candidate-generator
-   :lighter-function #'psx-package-list--lighter))
+   :function #'p-search-x-package-list--candidate-generator
+   :lighter-function #'p-search-x-package-list--lighter))
 
-(add-to-list 'p-search-candidate-generators psx-package-list-candidate-generator)
+(add-to-list 'p-search-candidate-generators p-search-x-package-list-candidate-generator)
 
-(provide 'psx-package-list)
-;;; psx-package-list.el ends here
+(provide 'p-search-x-package-list)
+;;; p-search-x-package-list.el ends here
