@@ -60,6 +60,7 @@ Introduction
 
 Installation
 
+* Installing from MELPA::
 * Installing from Quelpa::
 * Installing with Straight::
 * Recommended Tooling::
@@ -325,14 +326,24 @@ time being.
 
 * Menu:
 
+* Installing from MELPA::
 * Installing from Quelpa::
 * Installing with Straight::
 * Recommended Tooling::
 
 
-File: p-search.info,  Node: Installing from Quelpa,  Next: Installing with Straight,  Up: Installation
+File: p-search.info,  Node: Installing from MELPA,  Next: Installing from Quelpa,  Up: Installation
 
-2.1 Installing from Quelpa
+2.1 Installing from MELPA
+=========================
+
+p-search is now available for istallation via MELPA under the name
+p-search.
+
+
+File: p-search.info,  Node: Installing from Quelpa,  Next: Installing with Straight,  Prev: Installing from MELPA,  Up: Installation
+
+2.2 Installing from Quelpa
 ==========================
 
 Quelpa is a tool to install Emacs packages easily from local or remote
@@ -344,7 +355,7 @@ configuration file to install p-search.
 
 File: p-search.info,  Node: Installing with Straight,  Next: Recommended Tooling,  Prev: Installing from Quelpa,  Up: Installation
 
-2.2 Installing with Straight
+2.3 Installing with Straight
 ============================
 
 Using straight, the package can be installed as follows.
@@ -354,7 +365,7 @@ Using straight, the package can be installed as follows.
 
 File: p-search.info,  Node: Recommended Tooling,  Prev: Installing with Straight,  Up: Installation
 
-2.3 Recommended Tooling
+2.4 Recommended Tooling
 =======================
 
 While p-search can function without any external commands, if you intend
@@ -2366,66 +2377,67 @@ included, this too would greatly slow down p-search.
 
 Tag Table:
 Node: Top764
-Node: Introduction3645
-Node: The Search Candidates5981
-Node: Candidate Mappings7442
-Node: Asserting Probabilities8677
-Node: Searching and Making Observations10472
-Node: Installation12082
-Node: Installing from Quelpa12458
-Node: Installing with Straight12868
-Node: Recommended Tooling13195
-Node: Getting Started13550
-Node: Creating the p-search session13990
-Node: Adding Search Criteria15780
-Node: Refining our Search19059
-Node: Final Results20838
-Node: The p-search Interface22320
-Node: Starting a session22639
-Node: The p-search session buffer25246
-Node: Candidate Generators26249
-Node: Creating and Editing Candidate Generators27568
-Node: Inputs and Options29853
-Node: Built-in Candidate Generator: FILESYSTEM30635
-Node: Built-in Candidate Generator: BUFFERS32530
-Node: Extension Candidate Generator: BIBTEX33105
-Node: Extension Candidate Generator: ELISP33859
-Node: Extension Candidate Generator: INFO34515
-Node: Extension Candidate Generator: PACKAGE-LIST35265
-Node: Mappings35743
-Node: Creating and Editing Mappings37183
-Node: Extension Mapping: File Split38962
-Node: Extension Mapping: Denote39421
-Node: Extension Mapping: PDF Info40468
-Node: Priors41207
-Node: Creating and Editing Priors42437
-Node: Scoring43614
-Node: Importance and Complement Options44951
-Node: Text Queries46822
-Node: Text Query Syntax49675
-Node: Fields52936
-Node: Searching Category53908
-Node: Instruction Strings54629
-Node: Git-related Priors55262
-Node: Filesystem-related Priors57874
-Node: Troubleshooting Priors59091
-Node: Search Results59987
-Node: Navigating and Viewing Search Results60989
-Node: Making Observations62523
-Node: Search Result Preview64005
-Node: Saving Sessions65416
-Node: Extending p-search65562
-Node: Creating Candidate Generators66192
-Node: A Note on Properties and Fields70726
-Node: Creating Documents72334
-Node: Creating Mappings76171
-Node: Input/Options Specification80420
-Node: Creating Priors84843
-Node: The Preset Data Structure and Programatically Creating Sessions88680
-Node: Examples of Extending p-search91650
-Node: Candidate Generator Examples92133
-Node: A Candidate Generator with Hard-coded Items92587
-Node: Defining Custom Properties94488
+Node: Introduction3671
+Node: The Search Candidates6007
+Node: Candidate Mappings7468
+Node: Asserting Probabilities8703
+Node: Searching and Making Observations10498
+Node: Installation12108
+Node: Installing from MELPA12510
+Node: Installing from Quelpa12744
+Node: Installing with Straight13184
+Node: Recommended Tooling13511
+Node: Getting Started13866
+Node: Creating the p-search session14306
+Node: Adding Search Criteria16096
+Node: Refining our Search19375
+Node: Final Results21154
+Node: The p-search Interface22636
+Node: Starting a session22955
+Node: The p-search session buffer25562
+Node: Candidate Generators26565
+Node: Creating and Editing Candidate Generators27884
+Node: Inputs and Options30169
+Node: Built-in Candidate Generator: FILESYSTEM30951
+Node: Built-in Candidate Generator: BUFFERS32846
+Node: Extension Candidate Generator: BIBTEX33421
+Node: Extension Candidate Generator: ELISP34175
+Node: Extension Candidate Generator: INFO34831
+Node: Extension Candidate Generator: PACKAGE-LIST35581
+Node: Mappings36059
+Node: Creating and Editing Mappings37499
+Node: Extension Mapping: File Split39278
+Node: Extension Mapping: Denote39737
+Node: Extension Mapping: PDF Info40784
+Node: Priors41523
+Node: Creating and Editing Priors42753
+Node: Scoring43930
+Node: Importance and Complement Options45267
+Node: Text Queries47138
+Node: Text Query Syntax49991
+Node: Fields53252
+Node: Searching Category54224
+Node: Instruction Strings54945
+Node: Git-related Priors55578
+Node: Filesystem-related Priors58190
+Node: Troubleshooting Priors59407
+Node: Search Results60303
+Node: Navigating and Viewing Search Results61305
+Node: Making Observations62839
+Node: Search Result Preview64321
+Node: Saving Sessions65732
+Node: Extending p-search65878
+Node: Creating Candidate Generators66508
+Node: A Note on Properties and Fields71042
+Node: Creating Documents72650
+Node: Creating Mappings76487
+Node: Input/Options Specification80736
+Node: Creating Priors85159
+Node: The Preset Data Structure and Programatically Creating Sessions88996
+Node: Examples of Extending p-search91966
+Node: Candidate Generator Examples92449
+Node: A Candidate Generator with Hard-coded Items92903
+Node: Defining Custom Properties94804
 
 End Tag Table
 

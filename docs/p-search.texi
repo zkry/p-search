@@ -210,6 +210,10 @@ In any case, it's my hope that p-search assisted you on your journey.
 
 p-search is currently not published on any Emacs package manager, though it is in the works. It will have to be installed from source for the time being.
 
+@node Installing from MELPA
+@section Installing from MELPA
+
+p-search is now available for istallation via MELPA under the name p-search.
 
 @node Installing from Quelpa
 @section Installing from Quelpa

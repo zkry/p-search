@@ -16,8 +16,8 @@
 
   https://p-search.org/documentation/Installation.html
 
-  Until p-search is available on ELPA/MELPA, you will have to install
-  this package manually.
+  p-search is installable via MELPA under the name p-search.  You can
+  also install it as follows:
 
   Using Quelpa:
 #+begin_src lisp
