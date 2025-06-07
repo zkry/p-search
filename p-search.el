@@ -1,4 +1,4 @@
-;;; p-search.el --- Emacs Search Tool Aggregator -*- lexical-binding: t; -*-
+;;; p-search.el --- Local Search Engine for Emacs -*- lexical-binding: t; -*-
 
 ;; Author: Zachary Romero
 ;; URL: https://github.com/zkry/p-search
@@ -22,11 +22,13 @@
 
 ;;; Commentary:
 
-;; P-SEARCH is an tool for combining and executing searches in Emacs.
-;; The tool takes its inspiration from Bayesian search theory where it
-;; is assumed that the thing being searched for has a prior
-;; distribution of where it can be found, and that the act of looking
-;; should update our posterior probability distribution.
+;; p-search is a tool for executing searches locally. It does this by
+;; running multiple commands like grep, and combining the results
+;; using algorithms from the field of information retrieval.  The tool
+;; takes its inspiration from Bayesian search theory where it is
+;; assumed that the thing being searched for has a prior distribution
+;; of where it can be found, and that the act of looking should update
+;; our posterior probability distribution.
 
 ;; Terminology: In p-search there are two parts of the search, the
 ;; prior and likelihood.  The prior is specified via certain
@@ -1068,6 +1070,10 @@ TYPE should be a field type sympol, such as `text' or `category'."
      candidates)
     fields))
 
+(defun p-search--category-fields-exist ()
+  "Return non-nil if there exists any document that has a category field."
+  (p-search--available-fields 'category))
+
 (defun p-search-document-property (document property)
   "Return PROPERTY of DOCUMENT."
   (unless (consp (car document))
@@ -1259,7 +1265,8 @@ If FIELDS is non-nil, only search on those specified fields."
            (cl-flet ((count-field (fval)
                        (let* ((doc-id->count (gethash field-id field->doc-id->count)))
                          (when-let* ((field-def (p-search-get-field field-id))
-                                     (text-p (eql (car field-def) 'text)))
+                                     (text-p (or (eql (car field-def) 'text)
+                                                 p-search-include-categories-p)))
                            (let ((len (length fval)))
                              (puthash (cons field-id doc-id) len field+doc-id->size)
                              (puthash :total-size (+ (gethash :total-size doc-id->count) len)
@@ -1606,10 +1613,14 @@ are peanalized by how far away it is."))
 
 ;;; Search priors
 
+(defvar p-search-include-categories-p nil
+  "Dynamic variable to ")
+
 (defun p-search--prior-query-initialize-function (prior)
   "Initialization function for the text query PRIOR.
 Called with user supplied ARGS for the prior."
   (let* ((args (p-search-prior-arguments prior))
+         (p-search-include-categories-p (alist-get 'include-categories args))
          (fields (alist-get 'fields args))
          (query-string (alist-get 'query-string args)))
     (p-search-query
@@ -1696,9 +1707,13 @@ Called with user supplied ARGS for the prior."
                                     :key "q"
                                     :description "Query String"
                                     :instruction-string ,instruction-string)))
-     :options-spec '((fields . (p-search-infix-choices
+     :options-spec '((include-categories . (p-search-infix-toggle
+                                            :key "-t"
+                                            :description "Search category field's text"
+                                            :if p-search--category-fields-exist))
+                     (fields . (p-search-infix-choices
                                 :key "-f"
-                                :description "Fields"
+                                :description "Field"
                                 :choices (lambda ()
                                            (p-search--available-fields 'text)))))
      :initialize-function #'p-search--prior-query-initialize-function
@@ -2738,7 +2753,9 @@ Arguments are provided from the transient dispatcher."
     (cons
      transient-type
      (cl-loop for (key value) on spec-props by 'cddr
-              append (list key (if (and (functionp value) (not (eql key :reader)))
+              append (list key (if (and (functionp value)
+                                        (not (eql key :reader))
+                                        (not (eql key :if)))
                                    (funcall value)
                                  value))))))
 
@@ -4618,6 +4635,10 @@ variable `p-search-default-command-behavior'."
 (add-to-list 'p-search-prior-templates p-search-prior-git-author)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-frequency)
 (add-to-list 'p-search-prior-templates p-search-prior-git-commit-time)
+
+;; Run the following line to ease development.  If a prior template is
+;; changed, the change won't be reflecteed unless the following cache is reset.
+;; (setq p-search--relevant-prior-templates-cache (make-hash-table :test #'equal))
 
 (provide 'p-search)
 
