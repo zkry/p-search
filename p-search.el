@@ -2626,9 +2626,15 @@ CONFIG should be provided simmilar to how `transient-define-prefix' is used."
         (transient-setup 'p-search-transient-dispatcher)))
     (put name 'transient--prefix
          (transient-prefix :command name))
-    (put name 'transient--layout
-         (seq-map #'eval (cl-mapcan (lambda (s) (transient--parse-child name s))
-                                   suffixes)))
+    (if (functionp #'transient--set-layout)
+        (funcall #'transient--set-layout
+                 name
+                 (seq-map #'eval (cl-mapcan (lambda (s)
+                                              (transient--parse-child name s))
+                                            suffixes)))
+      (put name 'transient--layout
+           (seq-map #'eval (cl-mapcan (lambda (s) (transient--parse-child name s))
+                                      suffixes))))
     (call-interactively name)))
 
 (defun p-search--unique-prefix (elt elts)
