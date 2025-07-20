@@ -1438,30 +1438,6 @@ of the term frequency counts."
    :term-frequency-func #'p-search--filesystem-term-frequency-function
    :lighter-function #'p-search--filesystem-lighter-function))
 
-;;; Generic priors
-
-(defconst p-search-prior-name
-  (p-search-prior-template-create
-   :id 'p-search-prior-name
-   :group ""
-   :name "name heading"
-   :required-properties '(name)
-   :input-spec '((name . (p-search-infix-string
-                           :key "n"
-                           :description "Document's Name")))
-   :initialize-function
-   (lambda (prior)
-     (let* ((args (p-search-prior-arguments prior))
-            (name (alist-get 'name args))
-            (documents (p-search-candidates-with-properties '(name))))
-       (maphash
-        (lambda (_ document)
-          (let* ((doc-name (p-search-document-property document 'name)))
-            (when (string-search name doc-name)
-              (p-search-set-score prior document p-search-score-yes))))
-        documents)))
-   :transient-key-string "he"))
-
 ;;; Buffer priors
 
 (defconst p-search-prior-major-mode
@@ -1619,7 +1595,7 @@ Called with user supplied ARGS for the prior."
         (lambda (doc p)
           (p-search-set-score prior doc p))
         probs)
-       (p-search-calculate))
+       (p-search-prior-complete prior))
      (hash-table-count (p-search-candidates))
      (p-search-reduce-document-property 'size 0 #'+)
      (and fields (list fields)))))
@@ -1803,7 +1779,7 @@ Called with user supplied ARGS for the prior."
                                 (p-search-set-score prior doc-id p)))
                             commit-counts)
                            (p-search-set-score prior :default p-search-score-no)
-                           (p-search-calculate))))))))))
+                           (p-search-prior-complete prior))))))))))
 
 (defconst p-search-prior-git-author
   (p-search-prior-template-create
@@ -1937,7 +1913,7 @@ E.g. For \"yesterday vs three days ago vs 10 days ago\" choose :days.
                   (kill-buffer buf)
                   (p-search-set-score prior :default p-search-score-no)
                   ;; TODO - only do one calculation after all processes finish
-                  (p-search-calculate)))))))))))
+                  (p-search-prior-complete prior)))))))))))
 
 
 ;;; Data Priors and Candidate Generators
@@ -2441,8 +2417,7 @@ have an ID."
 (defun p-search--p-prior-doc (prior doc-id)
   "Return the probability of DOC-ID of given PRIOR."
   (let* ((prior-results (p-search-prior-results prior))
-         (default-result (or (gethash :default prior-results)
-                             0.5))
+         (default-result (or (gethash :default prior-results) 0.5))
          (importance (alist-get 'importance (p-search-prior-arguments prior) 'medium))
          (complement (alist-get 'complement (p-search-prior-arguments prior)))
          (doc-result (gethash doc-id prior-results default-result))
@@ -2494,6 +2469,14 @@ If NO-REPRINT is nil, don't redraw `p-search' buffer."
     (unless no-reprint
       (p-search--reprint))
     res))
+
+(defun p-search-prior-complete (prior)
+  "Mark PRIOR as complte by ensuring its result ht has at least one element.
+Proceed to run recalculations and print results."
+  (let ((results (p-search-prior-results prior)))
+    (when (= (hash-table-count results) 0)
+      (puthash :default nil results)))
+  (p-search-calculate))
 
 (defun p-search-restart-calculation ()
   "Re-generate all candidates, and re-run all priors."
@@ -3684,7 +3667,8 @@ mapping as this data is needed to retrieve the document count."
 
 (defun p-search--insert-prior (prior)
   "Insert PRIOR into current buffer."
-  (let* ((template (p-search-prior-template prior))
+  (let* ((proc (p-search-prior-proc-or-thread prior))
+         (template (p-search-prior-template prior))
          (results (p-search-prior-results prior))
          (args (p-search-prior-arguments prior))
          (name (p-search-prior-template-name template))
@@ -3703,9 +3687,11 @@ mapping as this data is needed to retrieve the document count."
                                 (propertize name 'face 'p-search-prior)))
          (heading-line
           (concat heading-line-1
-                  (if (and results (not (zerop (hash-table-count results))))
-                      ""
-                    (propertize " loading" 'face 'shadow))
+                  (if (or (process-live-p proc)
+                          (not results)
+                          (zerop (hash-table-count results)))
+                      (propertize " loading" 'face 'shadow)
+                    "")
                   ;; NOTE: the following code adds the entropy display
                   ;;       I haven't found this useful at all, so I'm leaving
                   ;;       it out for now
