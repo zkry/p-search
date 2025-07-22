@@ -82,8 +82,8 @@
   :group 'applications)
 
 (defcustom p-search-default-search-tool
-  (cond ((executable-find "ugrep") :ug)
-        ((executable-find "rg") :rg)
+  (cond ((executable-find "rg") :rg)
+        ((executable-find "ugrep") :ug)
         ((executable-find "ag") :ag)
         (t :grep))
   "Default tool to use when running search on filesystem."
