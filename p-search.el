@@ -1703,7 +1703,7 @@ Called with user supplied ARGS for the prior."
     (maphash
      (lambda (doc-id _)
        (let* ((fields (p-search-document-property doc-id 'fields)))
-         (pcase-dolist (`(,field-id ,vals) fields)
+         (pcase-dolist (`(,field-id . ,vals) fields)
            (when (and (eql (car (p-search-get-field field-id)) 'category)
                       (not (memq field-id fields)))
              (when (not (listp vals))
